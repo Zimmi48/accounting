@@ -4,6 +4,8 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.App as App
 import Kinvey exposing (..)
+import Login
+import LoggedIn
 
 
 main =
@@ -23,26 +25,14 @@ auth =
 
 
 type Model
-  = Login LoginModel
-  | LoggedIn LoggedInModel
-
-type alias LoginModel =
-  { username : String
-  , password : String
-  }
-
-
-type alias LoggedInModel =
-  { session : Maybe Session
-  , transactions : List String
-  }
+  = LoginModel Login.Model
+  | LoggedInModel LoggedIn.Model
 
 
 init : (Model, Cmd msg)
 init =
-  ( Login (LoginModel "" "")
-  , Cmd.none
-  )
+  let (model, cmd) = Login.init in
+  LoginModel model ! [ cmd ]
 
 
 type Msg
@@ -53,33 +43,18 @@ update : Msg -> Model -> (Model, Cmd msg)
 update msg model =
   case msg of
     NoOp ->
-      (model, Cmd.none)
+      model ! []
 
 
 view : Model -> Html msg
 view model =
   case model of
-    Login model ->
-      viewLogin model
+    LoginModel model ->
+      Login.view model
 
-    LoggedIn model ->
-      viewLoggedIn model
+    LoggedInModel model ->
+      LoggedIn.view model
 
-
-viewLogin : LoginModel -> Html msg
-viewLogin model =
-  div []
-    [ input [ placeholder "Username" ] []
-    , input [ type' "password" , placeholder "Password" ] []
-    , button [] [ text "Login" ]
-    ]
-
-
-viewLoggedIn : LoggedInModel -> Html msg
-viewLoggedIn model =
-  div []
-    [ text "Success!"
-    ]
 
 
 
