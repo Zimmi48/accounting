@@ -37,6 +37,7 @@ init =
 
 type Msg
   = NoOp
+  | LoginMsg Login.Msg
 
 
 update : Msg -> Model -> (Model, Cmd msg)
@@ -45,12 +46,15 @@ update msg model =
     NoOp ->
       model ! []
 
+    LoginMsg msg ->
+      Debug.crash "not implemented"
 
-view : Model -> Html msg
+
+view : Model -> Html Msg
 view model =
   case model of
     LoginModel model ->
-      Login.view model
+      App.map LoginMsg <| Login.view model
 
     LoggedInModel model ->
       LoggedIn.view model
