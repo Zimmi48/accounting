@@ -7,6 +7,7 @@ module Kinvey exposing
   , login
   , getUserData
   , setUserData
+  , createData
   )
 
 
@@ -123,8 +124,10 @@ login auth email password decoder =
                 ]
     }
   |> Http.fromJson
-      ( Decode.at ["_kmd" , "authtoken"] Decode.string `Decode.andThen` \token ->
-        Decode.at ["_id"] Decode.string `Decode.andThen` \id ->
+      ( Decode.at ["_kmd" , "authtoken"] Decode.string
+                `Decode.andThen` \token ->
+        Decode.at ["_id"] Decode.string
+                `Decode.andThen` \id ->
         Decode.map ((,) {token = "Kinvey " ++ token , id = id}) decoder
       )
   |> Task.mapError HttpError
@@ -158,14 +161,28 @@ setUserData auth session fields =
         , contentType
         , apiVersion
         ]
-        , url = baseUrl auth ++ session.id
-        , body =
-            Http.string
-            <| encode 0
-            <| Encode.object fields
+    , url = baseUrl auth ++ session.id
+    , body =
+        Http.string
+        <| encode 0
+        <| Encode.object fields
     }
   |> Http.fromJson (Decode.succeed ())
   |> Task.mapError HttpError
 
 
-
+createData : Auth -> Session -> String -> Encode.Value -> Task Error ()
+createData auth session collection data =
+  Http.send
+    Http.defaultSettings
+    { verb = "POST"
+    , headers =
+        [ ("Authorization" , session.token)
+        , contentType
+        , apiVersion
+        ]
+    , url = Http.uriEncode <| baseUrl auth ++ collection
+    , body = Http.string <| encode 0 data
+    }
+  |> Http.fromJson (Decode.succeed ())
+  |> Task.mapError HttpError
