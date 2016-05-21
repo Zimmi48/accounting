@@ -3,7 +3,7 @@
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.App as App
-import Kinvey exposing (..)
+import Kinvey exposing (Session)
 import Login
 import LoggedIn
 
@@ -15,13 +15,6 @@ main =
      , view = view
      , subscriptions = \_ -> Sub.none
      }
-
-
-auth : Auth
-auth =
-  { appId = "kid_ZkL79b5Kbb"
-  , appSecret = "aa5f8ad01ed7447fbb9a65fbd8b1f901"
-  }
 
 
 type Model
@@ -38,16 +31,18 @@ init =
 type Msg
   = NoOp
   | LoginMsg Login.Msg
+  | NewSession Session
 
 
-update : Msg -> Model -> (Model, Cmd msg)
+update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
-  case msg of
-    NoOp ->
-      model ! []
+  case (msg , model) of
+    (LoginMsg msg , LoginModel model) ->
+      let (model, cmd) = Login.update NewSession LoginMsg msg model in
+      ( LoginModel model , cmd )
 
-    LoginMsg msg ->
-      Debug.crash "not implemented"
+    _ ->
+      model ! []
 
 
 view : Model -> Html Msg
