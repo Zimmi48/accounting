@@ -70,8 +70,12 @@ getAuthToken { appId , appSecret } =
   |> Task.fromResult
 
 
-baseUrl : Auth -> String
-baseUrl { appId } = "https://baas.kinvey.com/user/" ++ appId ++ "/"
+baseUserUrl : Auth -> String
+baseUserUrl { appId } = "https://baas.kinvey.com/user/" ++ appId ++ "/"
+
+
+baseDataUrl : Auth -> String
+baseDataUrl { appId } = "https://baas.kinvey.com/appdata/" ++ appId ++ "/"
 
 
 {-| signup creates a new user given auth information, an email and a password -}
@@ -86,7 +90,7 @@ signup auth username password fields =
         , contentType
         , apiVersion
         ]
-        , url = baseUrl auth
+        , url = baseUserUrl auth
         , body =
             Http.string
             <| encode 0
@@ -114,7 +118,7 @@ login auth email password decoder =
         , contentType
         , apiVersion
         ]
-        , url = baseUrl auth ++ "login"
+        , url = baseUserUrl auth ++ "login"
         , body =
             Http.string
             <| Encode.encode 0
@@ -143,7 +147,7 @@ getUserData auth session decoder =
         [ ("Authorization" , session.token)
         , apiVersion
         ]
-        , url = baseUrl auth ++ "_me"
+        , url = baseUserUrl auth ++ "_me"
         , body = Http.empty
     }
   |> Http.fromJson decoder
@@ -161,7 +165,7 @@ setUserData auth session fields =
         , contentType
         , apiVersion
         ]
-    , url = baseUrl auth ++ session.id
+    , url = baseUserUrl auth ++ session.id
     , body =
         Http.string
         <| encode 0
@@ -181,7 +185,7 @@ createData auth session collection data =
         , contentType
         , apiVersion
         ]
-    , url = Http.uriEncode <| baseUrl auth ++ collection
+    , url = baseDataUrl auth ++ collection
     , body = Http.string <| encode 0 data
     }
   |> Http.fromJson (Decode.succeed ())

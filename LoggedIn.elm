@@ -12,8 +12,14 @@ import MyKinvey exposing (..)
 
 type alias Model =
   { session : Session
-  , transactions : List (String, String, String)
-  , object : String
+  , transactions : List Transaction
+  , newTransaction : Transaction
+  , recentError : Maybe Kinvey.Error
+  }
+
+
+type alias Transaction =
+  { object : String
   , value : String
   , date : String
   }
@@ -21,7 +27,7 @@ type alias Model =
 
 init : Session -> (Model, Cmd msg)
 init session =
-  Model session [] "" "" "" ! []
+  Model session [] (Transaction "" "" "") Nothing ! []
        
 
 view : Model -> Html Msg
@@ -31,18 +37,18 @@ view model =
       div []
         [ input
             [ placeholder "Object"
-            , value model.object
+            , value model.newTransaction.object
             , onInput UpdateObject
             ] []
         , input
             [ placeholder "Value"
-            , value model.value
+            , value model.newTransaction.value
             , type' "number"
             , onInput UpdateValue
             ] []
         , input
             [ type' "date"
-            , value model.date
+            , value model.newTransaction.date
             , onInput UpdateDate
             ] []
         , button
@@ -53,15 +59,30 @@ view model =
     listTransactions =
       div []
         [ text "List of recent transactions"
+        , div [] <| List.map viewTransaction model.transactions
         ]
 
   in
     
   div []
     [ addTransaction
+    , div [ style [ ("color", "red") ] ]
+        [ text
+            <| Maybe.withDefault ""
+            <| Maybe.map Kinvey.errorToString model.recentError
+        ]
     , listTransactions
     ]
 
+
+viewTransaction : Transaction -> Html msg
+viewTransaction { object , value , date } =
+  div []
+    [ text object
+    , text value
+    , text date
+    ]
+                    
 type Msg
   = NoOp
   | UpdateObject String
@@ -73,41 +94,51 @@ type Msg
 
     
 update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
+update msg ({ newTransaction } as model) =
   case msg of
     UpdateObject s ->
-      { model | object = s } ! []
+      { model |
+        newTransaction = { newTransaction | object = s }
+      , recentError = Nothing
+      } ! []
 
     UpdateValue s ->
-      { model | value = s } ! []
+      { model |
+        newTransaction = { newTransaction | value = s }
+      , recentError = Nothing
+      } ! []
 
     UpdateDate s ->
-      { model | date = s } ! []
+      { model |
+        newTransaction = { newTransaction | date = s }
+      , recentError = Nothing
+      } ! []
 
     CreateTransaction ->
       let
         transaction =
           Encode.object
-            [ ("object", Encode.string model.object)
-            , ("value", Encode.string model.value) -- should be a float
-            , ("date", Encode.string model.date)
+            [ ("object", Encode.string model.newTransaction.object)
+            , ("value", Encode.string model.newTransaction.value)
+            -- should be a float
+            , ("date", Encode.string model.newTransaction.date)
             ]
           
       in
         
-      model
+      { model | recentError = Nothing }
         ! [ Task.perform Error CreatedTransaction
               <| createData model.session "transactions" transaction
           ]
 
     CreatedTransaction () ->
       { model |
-        transactions =
-          (model.object, model.value, model.date) :: model.transactions
-      , object = ""
-      , value = ""
-      , date = ""
+        transactions = model.newTransaction :: model.transactions
+      , newTransaction = Transaction "" "" ""
       } ! []
 
-    _ ->
+    Error e ->
+      { model | recentError = Just e } ! []
+
+    NoOp ->
       model ! []
