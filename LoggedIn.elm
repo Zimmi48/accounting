@@ -10,6 +10,10 @@ import Kinvey exposing (Session)
 import MyKinvey exposing (..)
 
 
+-- TODO : always check for HTTP 401 Unauthorized response and go back
+-- to Login page when it occurs
+
+
 type alias Model =
   { session : Session
   , transactions : List Transaction
