@@ -23,8 +23,8 @@ main =
 
 
 port setStorage : Session -> Cmd msg
-    
-    
+
+
 type Model
   = LoginModel Login.Model
   | LoggedInModel LoggedIn.Model
@@ -49,7 +49,7 @@ initLoggedIn session =
     , setStorage session
     ]
 
-          
+
 type Msg
   = NoOp
   | LoginMsg Login.Msg
@@ -70,7 +70,7 @@ update msg model =
     ( LoggedInMsg msg , LoggedInModel model ) ->
       let (model, cmd) = LoggedIn.update msg model in
       ( LoggedInModel model , Cmd.map LoggedInMsg cmd )
-        
+
     _ ->
       model ! []
 

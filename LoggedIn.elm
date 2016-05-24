@@ -32,7 +32,7 @@ type alias Transaction =
 init : Session -> (Model, Cmd msg)
 init session =
   Model session [] (Transaction "" "" "") Nothing ! []
-       
+
 
 view : Model -> Html Msg
 view model =
@@ -67,7 +67,7 @@ view model =
         ]
 
   in
-    
+
   div []
     [ addTransaction
     , div [ style [ ("color", "red") ] ]
@@ -86,7 +86,7 @@ viewTransaction { object , value , date } =
     , text value
     , text date
     ]
-                    
+
 type Msg
   = NoOp
   | UpdateObject String
@@ -96,7 +96,7 @@ type Msg
   | CreatedTransaction ()
   | Error Kinvey.Error
 
-    
+
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg ({ newTransaction } as model) =
   case msg of
@@ -127,9 +127,9 @@ update msg ({ newTransaction } as model) =
             -- should be a float
             , ("date", Encode.string model.newTransaction.date)
             ]
-          
+
       in
-        
+
       { model | recentError = Nothing }
         ! [ Task.perform Error CreatedTransaction
               <| createData model.session "transactions" transaction
