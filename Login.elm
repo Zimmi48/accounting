@@ -9,6 +9,9 @@ import Kinvey exposing (Session)
 import MyKinvey exposing (..)
 
 
+-- TODO : handle Enter key
+
+
 type alias Model =
   { username : String
   , password : String

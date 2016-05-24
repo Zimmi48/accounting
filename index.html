@@ -1,0 +1,22 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Keeping track of my spendings</title>
+  <script type="text/javascript" src="elm.js"></script>
+</head>
+
+<body>
+</body>
+
+<script type="text/javascript">
+var storedState = localStorage.getItem('accounting-state');
+var startingState = storedState ? JSON.parse(storedState) : null;
+var app = Elm.Main.fullscreen(startingState);
+app.ports.setStorage.subscribe(function(state) {
+    localStorage.setItem('accounting-state', JSON.stringify(state));
+});
+</script>
+
+</html>

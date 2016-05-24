@@ -1,3 +1,4 @@
+port module Main exposing (..)
 
 
 import Html exposing (..)
@@ -8,8 +9,12 @@ import Login
 import LoggedIn
 
 
+-- TODO: if session is invalid, go back to Login page
+
+
+main : Program (Maybe Session)
 main =
-  App.program
+  App.programWithFlags
      { init = init
      , update = update
      , view = view
@@ -17,17 +22,34 @@ main =
      }
 
 
+port setStorage : Session -> Cmd msg
+    
+    
 type Model
   = LoginModel Login.Model
   | LoggedInModel LoggedIn.Model
 
 
-init : (Model, Cmd msg)
-init =
-  let (model, cmd) = Login.init in
-  LoginModel model ! [ cmd ]
+init : Maybe Session -> (Model, Cmd Msg)
+init savedSession =
+  case savedSession of
+    Nothing ->
+      let (model, cmd) = Login.init in
+      LoginModel model ! [ cmd ]
+
+    Just session ->
+      initLoggedIn session
 
 
+initLoggedIn : Session -> (Model, Cmd Msg)
+initLoggedIn session =
+  let (model, cmd) = LoggedIn.init session in
+  LoggedInModel model !
+    [ Cmd.map LoggedInMsg cmd
+    , setStorage session
+    ]
+
+          
 type Msg
   = NoOp
   | LoginMsg Login.Msg
@@ -43,8 +65,7 @@ update msg model =
       ( LoginModel model , cmd )
 
     ( NewSession session , _ ) ->
-      let (model, cmd) = LoggedIn.init session in
-      ( LoggedInModel model , Cmd.map LoggedInMsg cmd )
+      initLoggedIn session
 
     ( LoggedInMsg msg , LoggedInModel model ) ->
       let (model, cmd) = LoggedIn.update msg model in
