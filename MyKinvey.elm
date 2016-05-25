@@ -4,6 +4,7 @@ module MyKinvey exposing
   , getUserData
   , setUserData
   , createData
+  , getData
   )
 
 
@@ -35,3 +36,7 @@ setUserData = Kinvey.setUserData auth
 
 
 createData = Kinvey.createData auth
+
+
+getData = Kinvey.getData auth
+

@@ -5,6 +5,7 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Encode as Encode
+import Json.Decode as Decode exposing ((:=))
 import Task
 import Kinvey exposing (Session)
 import MyKinvey exposing (..)
@@ -29,9 +30,19 @@ type alias Transaction =
   }
 
 
-init : Session -> (Model, Cmd msg)
+transactionTable = "transactions"
+
+
+init : Session -> (Model, Cmd Msg)
 init session =
-  Model session [] (Transaction "" "" "") Nothing ! []
+  Model session [] (Transaction "" "" "") Nothing !
+    [ Task.perform Error FetchTransactions
+        <| getData session transactionTable
+        <| Decode.object3 Transaction
+            ("object" := Decode.string)
+            ("value" := Decode.string)
+            ("date" := Decode.string)
+    ]
 
 
 view : Model -> Html Msg
@@ -94,6 +105,7 @@ type Msg
   | UpdateDate String
   | CreateTransaction
   | CreatedTransaction ()
+  | FetchTransactions (List Transaction)
   | Error Kinvey.Error
 
 
@@ -132,7 +144,7 @@ update msg ({ newTransaction } as model) =
 
       { model | recentError = Nothing }
         ! [ Task.perform Error CreatedTransaction
-              <| createData model.session "transactions" transaction
+              <| createData model.session transactionTable transaction
           ]
 
     CreatedTransaction () ->
@@ -140,6 +152,9 @@ update msg ({ newTransaction } as model) =
         transactions = model.newTransaction :: model.transactions
       , newTransaction = Transaction "" "" ""
       } ! []
+
+    FetchTransactions t ->
+      { model | transactions = t } ! []
 
     Error e ->
       { model | recentError = Just e } ! []

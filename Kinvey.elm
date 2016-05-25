@@ -8,6 +8,7 @@ module Kinvey exposing
   , getUserData
   , setUserData
   , createData
+  , getData
   )
 
 
@@ -190,3 +191,24 @@ createData auth session collection data =
     }
   |> Http.fromJson (Decode.succeed ())
   |> Task.mapError HttpError
+
+
+getData : Auth -> Session -> String -> Decoder a -> Task Error (List a)
+getData auth session collection decoder =
+  Http.send
+    Http.defaultSettings
+    { verb = "GET"
+    , headers =
+        [ ("Authorization" , session.token)
+        , apiVersion
+        ]
+    , url = baseDataUrl auth ++ collection
+    , body = Http.empty
+    }
+  |> Http.fromJson (Decode.list decoder)
+  |> Task.mapError HttpError
+
+
+
+
+
