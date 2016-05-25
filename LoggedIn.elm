@@ -72,9 +72,22 @@ view model =
                 ]
               ]
           ]
-      , button
-          [ onClick CreateTransaction ]
-          [ text "Add new transaction" ]
+      , div [ style [ ("text-align", "center") , ("margin", "10px 0") ] ]
+          [ button
+            [ onClick CreateTransaction
+            , style
+                [ ("background-color", "#4CAF50")
+                , ("border", "none")
+                , ("color", "white")
+                , ("padding", "15px 32px")
+                , ("text-align", "center")
+                , ("font-weight", "bold")
+                , ("display", "inline-block")
+                , ("cursor", "pointer")
+                ]
+            ]
+            [ text "Add new transaction" ]
+          ]
       , div [ style [ ("color", "red") ] ]
           [ text
               <| Maybe.withDefault ""
@@ -111,16 +124,18 @@ viewTransaction { object , value , date } =
 -- a tr node
 tr' : List (Html a) -> Html a
 tr' lines =
-  List.map (\e -> td [ style [ ("width", "30%") ] ] [e]) lines |> tr []
+  let width = toString (100 // List.length lines) ++ "%" in
+  List.map (\e -> td [ style [ ("width", width) , ("padding", "3px 15px 0 5px") ] ] [e]) lines |> tr []
 
 
 inputStyle : Attribute a
 inputStyle =
   style
-    [ ("width", "90%")
+    [ ("width", "100%")
+    , ("height", "30px")
     ]
 
-    
+
 type Msg
   = NoOp
   | UpdateObject String
