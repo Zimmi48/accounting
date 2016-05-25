@@ -2,7 +2,6 @@ port module Main exposing (..)
 
 
 import Html exposing (..)
-import Html.Attributes exposing (..)
 import Html.App as App
 import Kinvey exposing (Session)
 import Login

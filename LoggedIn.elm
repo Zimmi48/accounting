@@ -30,6 +30,7 @@ type alias Transaction =
   }
 
 
+transactionTable : String
 transactionTable = "transactions"
 
 
@@ -49,55 +50,77 @@ view : Model -> Html Msg
 view model =
   let
     addTransaction =
-      div []
-        [ input
-            [ placeholder "Object"
-            , value model.newTransaction.object
-            , onInput UpdateObject
-            ] []
-        , input
-            [ placeholder "Value"
-            , value model.newTransaction.value
-            , type' "number"
-            , onInput UpdateValue
-            ] []
-        , input
-            [ type' "date"
-            , value model.newTransaction.date
-            , onInput UpdateDate
-            ] []
-        , button
-            [ onClick CreateTransaction ]
-            [ text "Add new transaction" ]
-        ]
+      [ table
+          [ style
+              [ ("width", "100%")
+              ]
+          ]
+          [ (List.map (\attrs -> input (inputStyle :: attrs) []) >> tr')
+              [ [ placeholder "Object"
+                , value model.newTransaction.object
+                , onInput UpdateObject
+                ]
+              , [ placeholder "Value"
+                , value model.newTransaction.value
+                , type' "number"
+                , onInput UpdateValue
+                ]
+              , [ placeholder "Date"
+                , value model.newTransaction.date
+                , type' "date"
+                , onInput UpdateDate
+                ]
+              ]
+          ]
+      , button
+          [ onClick CreateTransaction ]
+          [ text "Add new transaction" ]
+      , div [ style [ ("color", "red") ] ]
+          [ text
+              <| Maybe.withDefault ""
+              <| Maybe.map Kinvey.errorToString model.recentError
+          ]
+      ]
 
     listTransactions =
-      div []
-        [ text "List of recent transactions"
-        , div [] <| List.map viewTransaction model.transactions
-        ]
+      [ h2 [] [ text "List of recent transactions" ]
+      , table
+          [ style
+              [ ("width", "100%")
+              , ("border", "1px solid black")
+              ]
+          ]
+          <| List.map viewTransaction model.transactions
+      ]
 
   in
 
-  div []
-    [ addTransaction
-    , div [ style [ ("color", "red") ] ]
-        [ text
-            <| Maybe.withDefault ""
-            <| Maybe.map Kinvey.errorToString model.recentError
-        ]
-    , listTransactions
-    ]
+  div [] ( addTransaction ++ listTransactions )
 
 
 viewTransaction : Transaction -> Html msg
 viewTransaction { object , value , date } =
-  div []
+  tr'
     [ text object
     , text value
     , text date
     ]
 
+
+-- tr' puts each element of the list into a td node and the whole thing into
+-- a tr node
+tr' : List (Html a) -> Html a
+tr' lines =
+  List.map (\e -> td [ style [ ("width", "30%") ] ] [e]) lines |> tr []
+
+
+inputStyle : Attribute a
+inputStyle =
+  style
+    [ ("width", "90%")
+    ]
+
+    
 type Msg
   = NoOp
   | UpdateObject String
