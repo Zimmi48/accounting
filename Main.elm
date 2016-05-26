@@ -37,16 +37,11 @@ init savedSession =
       LoginModel model ! [ cmd ]
 
     Just session ->
-      initLoggedIn session
-
-
-initLoggedIn : Session -> (Model, Cmd Msg)
-initLoggedIn session =
-  let (model, cmd) = LoggedIn.init session in
-  LoggedInModel model !
-    [ Cmd.map LoggedInMsg cmd
-    , setStorage session
-    ]
+      let (model, cmd) = LoggedIn.init session in
+      LoggedInModel model !
+        [ Cmd.map LoggedInMsg cmd
+        , setStorage session
+        ]
 
 
 type Msg
@@ -64,11 +59,15 @@ update msg model =
       ( LoginModel model , cmd )
 
     ( NewSession session , _ ) ->
-      initLoggedIn session
+      init (Just session)
 
     ( LoggedInMsg msg , LoggedInModel model ) ->
-      let (model, cmd) = LoggedIn.update msg model in
-      ( LoggedInModel model , Cmd.map LoggedInMsg cmd )
+      let (model, cmd, failedSession) = LoggedIn.update msg model in
+      if failedSession then
+        init Nothing
+
+      else
+        ( LoggedInModel model , Cmd.map LoggedInMsg cmd )
 
     _ ->
       model ! []

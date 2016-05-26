@@ -7,12 +7,9 @@ import Html.Events exposing (..)
 import Json.Encode as Encode
 import Json.Decode as Decode exposing ((:=))
 import Task
+import Http
 import Kinvey exposing (Session)
 import MyKinvey exposing (..)
-
-
--- TODO : always check for HTTP 401 Unauthorized response and go back
--- to Login page when it occurs
 
 
 type alias Model =
@@ -147,26 +144,28 @@ type Msg
   | Error Kinvey.Error
 
 
-update : Msg -> Model -> (Model, Cmd Msg)
+-- the third value returned by update is connectionFailed
+-- if true it indicates that the user must login again
+update : Msg -> Model -> (Model, Cmd Msg, Bool)
 update msg ({ newTransaction } as model) =
   case msg of
     UpdateObject s ->
       { model |
         newTransaction = { newTransaction | object = s }
       , recentError = Nothing
-      } ! []
+      } |> updateStandard
 
     UpdateValue s ->
       { model |
         newTransaction = { newTransaction | value = s }
       , recentError = Nothing
-      } ! []
+      } |> updateStandard
 
     UpdateDate s ->
       { model |
         newTransaction = { newTransaction | date = s }
       , recentError = Nothing
-      } ! []
+      } |> updateStandard
 
     CreateTransaction ->
       let
@@ -180,22 +179,38 @@ update msg ({ newTransaction } as model) =
 
       in
 
-      { model | recentError = Nothing }
-        ! [ Task.perform Error CreatedTransaction
-              <| createData model.session transactionTable transaction
-          ]
+      ( { model | recentError = Nothing }
+      , Task.perform Error CreatedTransaction
+          <| createData model.session transactionTable transaction
+      , False
+      )
 
     CreatedTransaction () ->
       { model |
         transactions = model.newTransaction :: model.transactions
       , newTransaction = Transaction "" "" ""
-      } ! []
+      } |> updateStandard
 
     FetchTransactions t ->
-      { model | transactions = t } ! []
+      { model | transactions = t } |> updateStandard
 
     Error e ->
-      { model | recentError = Just e } ! []
+      ( { model | recentError = Just e }
+      , Cmd.none
+      , is401 e
+      )
 
     NoOp ->
-      model ! []
+      model |> updateStandard
+
+
+updateStandard model = (model, Cmd.none, False)
+
+
+is401 e =
+  case e of
+    Kinvey.HttpError (Http.BadResponse 401 _) ->
+      True
+
+    _ ->
+      False
