@@ -8,9 +8,6 @@ import Login
 import LoggedIn
 
 
--- TODO: if session is invalid, go back to Login page
-
-
 main : Program (Maybe Session)
 main =
   App.programWithFlags
@@ -40,7 +37,7 @@ init savedSession =
       let (model, cmd) = LoggedIn.init session in
       LoggedInModel model !
         [ Cmd.map LoggedInMsg cmd
-        , setStorage session
+        , setStorage session -- save session token for later use
         ]
 
 
@@ -48,26 +45,26 @@ type Msg
   = NoOp
   | LoginMsg Login.Msg
   | LoggedInMsg LoggedIn.Msg
-  | NewSession Session
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case ( msg , model ) of
     ( LoginMsg msg , LoginModel model ) ->
-      let (model, cmd) = Login.update NewSession LoginMsg msg model in
-      ( LoginModel model , cmd )
+      case Login.update msg model of
+        Login.Update (model, cmd) ->
+          ( LoginModel model , Cmd.map LoginMsg cmd )
 
-    ( NewSession session , _ ) ->
-      init (Just session)
+        Login.NewSession session ->
+          init (Just session)
 
     ( LoggedInMsg msg , LoggedInModel model ) ->
-      let (model, cmd, failedSession) = LoggedIn.update msg model in
-      if failedSession then
-        init Nothing
+      case LoggedIn.update msg model of
+        Nothing ->
+          init Nothing
 
-      else
-        ( LoggedInModel model , Cmd.map LoggedInMsg cmd )
+        Just (model, cmd) ->
+          ( LoggedInModel model , Cmd.map LoggedInMsg cmd )
 
     _ ->
       model ! []

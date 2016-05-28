@@ -144,9 +144,8 @@ type Msg
   | Error Kinvey.Error
 
 
--- the third value returned by update is connectionFailed
--- if true it indicates that the user must login again
-update : Msg -> Model -> (Model, Cmd Msg, Bool)
+-- if update returns Nothing, it means the connection has failed
+update : Msg -> Model -> Maybe (Model, Cmd Msg)
 update msg ({ newTransaction } as model) =
   case msg of
     UpdateObject s ->
@@ -179,11 +178,11 @@ update msg ({ newTransaction } as model) =
 
       in
 
-      ( { model | recentError = Nothing }
-      , Task.perform Error CreatedTransaction
-          <| createData model.session transactionTable transaction
-      , False
-      )
+        Just
+          ( { model | recentError = Nothing }
+          , Task.perform Error CreatedTransaction
+              <| createData model.session transactionTable transaction
+          )
 
     CreatedTransaction () ->
       { model |
@@ -195,22 +194,16 @@ update msg ({ newTransaction } as model) =
       { model | transactions = t } |> updateStandard
 
     Error e ->
-      ( { model | recentError = Just e }
-      , Cmd.none
-      , is401 e
-      )
+      case e of
+        Kinvey.HttpError (Http.BadResponse 401 _) ->
+          Nothing
+
+        _ ->
+          { model | recentError = Just e } |> updateStandard
 
     NoOp ->
       model |> updateStandard
 
 
-updateStandard model = (model, Cmd.none, False)
-
-
-is401 e =
-  case e of
-    Kinvey.HttpError (Http.BadResponse 401 _) ->
-      True
-
-    _ ->
-      False
+updateStandard : a -> Maybe ( a, Cmd b )
+updateStandard model = Just (model, Cmd.none)

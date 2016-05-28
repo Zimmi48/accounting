@@ -1,4 +1,4 @@
-module Login exposing (Model, init, view, update, Msg)
+module Login exposing (Model, init, view, update, Msg, UpdateResponse(..))
 
 
 import Html exposing (..)
@@ -45,21 +45,32 @@ type Msg
   | Password String
   | Login
   | Error Kinvey.Error
+  | Success Session
 
 
-update : (Session -> msg) -> (Msg -> msg) -> Msg -> Model -> (Model, Cmd msg)
-update successMsg mapMsg msg model =
+type UpdateResponse
+  = Update (Model, Cmd Msg)
+  | NewSession Session
+
+
+update : Msg -> Model -> UpdateResponse
+update msg model =
   case msg of
     Username s ->
-      { model | username = s } ! []
+      Update ( { model | username = s } , Cmd.none)
 
     Password s ->
-      { model | password = s } ! []
+      Update ( { model | password = s } , Cmd.none )
 
     Login ->
-      model
-        ! [ Task.perform (mapMsg << Error) successMsg
-              <| login model.username model.password ]
+      Update
+        ( model
+        , Task.perform Error Success
+            <| login model.username model.password
+        )
 
-    _ ->
-      init
+    Error _ ->
+      Update init
+
+    Success session ->
+      NewSession session
