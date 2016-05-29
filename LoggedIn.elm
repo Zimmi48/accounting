@@ -1,6 +1,7 @@
 module LoggedIn exposing (Model, init, view, Msg, update)
 
 
+import String
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
@@ -22,7 +23,7 @@ type alias Model =
 
 type alias Transaction =
   { object : String
-  , value : String
+  , value : Float
   , date : String
   }
 
@@ -33,12 +34,12 @@ transactionTable = "transactions"
 
 init : Session -> (Model, Cmd Msg)
 init session =
-  Model session [] (Transaction "" "" "") Nothing !
+  Model session [] (Transaction "" 0 "") Nothing !
     [ Task.perform Error FetchTransactions
         <| getData session transactionTable
         <| Decode.object3 Transaction
             ("object" := Decode.string)
-            ("value" := Decode.string)
+            ("value" := Decode.float)
             ("date" := Decode.string)
     ]
 
@@ -58,7 +59,7 @@ view model =
                 , onInput UpdateObject
                 ]
               , [ placeholder "Value"
-                , value model.newTransaction.value
+                , value (toString model.newTransaction.value)
                 , type' "number"
                 , onInput UpdateValue
                 ]
@@ -112,7 +113,7 @@ viewTransaction : Transaction -> Html msg
 viewTransaction { object , value , date } =
   tr'
     [ text object
-    , text value
+    , text (toString value)
     , text date
     ]
 
@@ -155,10 +156,15 @@ update msg ({ newTransaction } as model) =
       } |> updateStandard
 
     UpdateValue s ->
-      { model |
-        newTransaction = { newTransaction | value = s }
-      , recentError = Nothing
-      } |> updateStandard
+      case String.toFloat s of
+        Ok value ->
+          { model |
+            newTransaction = { newTransaction | value = value }
+          , recentError = Nothing
+          } |> updateStandard
+
+        _ ->
+          model |> updateStandard
 
     UpdateDate s ->
       { model |
@@ -171,8 +177,7 @@ update msg ({ newTransaction } as model) =
         transaction =
           Encode.object
             [ ("object", Encode.string model.newTransaction.object)
-            , ("value", Encode.string model.newTransaction.value)
-            -- should be a float
+            , ("value", Encode.float model.newTransaction.value)
             , ("date", Encode.string model.newTransaction.date)
             ]
 
@@ -187,7 +192,7 @@ update msg ({ newTransaction } as model) =
     CreatedTransaction () ->
       { model |
         transactions = model.newTransaction :: model.transactions
-      , newTransaction = Transaction "" "" ""
+      , newTransaction = Transaction "" 0 ""
       } |> updateStandard
 
     FetchTransactions t ->
