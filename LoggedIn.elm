@@ -2,6 +2,8 @@ module LoggedIn exposing (Model, init, view, Msg, update)
 
 
 import String
+import Date exposing (Date)
+import Date.Format as Date
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
@@ -17,15 +19,19 @@ type alias Model =
   { session : Session
   , transactions : List Transaction
   , newTransaction : Transaction
-  , recentError : Maybe Kinvey.Error
+  , recentError : Maybe String
   }
 
 
 type alias Transaction =
   { object : String
   , value : Float
-  , date : String
+  , date : Date
   }
+
+
+newTransaction : Transaction
+newTransaction = Transaction "" 0 (Date.fromTime 0)
 
 
 transactionTable : String
@@ -34,13 +40,13 @@ transactionTable = "transactions"
 
 init : Session -> (Model, Cmd Msg)
 init session =
-  Model session [] (Transaction "" 0 "") Nothing !
+  Model session [] newTransaction Nothing !
     [ Task.perform Error FetchTransactions
         <| getData session transactionTable
         <| Decode.object3 Transaction
             ("object" := Decode.string)
             ("value" := Decode.float)
-            ("date" := Decode.string)
+            ("date" := Decode.customDecoder Decode.string Date.fromString)
     ]
 
 
@@ -55,16 +61,13 @@ view model =
           ]
           [ (List.map (\attrs -> input (inputStyle :: attrs) []) >> tr')
               [ [ placeholder "Object"
-                , value model.newTransaction.object
                 , onInput UpdateObject
                 ]
               , [ placeholder "Value"
-                , value (toString model.newTransaction.value)
                 , type' "number"
                 , onInput UpdateValue
                 ]
               , [ placeholder "Date"
-                , value model.newTransaction.date
                 , type' "date"
                 , onInput UpdateDate
                 ]
@@ -88,8 +91,7 @@ view model =
           ]
       , div [ style [ ("color", "red") ] ]
           [ text
-              <| Maybe.withDefault ""
-              <| Maybe.map Kinvey.errorToString model.recentError
+              <| Maybe.withDefault "" model.recentError
           ]
       ]
 
@@ -114,7 +116,7 @@ viewTransaction { object , value , date } =
   tr'
     [ text object
     , text (toString value)
-    , text date
+    , text (Date.format "%e %b %Y" date)
     ]
 
 
@@ -163,14 +165,23 @@ update msg ({ newTransaction } as model) =
           , recentError = Nothing
           } |> updateStandard
 
-        _ ->
-          model |> updateStandard
+        Err s ->
+          { model |
+            recentError = Just s
+          } |> updateStandard
 
     UpdateDate s ->
-      { model |
-        newTransaction = { newTransaction | date = s }
-      , recentError = Nothing
-      } |> updateStandard
+      case Date.fromString s of
+        Ok date ->
+          { model |
+            newTransaction = { newTransaction | date = date }
+          , recentError = Nothing
+          } |> updateStandard
+
+        Err s ->
+          { model |
+            recentError = Just s
+          } |> updateStandard
 
     CreateTransaction ->
       let
@@ -178,7 +189,10 @@ update msg ({ newTransaction } as model) =
           Encode.object
             [ ("object", Encode.string model.newTransaction.object)
             , ("value", Encode.float model.newTransaction.value)
-            , ("date", Encode.string model.newTransaction.date)
+            , ( "date"
+              , Encode.string
+                  <| Date.formatISO8601 model.newTransaction.date
+              )
             ]
 
       in
@@ -192,7 +206,7 @@ update msg ({ newTransaction } as model) =
     CreatedTransaction () ->
       { model |
         transactions = model.newTransaction :: model.transactions
-      , newTransaction = Transaction "" 0 ""
+      , newTransaction = newTransaction
       } |> updateStandard
 
     FetchTransactions t ->
@@ -204,7 +218,9 @@ update msg ({ newTransaction } as model) =
           Nothing
 
         _ ->
-          { model | recentError = Just e } |> updateStandard
+          { model
+            | recentError = Just (Kinvey.errorToString e)
+          } |> updateStandard
 
     NoOp ->
       model |> updateStandard
