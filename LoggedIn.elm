@@ -30,8 +30,8 @@ type alias Transaction =
   }
 
 
-newTransaction : Transaction
-newTransaction = Transaction "" 0 (Date.fromTime 0)
+initTransaction : Transaction
+initTransaction = Transaction "" 0 (Date.fromTime 0)
 
 
 transactionTable : String
@@ -40,7 +40,7 @@ transactionTable = "transactions"
 
 init : Session -> (Model, Cmd Msg)
 init session =
-  Model session [] newTransaction Nothing !
+  Model session [] initTransaction Nothing !
     [ Task.perform Error FetchTransactions
         <| getData session transactionTable
         <| Decode.object3 Transaction
@@ -66,6 +66,13 @@ view model =
               , [ placeholder "Value"
                 , type' "number"
                 , onInput UpdateValue
+                , value
+                    ( if model.newTransaction.value == 0 then
+                        ""
+                        
+                      else
+                        toString model.newTransaction.value
+                    )
                 ]
               , [ placeholder "Date"
                 , type' "date"
@@ -158,16 +165,22 @@ update msg ({ newTransaction } as model) =
       } |> updateStandard
 
     UpdateValue s ->
-      case String.toFloat s of
+      case if String.isEmpty s then Ok 0 else String.toFloat s of
         Ok value ->
-          { model |
-            newTransaction = { newTransaction | value = value }
-          , recentError = Nothing
-          } |> updateStandard
+          if value > 0 || String.isEmpty s then
+            { model |
+              newTransaction = { newTransaction | value = value }
+            , recentError = Nothing
+            } |> updateStandard
 
-        Err s ->
+          else
+            { model |
+              recentError = Just "Value should be a positive number"
+            } |> updateStandard
+
+        Err _ ->
           { model |
-            recentError = Just s
+            recentError = Just "Value should be a positive number"
           } |> updateStandard
 
     UpdateDate s ->
@@ -206,7 +219,7 @@ update msg ({ newTransaction } as model) =
     CreatedTransaction () ->
       { model |
         transactions = model.newTransaction :: model.transactions
-      , newTransaction = newTransaction
+      , newTransaction = initTransaction
       } |> updateStandard
 
     FetchTransactions t ->
