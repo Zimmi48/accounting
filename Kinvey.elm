@@ -20,9 +20,11 @@ import Result
 import Task exposing (Task, andThen, toResult)
 
 
+apiVersion : ( String, String )
 apiVersion = ("X-Kinvey-Api-Version" , "3")
 
 
+contentType : ( String, String )
 contentType = ("Content-Type", "application/json")
 
 
@@ -47,7 +49,7 @@ errorToString e =
       "Unexpected payload: " ++ s
 
     HttpError (BadResponse _ s) ->
-      "Bad response: " ++ s
+      s
 
 
 type alias Auth =
