@@ -62,6 +62,7 @@ view model =
           [ (List.map (\attrs -> input (inputStyle :: attrs) []) >> tr')
               [ [ placeholder "Object"
                 , onInput UpdateObject
+                , value model.newTransaction.object
                 ]
               , [ placeholder "Value"
                 , type' "number"
@@ -77,7 +78,16 @@ view model =
               , [ placeholder "Date"
                 , type' "date"
                 , onInput UpdateDate
-                ]
+                ] ++
+                  if Date.toTime model.newTransaction.date == 0
+                  && model.recentError == Nothing
+                  then
+                    Debug.log "weird 1"
+                    [ value "" ]
+
+                  else
+                    Debug.log "weird 3"
+                    []  
               ]
           ]
       , div [ style [ ("text-align", "center") , ("margin", "10px 0") ] ]
@@ -184,7 +194,13 @@ update msg ({ newTransaction } as model) =
           } |> updateStandard
 
     UpdateDate s ->
-      case Date.fromString s of
+      case
+        if String.isEmpty s then
+          Ok (Date.fromTime 0)
+
+        else
+          Date.fromString s
+      of
         Ok date ->
           { model |
             newTransaction = { newTransaction | date = date }
@@ -192,6 +208,7 @@ update msg ({ newTransaction } as model) =
           } |> updateStandard
 
         Err s ->
+          Debug.log "wierd 2"
           { model |
             recentError = Just s
           } |> updateStandard
