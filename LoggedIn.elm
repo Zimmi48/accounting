@@ -19,7 +19,8 @@ type alias Model =
   { session : Session
   , transactions : List Transaction
   , newTransaction : Transaction
-  , recentError : Maybe String
+  , dateValue : String
+  , recentError : String
   }
 
 
@@ -40,7 +41,7 @@ transactionTable = "transactions"
 
 init : Session -> (Model, Cmd Msg)
 init session =
-  Model session [] initTransaction Nothing !
+  Model session [] initTransaction "" "" !
     [ Task.perform Error FetchTransactions
         <| getData session transactionTable
         <| Decode.object3 Transaction
@@ -78,16 +79,8 @@ view model =
               , [ placeholder "Date"
                 , type' "date"
                 , onInput UpdateDate
-                ] ++
-                  if Date.toTime model.newTransaction.date == 0
-                  && model.recentError == Nothing
-                  then
-                    Debug.log "weird 1"
-                    [ value "" ]
-
-                  else
-                    Debug.log "weird 3"
-                    []  
+                , value model.dateValue
+                ]
               ]
           ]
       , div [ style [ ("text-align", "center") , ("margin", "10px 0") ] ]
@@ -107,8 +100,7 @@ view model =
             [ text "Add new transaction" ]
           ]
       , div [ style [ ("color", "red") ] ]
-          [ text
-              <| Maybe.withDefault "" model.recentError
+          [ text model.recentError
           ]
       ]
 
@@ -171,7 +163,7 @@ update msg ({ newTransaction } as model) =
     UpdateObject s ->
       { model |
         newTransaction = { newTransaction | object = s }
-      , recentError = Nothing
+      , recentError = ""
       } |> updateStandard
 
     UpdateValue s ->
@@ -180,17 +172,17 @@ update msg ({ newTransaction } as model) =
           if value > 0 || String.isEmpty s then
             { model |
               newTransaction = { newTransaction | value = value }
-            , recentError = Nothing
+            , recentError = ""
             } |> updateStandard
 
           else
             { model |
-              recentError = Just "Value should be a positive number"
+              recentError = "Value should be a positive number"
             } |> updateStandard
 
         Err _ ->
           { model |
-            recentError = Just "Value should be a positive number"
+            recentError = "Value should be a positive number"
           } |> updateStandard
 
     UpdateDate s ->
@@ -204,13 +196,15 @@ update msg ({ newTransaction } as model) =
         Ok date ->
           { model |
             newTransaction = { newTransaction | date = date }
-          , recentError = Nothing
+          , dateValue = s
+          , recentError = ""
           } |> updateStandard
 
-        Err s ->
+        Err e ->
           Debug.log "wierd 2"
           { model |
-            recentError = Just s
+            dateValue = s
+          , recentError = e
           } |> updateStandard
 
     CreateTransaction ->
@@ -228,7 +222,7 @@ update msg ({ newTransaction } as model) =
       in
 
         Just
-          ( { model | recentError = Nothing }
+          ( { model | recentError = "" }
           , Task.perform Error CreatedTransaction
               <| createData model.session transactionTable transaction
           )
@@ -249,7 +243,7 @@ update msg ({ newTransaction } as model) =
 
         _ ->
           { model
-            | recentError = Just (Kinvey.errorToString e)
+            | recentError = Kinvey.errorToString e
           } |> updateStandard
 
     NoOp ->
