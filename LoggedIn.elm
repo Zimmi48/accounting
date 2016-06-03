@@ -4,6 +4,7 @@ module LoggedIn exposing (Model, init, view, Msg, update)
 import String
 import Date exposing (Date)
 import Date.Format as Date
+import Time exposing (Time)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
@@ -48,6 +49,7 @@ init session =
             ("object" := Decode.string)
             ("value" := Decode.float)
             ("date" := Decode.customDecoder Decode.string Date.fromString)
+    , Task.perform Error CurrentTime Time.now
     ]
 
 
@@ -150,6 +152,7 @@ type Msg
   | UpdateObject String
   | UpdateValue String
   | UpdateDate String
+  | CurrentTime Time
   | CreateTransaction
   | CreatedTransaction ()
   | FetchTransactions (List Transaction)
@@ -206,6 +209,17 @@ update msg ({ newTransaction } as model) =
             dateValue = s
           , recentError = e
           } |> updateStandard
+
+    CurrentTime t ->
+        if model.dateValue == "" then
+          let today = Date.fromTime t in
+          { model |
+            newTransaction = { newTransaction | date = today }
+          , dateValue = Date.format "%Y-%m-%d" today
+          } |> updateStandard
+
+        else
+          model |> updateStandard
 
     CreateTransaction ->
       let
