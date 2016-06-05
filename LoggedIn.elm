@@ -94,8 +94,8 @@ tr' lines =
 
 addTransactionIntoConfig : AddTransaction.Model -> Dialog.Config Msg
 addTransactionIntoConfig model =
-  { closeMessage = Nothing
-  , header = Just (text "Add a new transaction")
+  { closeMessage = Just CloseAddTransaction
+  , header = Just (h4 [] [text "Add a new transaction"])
   , body = Just (App.map AddTransactionMsg <| AddTransaction.view model)
   , footer = Nothing
   }
@@ -104,6 +104,7 @@ addTransactionIntoConfig model =
 type Msg
   = AddTransactionMsg AddTransaction.Msg
   | OpenAddTransaction
+  | CloseAddTransaction
   | CreatedTransaction ()
   | FetchTransactions (List Transaction)
   | Error Kinvey.Error
@@ -158,6 +159,9 @@ update msg model =
           }
         , Cmd.map AddTransactionMsg cmd
         )
+
+    CloseAddTransaction ->
+      { model | addTransaction = Nothing } |> updateStandard
 
     CreatedTransaction () ->
       { model |
