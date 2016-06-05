@@ -5,6 +5,7 @@
   outline: 0; }
 
 .elm-datepicker--picker {
+  background-color: white;
   position: absolute;
   border: 1px solid #CCC;
   z-index: 10; }
