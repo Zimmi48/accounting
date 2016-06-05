@@ -87,7 +87,7 @@ update msg model =
       , Cmd.none
       , Nothing
       )
-            
+
     UpdateDate msg ->
       let
         (dateModel, dateCmd, date) =
@@ -125,7 +125,7 @@ view model =
       || Maybe.isNothing model.value
       || Maybe.isNothing model.date
   in
-    
+
   Html.form [ onSubmit Submit ]
     [ input
         [ placeholder "Object"

@@ -100,7 +100,7 @@ addTransactionIntoConfig model =
   , footer = Nothing
   }
 
-    
+
 type Msg
   = AddTransactionMsg AddTransaction.Msg
   | OpenAddTransaction
@@ -172,7 +172,7 @@ update msg model =
 
             Nothing ->
               model.transactions
-          
+
       , addTransaction = Nothing
       , newTransaction = Nothing
       } |> updateStandard
