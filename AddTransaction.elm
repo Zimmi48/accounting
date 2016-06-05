@@ -131,39 +131,26 @@ view model =
         [ placeholder "Object"
         , value model.object
         , onInput UpdateObject
-        , inputStyle
+        , class "form-control"
         ] []
     , input
         [ placeholder "Value"
         , value model.valueString
         , type' "number"
         , onInput UpdateValue
-        , inputStyle
+        , class "form-control"
         ] []
     , App.map UpdateDate <| DatePicker.view model.datePicker
     , input
         [ type' "submit"
-        , disabled notready        
-        , style
-            [ ("background-color", if notready then "gray" else "#4CAF50")
-            , ("border", "none")
-            , ("color", "white")
-            , ("padding", "15px 32px")
-            , ("text-align", "center")
-            , ("font-weight", "bold")
-            , ("display", "inline-block")
-            , ("cursor", if notready then "not-allowed" else "pointer")
+        , disabled notready
+        , classList
+            [ ("btn", True)
+            , ("btn-success", True)
             ]
         ] []
     ]
 
 
-inputStyle : Attribute msg
-inputStyle =
-  style
-    [ ("width", "90%")
-    , ("height", "30px")
-    , ("display", "block")
-    ]
 
 
