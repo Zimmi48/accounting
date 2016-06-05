@@ -55,7 +55,7 @@ init session =
 
 view : Model -> Html Msg
 view model =
-  div []
+  div [ class "container" ]
     [ button
         [ onClick OpenAddTransaction ]
         [ text "Add a new transaction" ]
@@ -63,12 +63,8 @@ view model =
         [ style [ ("color", "red") ] ]
         [ text model.recentError ]
     , h2 [] [ text "List of recent transactions" ]
-    , table
-        [ style
-            [ ("width", "100%")
-            , ("border", "1px solid black")
-            ]
-        ]
+    , div
+        [ class "container" ]
         <| List.map viewTransaction model.transactions
     , Dialog.view
       <| Maybe.map addTransactionIntoConfig model.addTransaction
@@ -77,10 +73,11 @@ view model =
 
 viewTransaction : Transaction -> Html msg
 viewTransaction { object , value , date } =
-  tr'
-    [ text object
-    , text (toString <| Positive.toNum value)
-    , text (Date.format "%e %b %Y" date)
+  div
+    [ class "row" ]
+    [ div [ class "col-md-4" ] [ text object ]
+    , div [ class "col-md-4" ] [ text (toString <| Positive.toNum value) ]
+    , div [ class "col-md-4" ] [ text (Date.format "%e %b %Y" date) ]
     ]
 
 
