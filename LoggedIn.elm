@@ -70,6 +70,7 @@ view model =
     , h2 [] [ text "List of recent transactions" ]
     , div
         [ class "container" ]
+        <| List.intersperse (hr [] [])
         <| List.map viewTransaction model.transactions
     , Dialog.view
       <| Maybe.map addTransactionIntoConfig model.addTransaction
