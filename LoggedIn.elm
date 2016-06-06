@@ -55,9 +55,14 @@ init session =
 
 view : Model -> Html Msg
 view model =
-  div [ class "container" ]
+  div []
     [ button
-        [ onClick OpenAddTransaction ]
+        [ onClick OpenAddTransaction
+        , classList
+            [ ("btn", True)
+            , ("btn-success", True)
+            ]
+        ]
         [ text "Add a new transaction" ]
     , div
         [ style [ ("color", "red") ] ]

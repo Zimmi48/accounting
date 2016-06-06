@@ -43,7 +43,7 @@ init =
     (dateModel, dateCmd) =
       DatePicker.init
         { defaultSettings |
-          placeholder = "Date"
+          placeholder = "1 Jan 1970"
         , dateFormatter = Date.format "%e %b %Y"
         , firstDayOfWeek = Date.Mon
         }
@@ -126,21 +126,34 @@ view model =
       || Maybe.isNothing model.date
   in
 
-  Html.form [ onSubmit Submit ]
-    [ input
-        [ placeholder "Object"
-        , value model.object
-        , onInput UpdateObject
-        , class "form-control"
-        ] []
-    , input
-        [ placeholder "Value"
-        , value model.valueString
-        , type' "number"
-        , onInput UpdateValue
-        , class "form-control"
-        ] []
-    , App.map UpdateDate <| DatePicker.view model.datePicker
+  Html.form
+    [ onSubmit Submit ]
+    [ div
+        [ class "form-group" ]
+        [ label [ for "object" ] [ text "Object" ]
+        , input
+            [ placeholder "Groceries"
+            , value model.object
+            , onInput UpdateObject
+            , class "form-control"
+            ] []
+        ]
+    , div
+        [ class "form-group" ]
+        [ label [ for "value" ] [ text "Value" ]
+        , input
+            [ placeholder "23.33"
+            , value model.valueString
+            , type' "number"
+            , onInput UpdateValue
+            , class "form-control"
+            ] []
+        ]
+    , div
+        [ class "form-group" ]
+        [ label [ for "date" ] [ text "Date" ]
+        , App.map UpdateDate <| DatePicker.view model.datePicker
+        ]
     , input
         [ type' "submit"
         , disabled notready
