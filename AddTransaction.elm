@@ -134,6 +134,7 @@ view model =
         , input
             [ placeholder "Groceries"
             , value model.object
+            , name "object"
             , onInput UpdateObject
             , class "form-control"
             ] []
@@ -145,6 +146,10 @@ view model =
             [ placeholder "23.33"
             , value model.valueString
             , type' "number"
+            , name "value"
+            , Html.Attributes.min "0.01"
+            , step "0.01"
+            , required True
             , onInput UpdateValue
             , class "form-control"
             ] []

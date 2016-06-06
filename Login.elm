@@ -43,6 +43,8 @@ view model =
             , type' "email"
             , placeholder "Email"
             , value model.username
+            , name "email"
+            , required True
             , class "form-control"
             ] []
         ]
@@ -59,6 +61,8 @@ view model =
             , type' "password"
             , placeholder "Password"
             , value model.password
+            , name "password"
+            , required True
             , class "form-control"
             ] []
         ]
