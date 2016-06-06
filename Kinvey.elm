@@ -9,6 +9,7 @@ module Kinvey exposing
   , setUserData
   , createData
   , getData
+  , Sort(..)
   )
 
 
@@ -195,8 +196,13 @@ createData auth session collection data =
   |> Task.mapError HttpError
 
 
-getData : Auth -> Session -> String -> Decoder a -> Task Error (List a)
-getData auth session collection decoder =
+type Sort
+  = NoSort
+  | ReverseSort String
+  | Sort String
+
+getData : Auth -> Session -> String -> Sort -> Decoder a -> Task Error (List a)
+getData auth session collection sortfield decoder =
   Http.send
     Http.defaultSettings
     { verb = "GET"
@@ -204,7 +210,18 @@ getData auth session collection decoder =
         [ ("Authorization" , session.token)
         , apiVersion
         ]
-    , url = baseDataUrl auth ++ collection
+    , url =
+        baseDataUrl auth ++ collection ++
+          case sortfield of
+            NoSort ->
+              "/"
+                
+            ReverseSort sortfield ->
+              "/?query={}&sort={\"" ++ sortfield ++ "\": -1}"
+
+            Sort sortfield ->
+              "/?query={}&sort=" ++ sortfield
+              
     , body = Http.empty
     }
   |> Http.fromJson (Decode.list decoder)

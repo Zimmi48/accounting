@@ -42,7 +42,7 @@ init : Session -> (Model, Cmd Msg)
 init session =
   Model session [] Nothing Nothing "" !
     [ Task.perform Error FetchTransactions
-        <| getData session transactionTable
+        <| getData session transactionTable (Kinvey.ReverseSort "date")
         <| Decode.object3 Transaction
             ("object" := Decode.string)
             ("value" :=
