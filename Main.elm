@@ -1,6 +1,7 @@
 port module Main exposing (..)
 
 
+import Html.Attributes exposing (..)
 import Html exposing (..)
 import Html.App as App
 import Kinvey exposing (Session)
@@ -72,12 +73,17 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-  case model of
-    LoginModel model ->
-      App.map LoginMsg <| Login.view model
+  div
+    [ class "container" ]
+    [ h1 [] [ text "Keeping track of my spendings" ]
+    , case model of
+        LoginModel model ->
+          App.map LoginMsg <| Login.view model
+        
+        LoggedInModel model ->
+          App.map LoggedInMsg <| LoggedIn.view model
+    ]
 
-    LoggedInModel model ->
-      App.map LoggedInMsg <| LoggedIn.view model
 
 
 
