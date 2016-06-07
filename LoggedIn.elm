@@ -24,7 +24,7 @@ type alias Model =
   , transactions : List Transaction
   , newTransaction : Maybe Transaction
   , addTransaction : Maybe AddTransaction.Model
-  , newAccount : String
+  , newAccount : (String, Float)
   , addAccount : Maybe AddAccount.Model
   , recentError : String
   }
@@ -51,7 +51,7 @@ init session =
   , transactions = []
   , newTransaction = Nothing
   , addTransaction = Nothing
-  , newAccount = ""
+  , newAccount = ("", 0)
   , addAccount = Nothing
   , recentError = ""
   } !
@@ -218,15 +218,18 @@ update msg model =
             addAccount = Just addAccountModel
           } |> updateStandard
 
-        Just (addAccountModel, Just accountName) ->
+        Just (addAccountModel, Just (accountName, initialValue)) ->
           Just
             ( { model |
                 addAccount = Just addAccountModel
-              , newAccount = accountName
+              , newAccount = (accountName, initialValue)
               }
             , Task.perform Error CreatedAccount
               <| createData model.session accountTable
-              <| Encode.object [ ("name", Encode.string accountName) ]
+              <| Encode.object
+                   [ ("name", Encode.string accountName)
+                   , ("value", Encode.float initialValue)
+                   ]
             )
 
         Nothing ->
@@ -240,7 +243,7 @@ update msg model =
 
     CreatedAccount () ->
       { model |
-        newAccount = ""
+        newAccount = ("", 0)
       , addAccount = Nothing
       } |> updateStandard
     
