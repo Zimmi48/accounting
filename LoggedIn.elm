@@ -72,6 +72,11 @@ init session =
                  (Positive.fromNum >> Result.fromMaybe "")
             )
             ("date" := Decode.customDecoder Decode.string Date.fromString)
+    , Task.perform Error FetchAccounts
+        <| getData session accountTable Kinvey.NoSort
+        <| Decode.object2 Account
+            ("name" := Decode.string)
+            ("value" := Decode.float)
     ]
 
 
@@ -146,6 +151,7 @@ type Msg
   | OpenAddAccount
   | CloseAddAccount
   | CreatedAccount ()
+  | FetchAccounts (List Account)
   | Error Kinvey.Error
 
 
@@ -262,6 +268,9 @@ update msg model =
       , newAccount = Nothing
       , addAccount = Nothing
       } |> updateStandard
+
+    FetchAccounts a ->
+      { model | accounts = a } |> updateStandard
     
     Error e ->
       case e of
