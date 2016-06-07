@@ -2,6 +2,7 @@ module LoggedIn exposing (Model, init, view, Msg, update)
 
 
 import AddTransaction
+import AddAccount
 import Date exposing (Date)
 import Date.Format as Date
 import Dialog
@@ -23,6 +24,8 @@ type alias Model =
   , transactions : List Transaction
   , newTransaction : Maybe Transaction
   , addTransaction : Maybe AddTransaction.Model
+  , newAccount : String
+  , addAccount : Maybe AddAccount.Model
   , recentError : String
   }
 
@@ -38,9 +41,20 @@ transactionTable : String
 transactionTable = "transactions"
 
 
+accountTable : String
+accountTable = "accounts"
+
+
 init : Session -> (Model, Cmd Msg)
 init session =
-  Model session [] Nothing Nothing "" !
+  { session = session
+  , transactions = []
+  , newTransaction = Nothing
+  , addTransaction = Nothing
+  , newAccount = ""
+  , addAccount = Nothing
+  , recentError = ""
+  } !
     [ Task.perform Error FetchTransactions
         <| getData session transactionTable (Kinvey.ReverseSort "date")
         <| Decode.object3 Transaction
@@ -56,14 +70,9 @@ init session =
 view : Model -> Html Msg
 view model =
   div []
-    [ button
-        [ onClick OpenAddTransaction
-        , classList
-            [ ("btn", True)
-            , ("btn-success", True)
-            ]
-        ]
-        [ text "Add a new transaction" ]
+    [ successButton "Add a new transaction" OpenAddTransaction
+    , text " " -- for spacing
+    , successButton "Create a new account" OpenAddAccount
     , div
         [ style [ ("color", "red") ] ]
         [ text model.recentError ]
@@ -74,6 +83,8 @@ view model =
         <| List.map viewTransaction model.transactions
     , Dialog.view
       <| Maybe.map addTransactionIntoConfig model.addTransaction
+    , Dialog.view
+      <| Maybe.map addAccountIntoConfig model.addAccount
     ]
 
 
@@ -87,12 +98,16 @@ viewTransaction { object , value , date } =
     ]
 
 
--- tr' puts each element of the list into a td node and the whole thing into
--- a tr node
-tr' : List (Html a) -> Html a
-tr' lines =
-  let width = toString (100 // List.length lines) ++ "%" in
-  List.map (\e -> td [ style [ ("width", width) , ("padding", "3px 15px 0 5px") ] ] [e]) lines |> tr []
+successButton : String -> Msg -> Html Msg
+successButton buttonText msg =
+  button
+    [ onClick msg
+    , classList
+        [ ("btn", True)
+        , ("btn-success", True)
+        ]
+    ]
+  [ text buttonText ]
 
 
 addTransactionIntoConfig : AddTransaction.Model -> Dialog.Config Msg
@@ -104,12 +119,25 @@ addTransactionIntoConfig model =
   }
 
 
+addAccountIntoConfig : AddAccount.Model -> Dialog.Config Msg
+addAccountIntoConfig model =
+  { closeMessage = Just CloseAddAccount
+  , header = Just (h4 [] [text "Create a new account"])
+  , body = Just (App.map AddAccountMsg <| AddAccount.view model)
+  , footer = Nothing
+  }
+
+
 type Msg
   = AddTransactionMsg AddTransaction.Msg
   | OpenAddTransaction
   | CloseAddTransaction
   | CreatedTransaction ()
   | FetchTransactions (List Transaction)
+  | AddAccountMsg AddAccount.Msg
+  | OpenAddAccount
+  | CloseAddAccount
+  | CreatedAccount ()
   | Error Kinvey.Error
 
 
@@ -183,6 +211,39 @@ update msg model =
     FetchTransactions t ->
       { model | transactions = t } |> updateStandard
 
+    AddAccountMsg msg ->
+      case (Maybe.map (AddAccount.update msg) model.addAccount) of
+        Just (addAccountModel, Nothing) ->
+          { model |
+            addAccount = Just addAccountModel
+          } |> updateStandard
+
+        Just (addAccountModel, Just accountName) ->
+          Just
+            ( { model |
+                addAccount = Just addAccountModel
+              , newAccount = accountName
+              }
+            , Task.perform Error CreatedAccount
+              <| createData model.session accountTable
+              <| Encode.object [ ("name", Encode.string accountName) ]
+            )
+
+        Nothing ->
+          model |> updateStandard
+        
+    OpenAddAccount ->
+      { model | addAccount = Just AddAccount.init } |> updateStandard
+
+    CloseAddAccount ->
+      { model | addAccount = Nothing } |> updateStandard
+
+    CreatedAccount () ->
+      { model |
+        newAccount = ""
+      , addAccount = Nothing
+      } |> updateStandard
+    
     Error e ->
       case e of
         Kinvey.HttpError (Http.BadResponse 401 _) ->
