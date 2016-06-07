@@ -24,7 +24,8 @@ type alias Model =
   , transactions : List Transaction
   , newTransaction : Maybe Transaction
   , addTransaction : Maybe AddTransaction.Model
-  , newAccount : (String, Float)
+  , accounts : List Account
+  , newAccount : Maybe Account
   , addAccount : Maybe AddAccount.Model
   , recentError : String
   }
@@ -34,6 +35,12 @@ type alias Transaction =
   { object : String
   , value : Positive Float
   , date : Date
+  }
+
+
+type alias Account =
+  { name : String
+  , value : Float
   }
 
 
@@ -51,7 +58,8 @@ init session =
   , transactions = []
   , newTransaction = Nothing
   , addTransaction = Nothing
-  , newAccount = ("", 0)
+  , accounts = []
+  , newAccount = Nothing
   , addAccount = Nothing
   , recentError = ""
   } !
@@ -222,7 +230,7 @@ update msg model =
           Just
             ( { model |
                 addAccount = Just addAccountModel
-              , newAccount = (accountName, initialValue)
+              , newAccount = Just { name = accountName, value = initialValue }
               }
             , Task.perform Error CreatedAccount
               <| createData model.session accountTable
@@ -243,7 +251,15 @@ update msg model =
 
     CreatedAccount () ->
       { model |
-        newAccount = ("", 0)
+        accounts =
+          case model.newAccount of
+            Just account ->
+              account :: model.accounts
+
+            Nothing ->
+              model.accounts
+
+      , newAccount = Nothing
       , addAccount = Nothing
       } |> updateStandard
     
