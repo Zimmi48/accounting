@@ -46,6 +46,8 @@ init =
           placeholder = "1 Jan 1970"
         , dateFormatter = Date.format "%e %b %Y"
         , firstDayOfWeek = Date.Mon
+        , inputClassList = [ ("form-control", True) ]
+        , inputName = Just "date"
         }
 
   in
