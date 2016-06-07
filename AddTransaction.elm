@@ -161,14 +161,15 @@ view model =
         [ label [ for "date" ] [ text "Date" ]
         , App.map UpdateDate <| DatePicker.view model.datePicker
         ]
-    , input
+    , button
         [ type' "submit"
         , disabled notready
         , classList
             [ ("btn", True)
             , ("btn-success", True)
             ]
-        ] []
+        ]
+        [ text "Add transaction" ]
     ]
 
 
