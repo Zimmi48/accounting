@@ -4,6 +4,7 @@ module AddAccount exposing (Model, init, Msg, update, view)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import Lib exposing (..)
 import Maybe.Extra as Maybe
 import String
 
@@ -24,7 +25,7 @@ type Msg
   | Submit
 
 
-update : Msg -> Model -> (Model, Maybe (String, Float))
+update : Msg -> Model -> (Model, Maybe Account)
 update msg model =
   case msg of
     UpdateName s ->
@@ -46,7 +47,7 @@ update msg model =
           if String.isEmpty model.name then
             (model, Nothing)
           else
-            (model, Just (model.name, value))
+            (model, Just { name = model.name, value = value })
 
         Nothing ->
           (model, Nothing)

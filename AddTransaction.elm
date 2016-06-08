@@ -8,6 +8,7 @@ import Html exposing (..)
 import Html.App as App
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import Lib exposing (..)
 import Maybe
 import Maybe.Extra as Maybe
 import Positive exposing (Positive)
@@ -68,7 +69,7 @@ type Msg
   | Submit
 
 
-update : Msg -> Model -> (Model, Cmd Msg, Maybe (String, Positive Float, Date))
+update : Msg -> Model -> (Model, Cmd Msg, Maybe Transaction)
 update msg model =
   case msg of
     UpdateObject string ->
@@ -112,7 +113,11 @@ update msg model =
           else
             ( model
             , Cmd.none
-            , Just (model.object, value, date)
+            , Just
+                { object = model.object
+                , value = value
+                , date = date
+                }
             )
 
         _ ->

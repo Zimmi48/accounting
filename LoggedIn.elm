@@ -3,7 +3,6 @@ module LoggedIn exposing (Model, init, view, Msg, update)
 
 import AddTransaction
 import AddAccount
-import Date exposing (Date)
 import Date.Format as Date
 import Dialog
 import Html exposing (..)
@@ -11,11 +10,10 @@ import Html.App as App
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Http
-import Json.Decode as Decode exposing ((:=))
-import Json.Encode as Encode
 import Kinvey exposing (Session)
+import Lib exposing (..)
 import MyKinvey exposing (..)
-import Positive exposing (Positive)
+import Positive
 import Task
 
 
@@ -28,19 +26,6 @@ type alias Model =
   , newAccount : Maybe Account
   , addAccount : Maybe AddAccount.Model
   , recentError : String
-  }
-
-
-type alias Transaction =
-  { object : String
-  , value : Positive Float
-  , date : Date
-  }
-
-
-type alias Account =
-  { name : String
-  , value : Float
   }
 
 
@@ -65,18 +50,10 @@ init session =
   } !
     [ Task.perform Error FetchTransactions
         <| getData session transactionTable (Kinvey.ReverseSort "date")
-        <| Decode.object3 Transaction
-            ("object" := Decode.string)
-            ("value" :=
-               Decode.customDecoder Decode.float
-                 (Positive.fromNum >> Result.fromMaybe "")
-            )
-            ("date" := Decode.customDecoder Decode.string Date.fromString)
+        <| decodeTransaction
     , Task.perform Error FetchAccounts
         <| getData session accountTable Kinvey.NoSort
-        <| Decode.object2 Account
-            ("name" := Decode.string)
-            ("value" := Decode.float)
+        <| decodeAccount
     ]
 
 
@@ -171,24 +148,16 @@ update msg model =
               , Cmd.map AddTransactionMsg cmd
               )
 
-          Just (addTransaction, cmd, Just (object, value, date)) ->
-            let
-              transaction =
-                Encode.object
-                  [ ("object", Encode.string object)
-                  , ("value", Encode.float <| Positive.toNum value)
-                  , ("date", Encode.string <| Date.formatISO8601 date)
-                  ]
-            in
+          Just (addTransaction, cmd, Just newTransaction) ->
               Just
                 ( { model |
                     addTransaction = Just addTransaction
-                  , newTransaction =
-                      Just { object = object, value = value, date = date }
+                  , newTransaction = Just newTransaction
                   , recentError = ""
                   }
                 ! [ Task.perform Error CreatedTransaction
-                    <| createData model.session transactionTable transaction
+                    <| createData model.session transactionTable
+                    <| encodeTransaction newTransaction
                   , Cmd.map AddTransactionMsg cmd
                   ]
                 )
@@ -232,18 +201,15 @@ update msg model =
             addAccount = Just addAccountModel
           } |> updateStandard
 
-        Just (addAccountModel, Just (accountName, initialValue)) ->
+        Just (addAccountModel, Just account) ->
           Just
             ( { model |
                 addAccount = Just addAccountModel
-              , newAccount = Just { name = accountName, value = initialValue }
+              , newAccount = Just account
               }
             , Task.perform Error CreatedAccount
               <| createData model.session accountTable
-              <| Encode.object
-                   [ ("name", Encode.string accountName)
-                   , ("value", Encode.float initialValue)
-                   ]
+              <| encodeAccount account
             )
 
         Nothing ->
