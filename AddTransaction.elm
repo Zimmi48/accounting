@@ -8,7 +8,9 @@ import Html exposing (..)
 import Html.App as App
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import Json.Decode as Decode exposing ((:=))
 import Lib exposing (..)
+import List.Extra as List
 import Maybe
 import Maybe.Extra as Maybe
 import Positive exposing (Positive)
@@ -18,7 +20,7 @@ import String
 main : Program Never
 main =
   App.program
-    { init = init
+    { init = init []
     , update =
         (\msg model ->
            let (model, cmd, _) = update msg model in
@@ -35,11 +37,13 @@ type alias Model =
   , valueString : String
   , datePicker : DatePicker
   , date : Maybe Date
+  , account : Maybe Account
+  , accounts : List Account
   }
 
 
-init : (Model, Cmd Msg)
-init =
+init : List Account -> (Model, Cmd Msg)
+init accounts =
   let
     (dateModel, dateCmd) =
       DatePicker.init
@@ -57,6 +61,8 @@ init =
     , valueString = ""
     , datePicker = dateModel
     , date = Nothing
+    , account = List.head accounts
+    , accounts = accounts
     }
   ! [ Cmd.map UpdateDate dateCmd
     ]
@@ -66,6 +72,7 @@ type Msg
   = UpdateObject String
   | UpdateValue String
   | UpdateDate DatePicker.Msg
+  | UpdateAccount String
   | Submit
 
 
@@ -104,9 +111,17 @@ update msg model =
       , Nothing
       )
 
+    UpdateAccount s ->
+      ( { model |
+          account = List.find (\{ name } -> name == s) model.accounts
+        }
+      , Cmd.none
+      , Nothing
+      )
+
     Submit ->
-      case (model.value , model.date) of
-        (Just value, Just date) ->
+      case (model.value , model.date, model.account) of
+        (Just value, Just date, Just account) ->
           if String.isEmpty model.object then
             (model, Cmd.none, Nothing)
 
@@ -117,6 +132,7 @@ update msg model =
                 { object = model.object
                 , value = value
                 , date = date
+                , account = account
                 }
             )
 
@@ -131,40 +147,50 @@ view model =
       String.isEmpty model.object
       || Maybe.isNothing model.value
       || Maybe.isNothing model.date
+      || Maybe.isNothing model.account
   in
 
   Html.form
     [ onSubmit Submit ]
-    [ div
-        [ class "form-group" ]
-        [ label [ for "object" ] [ text "Object" ]
-        , input
-            [ placeholder "Groceries"
-            , value model.object
-            , name "object"
-            , onInput UpdateObject
-            , class "form-control"
-            ] []
+    [ inputGr "object" "Object" UpdateObject
+        [ placeholder "Groceries"
+        , value model.object
+        , required True
         ]
-    , div
-        [ class "form-group" ]
-        [ label [ for "value" ] [ text "Value" ]
-        , input
-            [ placeholder "23.33"
-            , value model.valueString
-            , type' "number"
-            , name "value"
-            , Html.Attributes.min "0.01"
-            , step "0.01"
-            , required True
-            , onInput UpdateValue
-            , class "form-control"
-            ] []
+    , inputGr "value" "Value" UpdateValue
+        [ placeholder "23.33"
+        , value model.valueString
+        , type' "number"
+        , Html.Attributes.min "0.01"
+        , step "0.01"
+        , required True
         ]
     , div
         [ class "form-group" ]
         [ label [ for "date" ] [ text "Date" ]
         , App.map UpdateDate <| DatePicker.view model.datePicker
+        ]
+    , div
+        [ class "form-group" ]
+        [ label [ for "account" ] [ text "Account" ]
+        , select
+            [ name "account"
+            , required True
+            , class "form-control"
+            , on
+                "change"
+                (Decode.object1 UpdateAccount ("value" := Decode.string)) 
+            ]
+            (List.indexedMap
+               (\i { name } ->
+                  option
+                    [ value name
+                    , selected (i == 0)
+                    ]
+                    [ text name ]
+               )
+               model.accounts
+            )
         ]
     , button
         [ type' "submit"

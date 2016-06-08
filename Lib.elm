@@ -3,15 +3,22 @@ module Lib exposing (..)
 
 import Date exposing (Date)
 import Date.Format as Date
+import Html exposing (..)
+import Html.Attributes exposing (..)
+import Html.Events exposing (..)
 import Json.Decode as Decode exposing ((:=), Decoder)
 import Json.Encode as Encode
 import Positive exposing (Positive)
+
+
+-- helpers for Models
 
 
 type alias Transaction =
   { object : String
   , value : Positive Float
   , date : Date
+  , account : Account
   }
 
 
@@ -26,7 +33,7 @@ encodeTransaction { object , value , date } =
 
 decodeTransaction : Decoder Transaction
 decodeTransaction =
-  Decode.object3 Transaction
+  Decode.object4 Transaction
     ("object" := Decode.string)
     ("value" :=
        Decode.customDecoder
@@ -34,6 +41,7 @@ decodeTransaction =
          (Positive.fromNum >> Result.fromMaybe "")
     )
     ("date" := Decode.customDecoder Decode.string Date.fromString)
+    ("account" := Decode.succeed { name = "not implemented", value = 0 })
 
 
 type alias Account =
@@ -55,3 +63,19 @@ decodeAccount =
   Decode.object2 Account
     ("name" := Decode.string)
     ("value" := Decode.float)
+
+
+-- helpers for Views
+
+inputGr : String -> String -> (String -> msg) -> List (Attribute msg) -> Html msg
+inputGr inputName helper msg attrs =
+  div
+    [ class "form-group" ]
+    [ label [ for inputName ] [ text helper ]
+    , input
+        ( [ name inputName 
+          , onInput msg
+          , class "form-control"
+          ] ++ attrs
+        ) []
+    ]

@@ -166,7 +166,7 @@ update msg model =
             model |> updateStandard
 
     OpenAddTransaction ->
-      let (addTransaction, cmd) = AddTransaction.init in
+      let (addTransaction, cmd) = AddTransaction.init model.accounts in
       Just
         ( { model |
             addTransaction = Just addTransaction

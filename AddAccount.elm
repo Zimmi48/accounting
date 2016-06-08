@@ -9,6 +9,9 @@ import Maybe.Extra as Maybe
 import String
 
 
+-- TODO : enforce only one account with the same name
+
+
 type alias Model =
   { name : String
   , initialValue : Maybe Float
@@ -86,15 +89,3 @@ view model =
     ]
 
 
-inputGr : String -> String -> (String -> Msg) -> List (Attribute Msg) -> Html Msg
-inputGr inputName helper msg attrs =
-  div
-    [ class "form-group" ]
-    [ label [ for inputName ] [ text helper ]
-    , input
-        ( [ name inputName 
-          , onInput msg
-          , class "form-control"
-          ] ++ attrs
-        ) []
-    ]
