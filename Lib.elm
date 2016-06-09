@@ -65,7 +65,7 @@ decodeAccount =
   Decode.object3 Account
     ("name" := Decode.string)
     ("value" := Decode.float)
-    ("id" := Decode.string)
+    ("_id" := Decode.string)
 
 
 -- helpers for Views

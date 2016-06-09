@@ -220,7 +220,7 @@ update msg model =
 
     CreatedAccount account ->
       { model |
-        accounts = account :: model.accounts
+        accounts = model.accounts ++ [ account ]
       , addAccount = Nothing
       } |> updateStandard
 
