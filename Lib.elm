@@ -52,14 +52,6 @@ type alias Account =
   }
 
 
-encodeAccount : Account -> Encode.Value
-encodeAccount { name , value } =
-  Encode.object
-    [ ("name", Encode.string name)
-    , ("value", Encode.float value)
-    ]
-
-
 decodeAccount : Decoder Account
 decodeAccount =
   Decode.object3 Account

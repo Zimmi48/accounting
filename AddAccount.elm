@@ -4,7 +4,8 @@ module AddAccount exposing (Model, init, Msg, update, view)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
-import Lib exposing (..)
+import Json.Encode as Json
+import Lib exposing (inputGr)
 import Maybe.Extra as Maybe
 import String
 
@@ -28,7 +29,7 @@ type Msg
   | Submit
 
 
-update : Msg -> Model -> (Model, Maybe Account)
+update : Msg -> Model -> (Model, Maybe Json.Value)
 update msg model =
   case msg of
     UpdateName s ->
@@ -50,7 +51,12 @@ update msg model =
           if String.isEmpty model.name then
             (model, Nothing)
           else
-            (model, Just { name = model.name, value = value , id = "" })
+            ( model
+            , Json.object
+                [ ("name", Json.string model.name)
+                , ("value", Json.float value)
+                ] |> Just
+            )
 
         Nothing ->
           (model, Nothing)

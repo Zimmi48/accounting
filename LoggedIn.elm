@@ -205,8 +205,7 @@ update msg model =
                 addAccount = Just addAccountModel
               }
             , Task.perform Error CreatedAccount
-              <| createData model.session accountTable decodeAccount
-              <| encodeAccount account
+              <| createData model.session accountTable decodeAccount account
             )
 
         Nothing ->
