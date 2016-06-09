@@ -50,7 +50,7 @@ update msg model =
           if String.isEmpty model.name then
             (model, Nothing)
           else
-            (model, Just { name = model.name, value = value })
+            (model, Just { name = model.name, value = value , id = "" })
 
         Nothing ->
           (model, Nothing)

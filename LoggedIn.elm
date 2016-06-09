@@ -23,7 +23,6 @@ type alias Model =
   , newTransaction : Maybe Transaction
   , addTransaction : Maybe AddTransaction.Model
   , accounts : List Account
-  , newAccount : Maybe Account
   , addAccount : Maybe AddAccount.Model
   , recentError : String
   }
@@ -44,7 +43,6 @@ init session =
   , newTransaction = Nothing
   , addTransaction = Nothing
   , accounts = []
-  , newAccount = Nothing
   , addAccount = Nothing
   , recentError = ""
   } !
@@ -127,7 +125,7 @@ type Msg
   | AddAccountMsg AddAccount.Msg
   | OpenAddAccount
   | CloseAddAccount
-  | CreatedAccount ()
+  | CreatedAccount Account
   | FetchAccounts (List Account)
   | Error Kinvey.Error
 
@@ -156,7 +154,7 @@ update msg model =
                   , recentError = ""
                   }
                 ! [ Task.perform Error CreatedTransaction
-                    <| createData model.session transactionTable
+                    <| createDataSimple model.session transactionTable
                     <| encodeTransaction newTransaction
                   , Cmd.map AddTransactionMsg cmd
                   ]
@@ -205,10 +203,9 @@ update msg model =
           Just
             ( { model |
                 addAccount = Just addAccountModel
-              , newAccount = Just account
               }
             , Task.perform Error CreatedAccount
-              <| createData model.session accountTable
+              <| createData model.session accountTable decodeAccount
               <| encodeAccount account
             )
 
@@ -221,17 +218,9 @@ update msg model =
     CloseAddAccount ->
       { model | addAccount = Nothing } |> updateStandard
 
-    CreatedAccount () ->
+    CreatedAccount account ->
       { model |
-        accounts =
-          case model.newAccount of
-            Just account ->
-              account :: model.accounts
-
-            Nothing ->
-              model.accounts
-
-      , newAccount = Nothing
+        accounts = account :: model.accounts
       , addAccount = Nothing
       } |> updateStandard
 

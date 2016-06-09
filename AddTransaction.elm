@@ -132,7 +132,7 @@ update msg model =
                 { object = model.object
                 , value = value
                 , date = date
-                , account = account
+                , accountId = account.id
                 }
             )
 
@@ -182,9 +182,9 @@ view model =
                 (Decode.object1 UpdateAccount ("value" := Decode.string)) 
             ]
             (List.indexedMap
-               (\i { name } ->
+               (\i { name , id } ->
                   option
-                    [ value name
+                    [ value id
                     , selected (i == 0)
                     ]
                     [ text name ]

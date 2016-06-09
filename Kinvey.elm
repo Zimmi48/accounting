@@ -8,6 +8,7 @@ module Kinvey exposing
   , getUserData
   , setUserData
   , createData
+  , createDataSimple
   , getData
   , Sort(..)
   )
@@ -179,8 +180,8 @@ setUserData auth session fields =
   |> Task.mapError HttpError
 
 
-createData : Auth -> Session -> String -> Encode.Value -> Task Error ()
-createData auth session collection data =
+createData : Auth -> Session -> String -> Decoder a -> Encode.Value -> Task Error a
+createData auth session collection decoder data =
   Http.send
     Http.defaultSettings
     { verb = "POST"
@@ -192,8 +193,13 @@ createData auth session collection data =
     , url = baseDataUrl auth ++ collection
     , body = Http.string <| encode 0 data
     }
-  |> Http.fromJson (Decode.succeed ())
+  |> Http.fromJson decoder
   |> Task.mapError HttpError
+
+
+createDataSimple : Auth -> Session -> String -> Encode.Value -> Task Error ()
+createDataSimple auth session collection =
+  createData auth session collection (Decode.succeed ())
 
 
 type Sort

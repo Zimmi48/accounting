@@ -18,16 +18,17 @@ type alias Transaction =
   { object : String
   , value : Positive Float
   , date : Date
-  , account : Account
+  , accountId : String
   }
 
 
 encodeTransaction : Transaction -> Encode.Value
-encodeTransaction { object , value , date } =
+encodeTransaction { object , value , date , accountId } =
   Encode.object
     [ ("object", Encode.string object)
     , ("value", Encode.float <| Positive.toNum value)
     , ("date", Encode.string <| Date.formatISO8601 date)
+    , ("account", Encode.string accountId)
     ]
 
 
@@ -41,12 +42,13 @@ decodeTransaction =
          (Positive.fromNum >> Result.fromMaybe "")
     )
     ("date" := Decode.customDecoder Decode.string Date.fromString)
-    ("account" := Decode.succeed { name = "not implemented", value = 0 })
+    ("account" := Decode.string)
 
 
 type alias Account =
   { name : String
   , value : Float
+  , id : String
   }
 
 
@@ -60,9 +62,10 @@ encodeAccount { name , value } =
 
 decodeAccount : Decoder Account
 decodeAccount =
-  Decode.object2 Account
+  Decode.object3 Account
     ("name" := Decode.string)
     ("value" := Decode.float)
+    ("id" := Decode.string)
 
 
 -- helpers for Views
