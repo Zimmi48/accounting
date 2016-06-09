@@ -20,7 +20,6 @@ import Task
 type alias Model =
   { session : Session
   , transactions : List Transaction
-  , newTransaction : Maybe Transaction
   , addTransaction : Maybe AddTransaction.Model
   , accounts : List Account
   , addAccount : Maybe AddAccount.Model
@@ -40,7 +39,6 @@ init : Session -> (Model, Cmd Msg)
 init session =
   { session = session
   , transactions = []
-  , newTransaction = Nothing
   , addTransaction = Nothing
   , accounts = []
   , addAccount = Nothing
@@ -120,7 +118,7 @@ type Msg
   = AddTransactionMsg AddTransaction.Msg
   | OpenAddTransaction
   | CloseAddTransaction
-  | CreatedTransaction ()
+  | CreatedTransaction Transaction
   | FetchTransactions (List Transaction)
   | AddAccountMsg AddAccount.Msg
   | OpenAddAccount
@@ -135,33 +133,31 @@ update : Msg -> Model -> Maybe (Model, Cmd Msg)
 update msg model =
   case msg of
     AddTransactionMsg msg ->
-      let
-        updated =
-          Maybe.map (AddTransaction.update msg) model.addTransaction
-      in
-        case updated of
-          Just (addTransaction, cmd, Nothing) ->
-            Just
-              ( { model | addTransaction = Just addTransaction }
+      case Maybe.map (AddTransaction.update msg) model.addTransaction of
+        Just (addTransaction, cmd, Nothing) ->
+          Just
+            ( { model | addTransaction = Just addTransaction }
+            , Cmd.map AddTransactionMsg cmd
+            )
+
+        Just (addTransaction, cmd, Just newTransaction) ->
+          Just
+            ( { model |
+                addTransaction = Just addTransaction
+              , recentError = ""
+              }
+            ! [ Task.perform Error CreatedTransaction
+                <| createData
+                     model.session
+                     transactionTable
+                     decodeTransaction
+                     newTransaction
               , Cmd.map AddTransactionMsg cmd
-              )
-
-          Just (addTransaction, cmd, Just newTransaction) ->
-              Just
-                ( { model |
-                    addTransaction = Just addTransaction
-                  , newTransaction = Just newTransaction
-                  , recentError = ""
-                  }
-                ! [ Task.perform Error CreatedTransaction
-                    <| createDataSimple model.session transactionTable
-                    <| encodeTransaction newTransaction
-                  , Cmd.map AddTransactionMsg cmd
-                  ]
-                )
-
-          Nothing ->
-            model |> updateStandard
+              ]
+            )
+            
+        Nothing ->
+          model |> updateStandard
 
     OpenAddTransaction ->
       let (addTransaction, cmd) = AddTransaction.init model.accounts in
@@ -175,18 +171,10 @@ update msg model =
     CloseAddTransaction ->
       { model | addTransaction = Nothing } |> updateStandard
 
-    CreatedTransaction () ->
+    CreatedTransaction transaction ->
       { model |
-        transactions =
-          case model.newTransaction of
-            Just newT ->
-              newT :: model.transactions
-
-            Nothing ->
-              model.transactions
-
+        transactions = transaction :: model.transactions
       , addTransaction = Nothing
-      , newTransaction = Nothing
       } |> updateStandard
 
     FetchTransactions t ->

@@ -2,12 +2,10 @@ module Lib exposing (..)
 
 
 import Date exposing (Date)
-import Date.Format as Date
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Decode as Decode exposing ((:=), Decoder)
-import Json.Encode as Encode
 import Positive exposing (Positive)
 
 
@@ -20,16 +18,6 @@ type alias Transaction =
   , date : Date
   , accountId : String
   }
-
-
-encodeTransaction : Transaction -> Encode.Value
-encodeTransaction { object , value , date , accountId } =
-  Encode.object
-    [ ("object", Encode.string object)
-    , ("value", Encode.float <| Positive.toNum value)
-    , ("date", Encode.string <| Date.formatISO8601 date)
-    , ("account", Encode.string accountId)
-    ]
 
 
 decodeTransaction : Decoder Transaction

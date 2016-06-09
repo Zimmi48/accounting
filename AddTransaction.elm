@@ -9,6 +9,7 @@ import Html.App as App
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Decode as Decode exposing ((:=))
+import Json.Encode as Encode
 import Lib exposing (..)
 import List.Extra as List
 import Maybe
@@ -76,7 +77,7 @@ type Msg
   | Submit
 
 
-update : Msg -> Model -> (Model, Cmd Msg, Maybe Transaction)
+update : Msg -> Model -> (Model, Cmd Msg, Maybe Encode.Value)
 update msg model =
   case msg of
     UpdateObject string ->
@@ -128,12 +129,12 @@ update msg model =
           else
             ( model
             , Cmd.none
-            , Just
-                { object = model.object
-                , value = value
-                , date = date
-                , accountId = account.id
-                }
+            ,   Encode.object
+                  [ ("object", Encode.string model.object)
+                  , ("value", Encode.float <| Positive.toNum value)
+                  , ("date", Encode.string <| Date.formatISO8601 date)
+                  , ("account", Encode.string account.id)
+                  ] |> Just
             )
 
         _ ->
