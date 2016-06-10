@@ -221,13 +221,13 @@ getData auth session collection sortfield decoder =
           case sortfield of
             NoSort ->
               "/"
-                
+
             ReverseSort sortfield ->
               "/?query={}&sort={\"" ++ sortfield ++ "\": -1}"
 
             Sort sortfield ->
               "/?query={}&sort=" ++ sortfield
-              
+
     , body = Http.empty
     }
   |> Http.fromJson (Decode.list decoder)

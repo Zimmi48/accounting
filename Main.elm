@@ -79,7 +79,7 @@ view model =
     , case model of
         LoginModel model ->
           App.map LoginMsg <| Login.view model
-        
+
         LoggedInModel model ->
           App.map LoggedInMsg <| LoggedIn.view model
     ]

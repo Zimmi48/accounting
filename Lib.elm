@@ -56,7 +56,7 @@ inputGr inputName helper updateInput attrs =
     [ class "form-group" ]
     [ label [ for inputName ] [ text helper ]
     , input
-        ( [ name inputName 
+        ( [ name inputName
           , onInput updateInput
           , class "form-control"
           ] ++ attrs
@@ -76,7 +76,7 @@ accountSelector accounts updateAccount addClasses =
         , class "form-control"
         , on
             "change"
-            (Decode.object1 updateAccount ("value" := Decode.string)) 
+            (Decode.object1 updateAccount ("value" := Decode.string))
         ]
         (List.indexedMap
            (\i { name , id } ->

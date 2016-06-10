@@ -170,7 +170,7 @@ update msg model =
               , Cmd.map AddTransactionMsg cmd
               ]
             )
-            
+
         Nothing ->
           model |> updateStandard
 
@@ -218,7 +218,7 @@ update msg model =
 
         Nothing ->
           model |> updateStandard
-        
+
     OpenAddAccount ->
       { model | addAccount = Just AddAccount.init } |> updateStandard
 
