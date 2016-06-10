@@ -23,7 +23,7 @@ type alias Model =
   , transactions : Maybe (List Transaction)
   , addTransaction : Maybe AddTransaction.Model
   , accounts : Maybe (List Account)
-  , selectedAccountId : Maybe String
+  , selectedAccount : Maybe Account
   , selectedAccountValue : Maybe Float
   , addAccount : Maybe AddAccount.Model
   , recentError : String
@@ -44,7 +44,7 @@ init session =
   , transactions = Nothing
   , addTransaction = Nothing
   , accounts = Nothing
-  , selectedAccountId = Nothing
+  , selectedAccount = Nothing
   , selectedAccountValue = Nothing
   , addAccount = Nothing
   , recentError = ""
@@ -239,12 +239,14 @@ update msg model =
 
 
     UpdateSelectedAccount id ->
-      { model |
-        selectedAccountId = Just id
-      , selectedAccountValue =
+      let
+        selectedAccount =
           model.accounts `Maybe.andThen`
           List.find (.id >> ((==) id))
-          |> Maybe.map .value
+       in
+      { model |
+        selectedAccount = selectedAccount
+      , selectedAccountValue = Maybe.map .value selectedAccount
       } |> updateStandard
 
     Error e ->
