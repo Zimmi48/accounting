@@ -19,9 +19,11 @@ import Task
 
 type alias Model =
   { session : Session
-  , transactions : List Transaction
+  , transactions : Maybe (List Transaction)
   , addTransaction : Maybe AddTransaction.Model
-  , accounts : List Account
+  , accounts : Maybe (List Account)
+  , selectedAccountId : Maybe String
+  , selectedAccountValue : Maybe Float
   , addAccount : Maybe AddAccount.Model
   , recentError : String
   }
@@ -38,9 +40,11 @@ accountTable = "accounts"
 init : Session -> (Model, Cmd Msg)
 init session =
   { session = session
-  , transactions = []
+  , transactions = Nothing
   , addTransaction = Nothing
-  , accounts = []
+  , accounts = Nothing
+  , selectedAccountId = Nothing
+  , selectedAccountValue = Nothing
   , addAccount = Nothing
   , recentError = ""
   } !
@@ -55,23 +59,28 @@ init session =
 
 view : Model -> Html Msg
 view model =
-  div []
-    [ successButton "Add a new transaction" OpenAddTransaction
-    , text " " -- for spacing
-    , successButton "Create a new account" OpenAddAccount
-    , div
-        [ style [ ("color", "red") ] ]
-        [ text model.recentError ]
-    , h2 [] [ text "List of recent transactions" ]
-    , div
-        [ class "container" ]
-        <| List.intersperse (hr [] [])
-        <| List.map viewTransaction model.transactions
-    , Dialog.view
-      <| Maybe.map addTransactionIntoConfig model.addTransaction
-    , Dialog.view
-      <| Maybe.map addAccountIntoConfig model.addAccount
-    ]
+  case (model.transactions, model.accounts) of
+    (Just transactions, Just accounts) ->
+      div []
+        [ successButton "Add a new transaction" OpenAddTransaction
+        , text " " -- for spacing
+        , successButton "Create a new account" OpenAddAccount
+        , div
+            [ class "text-danger" ]
+            [ text model.recentError ]
+        , h2 [] [ text "List of recent transactions" ]
+        , div
+            [ class "container" ]
+            <| List.intersperse (hr [] [])
+            <| List.map viewTransaction transactions
+        , Dialog.view
+          <| Maybe.map addTransactionIntoConfig model.addTransaction
+        , Dialog.view
+          <| Maybe.map addAccountIntoConfig model.addAccount
+        ]
+
+    _ ->
+      div [ class "text-info" ] [ text "Loading" ]
 
 
 viewTransaction : Transaction -> Html msg
@@ -160,25 +169,30 @@ update msg model =
           model |> updateStandard
 
     OpenAddTransaction ->
-      let (addTransaction, cmd) = AddTransaction.init model.accounts in
-      Just
-        ( { model |
-            addTransaction = Just addTransaction
-          }
-        , Cmd.map AddTransactionMsg cmd
-        )
+      case model.accounts of
+        Just accounts ->
+          let (addTransaction, cmd) = AddTransaction.init accounts in
+          Just
+          ( { model |
+              addTransaction = Just addTransaction
+            }
+          , Cmd.map AddTransactionMsg cmd
+          )
+
+        Nothing ->
+          model |> updateStandard
 
     CloseAddTransaction ->
       { model | addTransaction = Nothing } |> updateStandard
 
     CreatedTransaction transaction ->
       { model |
-        transactions = transaction :: model.transactions
+        transactions = Maybe.map ((::) transaction) model.transactions
       , addTransaction = Nothing
       } |> updateStandard
 
     FetchTransactions t ->
-      { model | transactions = t } |> updateStandard
+      { model | transactions = Just t } |> updateStandard
 
     AddAccountMsg msg ->
       case (Maybe.map (AddAccount.update msg) model.addAccount) of
@@ -207,12 +221,15 @@ update msg model =
 
     CreatedAccount account ->
       { model |
-        accounts = model.accounts ++ [ account ]
+        accounts =
+          Maybe.map
+            (\accounts -> accounts ++ [ account ])
+            model.accounts
       , addAccount = Nothing
       } |> updateStandard
 
     FetchAccounts a ->
-      { model | accounts = a } |> updateStandard
+      { model | accounts = Just a } |> updateStandard
     
     Error e ->
       case e of
