@@ -76,7 +76,7 @@ accountSelector accounts updateAccount addClasses =
         , class "form-control"
         , on
             "change"
-            (Decode.object1 updateAccount ("value" := Decode.string))
+            (Decode.object1 updateAccount targetValue)
         ]
         (List.indexedMap
            (\i { name , id } ->
