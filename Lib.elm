@@ -51,14 +51,40 @@ decodeAccount =
 -- helpers for Views
 
 inputGr : String -> String -> (String -> msg) -> List (Attribute msg) -> Html msg
-inputGr inputName helper msg attrs =
+inputGr inputName helper updateInput attrs =
   div
     [ class "form-group" ]
     [ label [ for inputName ] [ text helper ]
     , input
         ( [ name inputName 
-          , onInput msg
+          , onInput updateInput
           , class "form-control"
           ] ++ attrs
         ) []
+    ]
+
+
+accountSelector : List Account -> (String -> msg) -> Html msg
+accountSelector accounts updateAccount =
+  div
+    [ class "form-group" ]
+    [ label [ for "account" ] [ text "Account" ]
+    , select
+        [ name "account"
+        , required True
+        , class "form-control"
+        , on
+            "change"
+            (Decode.object1 updateAccount ("value" := Decode.string)) 
+        ]
+        (List.indexedMap
+           (\i { name , id } ->
+              option
+              [ value id
+              , selected (i == 0)
+              ]
+              [ text name ]
+           )
+           accounts
+        )
     ]

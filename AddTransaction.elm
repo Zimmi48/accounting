@@ -171,28 +171,7 @@ view model =
         [ label [ for "date" ] [ text "Date" ]
         , App.map UpdateDate <| DatePicker.view model.datePicker
         ]
-    , div
-        [ class "form-group" ]
-        [ label [ for "account" ] [ text "Account" ]
-        , select
-            [ name "account"
-            , required True
-            , class "form-control"
-            , on
-                "change"
-                (Decode.object1 UpdateAccount ("value" := Decode.string)) 
-            ]
-            (List.indexedMap
-               (\i { name , id } ->
-                  option
-                    [ value id
-                    , selected (i == 0)
-                    ]
-                    [ text name ]
-               )
-               model.accounts
-            )
-        ]
+    , accountSelector model.accounts UpdateAccount
     , button
         [ type' "submit"
         , disabled notready
