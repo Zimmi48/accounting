@@ -171,7 +171,7 @@ view model =
         [ label [ for "date" ] [ text "Date" ]
         , App.map UpdateDate <| DatePicker.view model.datePicker
         ]
-    , accountSelector model.accounts UpdateAccount
+    , accountSelector model.accounts UpdateAccount []
     , button
         [ type' "submit"
         , disabled notready

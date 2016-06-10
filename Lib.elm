@@ -64,11 +64,12 @@ inputGr inputName helper updateInput attrs =
     ]
 
 
-accountSelector : List Account -> (String -> msg) -> Html msg
-accountSelector accounts updateAccount =
+accountSelector : List Account -> (String -> msg) -> List (String, Bool) -> Html msg
+accountSelector accounts updateAccount addClasses =
   div
-    [ class "form-group" ]
+    [ classList ( [ ("form-group", True) ] ++ addClasses ) ]
     [ label [ for "account" ] [ text "Account" ]
+    , text " "
     , select
         [ name "account"
         , required True

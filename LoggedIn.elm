@@ -1,8 +1,8 @@
 module LoggedIn exposing (Model, init, view, Msg, update)
 
 
-import AddTransaction
 import AddAccount
+import AddTransaction
 import Date.Format as Date
 import Dialog
 import Html exposing (..)
@@ -12,6 +12,7 @@ import Html.Events exposing (..)
 import Http
 import Kinvey exposing (Session)
 import Lib exposing (..)
+import List.Extra as List
 import MyKinvey exposing (..)
 import Positive
 import Task
@@ -69,6 +70,10 @@ view model =
             [ class "text-danger" ]
             [ text model.recentError ]
         , h2 [] [ text "List of recent transactions" ]
+        , accountSelector
+            ({ name = "All accounts" , value = 0 , id = "" } :: accounts)
+            UpdateSelectedAccount
+            [ ("form-inline", True) ]
         , div
             [ class "container" ]
             <| List.intersperse (hr [] [])
@@ -134,6 +139,7 @@ type Msg
   | CloseAddAccount
   | CreatedAccount Account
   | FetchAccounts (List Account)
+  | UpdateSelectedAccount String
   | Error Kinvey.Error
 
 
@@ -230,7 +236,17 @@ update msg model =
 
     FetchAccounts a ->
       { model | accounts = Just a } |> updateStandard
-    
+
+
+    UpdateSelectedAccount id ->
+      { model |
+        selectedAccountId = Just id
+      , selectedAccountValue =
+          model.accounts `Maybe.andThen`
+          List.find (.id >> ((==) id))
+          |> Maybe.map .value
+      } |> updateStandard
+
     Error e ->
       case e of
         Kinvey.HttpError (Http.BadResponse 401 _) ->
