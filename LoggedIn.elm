@@ -77,7 +77,9 @@ view model =
         , div
             [ class "container" ]
             <| List.intersperse (hr [] [])
-            <| List.map viewTransaction transactions
+            <| List.map viewTransaction
+            <| filterTransactions model.selectedAccount
+            <| transactions
         , Dialog.view
           <| Maybe.map addTransactionIntoConfig model.addTransaction
         , Dialog.view
@@ -126,6 +128,16 @@ addAccountIntoConfig model =
   , body = Just (App.map AddAccountMsg <| AddAccount.view model)
   , footer = Nothing
   }
+
+
+filterTransactions : Maybe Account -> List Transaction -> List Transaction
+filterTransactions selected =
+  case selected of
+    Nothing ->
+      identity
+
+    Just { id } ->
+      List.filter (.accountId >> (==) id)
 
 
 type Msg
