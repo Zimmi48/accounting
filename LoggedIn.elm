@@ -18,6 +18,9 @@ import Positive
 import Task
 
 
+-- TODO : insert new transactions in the list depending on their date
+
+
 type alias Model =
   { session : Session
   , transactions : Maybe (List Transaction)
@@ -70,10 +73,23 @@ view model =
             [ class "text-danger" ]
             [ text model.recentError ]
         , h2 [] [ text "List of recent transactions" ]
-        , accountSelector
-            ({ name = "All accounts" , value = 0 , id = "" } :: accounts)
-            UpdateSelectedAccount
-            [ ("form-inline", True) ]
+        , div
+            [ class "row" ]
+            [ accountSelector
+                ({ name = "All accounts" , value = 0 , id = "" }
+                :: accounts)
+                UpdateSelectedAccount
+                [ ("form-inline", True)
+                , ("col-md-4", True)
+                ]
+            , div
+                [ class "col-md-4" ]
+                [ text
+                  <| Maybe.withDefault ""
+                  <| Maybe.map toString
+                  <| model.selectedAccountValue
+                ]
+            ]
         , div
             [ class "container" ]
             <| List.intersperse (hr [] [])
@@ -138,6 +154,12 @@ filterTransactions selected =
 
     Just { id } ->
       List.filter (.accountId >> (==) id)
+
+
+accountValue : Account -> List Transaction -> Float
+accountValue account =
+  filterTransactions (Just account) >>
+  List.foldl (.value >> Positive.toNum >> (+)) account.value
 
 
 type Msg
@@ -207,6 +229,16 @@ update msg model =
       { model |
         transactions = Maybe.map ((::) transaction) model.transactions
       , addTransaction = Nothing
+      , selectedAccountValue =
+          case (model.selectedAccount, model.selectedAccountValue) of
+            (Just account, Just value) ->
+              if transaction.accountId == account.id then
+                Just (value + Positive.toNum transaction.value)
+              else
+                model.selectedAccountValue
+
+            _ ->
+              model.selectedAccountValue
       } |> updateStandard
 
     FetchTransactions t ->
@@ -258,7 +290,8 @@ update msg model =
        in
       { model |
         selectedAccount = selectedAccount
-      , selectedAccountValue = Maybe.map .value selectedAccount
+      , selectedAccountValue =
+          Maybe.map2 accountValue selectedAccount model.transactions
       } |> updateStandard
 
     Error e ->
