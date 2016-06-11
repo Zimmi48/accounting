@@ -6,7 +6,6 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Decode as Json exposing ((:=), Decoder)
-import Positive exposing (Positive)
 
 
 -- helpers for Models
@@ -14,7 +13,7 @@ import Positive exposing (Positive)
 
 type alias Transaction =
   { object : String
-  , value : Positive Float
+  , value : Float
   , date : Date
   , accountId : String
   }
@@ -24,11 +23,7 @@ decodeTransaction : Decoder Transaction
 decodeTransaction =
   Json.object4 Transaction
     ("object" := Json.string)
-    ("value" :=
-       Json.customDecoder
-         Json.float
-         (Positive.fromNum >> Result.fromMaybe "")
-    )
+    ("value" := Json.float)
     ("date" := Json.customDecoder Json.string Date.fromString)
     ("account" := Json.string)
 

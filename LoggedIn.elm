@@ -14,7 +14,6 @@ import Kinvey exposing (Session)
 import Lib exposing (..)
 import List.Extra as List
 import MyKinvey exposing (..)
-import Positive
 import Task
 
 
@@ -111,7 +110,7 @@ viewTransaction { object , value , date } =
   div
     [ class "row" ]
     [ div [ class "col-md-4" ] [ text object ]
-    , div [ class "col-md-4" ] [ text (toString <| Positive.toNum value) ]
+    , div [ class "col-md-4" ] [ text (toString value) ]
     , div [ class "col-md-4" ] [ text (Date.format "%e %b %Y" date) ]
     ]
 
@@ -159,7 +158,7 @@ filterTransactions selected =
 accountValue : Account -> List Transaction -> Float
 accountValue account =
   filterTransactions (Just account) >>
-  List.foldl (.value >> Positive.toNum >> (+)) account.value
+  List.foldl (.value >> (+)) account.value
 
 
 type Msg
@@ -211,7 +210,7 @@ update msg model =
     OpenAddTransaction ->
       case model.accounts of
         Just accounts ->
-          let (addTransaction, cmd) = AddTransaction.init accounts in
+          let (addTransaction, cmd) = AddTransaction.init False accounts in
           Just
           ( { model |
               addTransaction = Just addTransaction
@@ -233,7 +232,7 @@ update msg model =
           case (model.selectedAccount, model.selectedAccountValue) of
             (Just account, Just value) ->
               if transaction.accountId == account.id then
-                Just (value + Positive.toNum transaction.value)
+                Just (value + transaction.value)
               else
                 model.selectedAccountValue
 
@@ -305,5 +304,5 @@ update msg model =
           } |> updateStandard
 
 
-updateStandard : a -> Maybe ( a, Cmd b )
+updateStandard : a -> Maybe (a, Cmd b)
 updateStandard model = Just (model, Cmd.none)

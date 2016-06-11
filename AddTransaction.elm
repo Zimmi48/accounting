@@ -20,7 +20,7 @@ import String
 main : Program Never
 main =
   App.program
-    { init = init []
+    { init = init True []
     , update =
         (\msg model ->
            let (model, cmd, _) = update msg model in
@@ -39,11 +39,12 @@ type alias Model =
   , date : Maybe Date
   , account : Maybe Account
   , accounts : List Account
+  , income : Bool
   }
 
 
-init : List Account -> (Model, Cmd Msg)
-init accounts =
+init : Bool -> List Account -> (Model, Cmd Msg)
+init income accounts =
   let
     (dateModel, dateCmd) =
       DatePicker.init
@@ -63,6 +64,7 @@ init accounts =
     , date = Nothing
     , account = List.head accounts
     , accounts = accounts
+    , income = income
     }
   ! [ Cmd.map UpdateDate dateCmd
     ]
@@ -130,7 +132,11 @@ update msg model =
             , Cmd.none
             ,   Json.object
                   [ ("object", Json.string model.object)
-                  , ("value", Json.float <| Positive.toNum value)
+                  , ( "value"
+                    , Json.float
+                      <| (if model.income then identity else (-) 0)
+                      <| Positive.toNum value
+                    )
                   , ("date", Json.string <| Date.formatISO8601 date)
                   , ("account", Json.string account.id)
                   ] |> Just
@@ -179,7 +185,7 @@ view model =
             , ("btn-success", True)
             ]
         ]
-        [ text "Add transaction" ]
+        [ text <| if model.income then "Add income" else "Add expense" ]
     ]
 
 
