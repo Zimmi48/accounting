@@ -112,9 +112,9 @@ update msg model =
       , Nothing
       )
 
-    UpdateAccount s ->
+    UpdateAccount id ->
       ( { model |
-          account = List.find (\{ name } -> name == s) model.accounts
+          account = List.find (.id >> ((==) id)) model.accounts
         }
       , Cmd.none
       , Nothing
