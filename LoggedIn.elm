@@ -65,7 +65,9 @@ view model =
   case (model.transactions, model.accounts) of
     (Just transactions, Just accounts) ->
       div []
-        [ successButton "Add a new transaction" OpenAddTransaction
+        [ successButton "Add a new expense" <| OpenAddTransaction False
+        , text " " -- for spacing
+        , successButton "Add a new income" <| OpenAddTransaction True
         , text " " -- for spacing
         , successButton "Create a new account" OpenAddAccount
         , div
@@ -82,10 +84,14 @@ view model =
                 , ("col-md-4", True)
                 ]
             , div
-                [ class "col-md-4" ]
+                [ classList
+                    [ ("col-md-4", True)
+                    , ("h4", True)
+                    ]
+                ]
                 [ text
                   <| Maybe.withDefault ""
-                  <| Maybe.map toString
+                  <| Maybe.map (toString >> (++) "Total: ")
                   <| model.selectedAccountValue
                 ]
             ]
@@ -163,7 +169,7 @@ accountValue account =
 
 type Msg
   = AddTransactionMsg AddTransaction.Msg
-  | OpenAddTransaction
+  | OpenAddTransaction Bool
   | CloseAddTransaction
   | CreatedTransaction Transaction
   | FetchTransactions (List Transaction)
@@ -207,10 +213,10 @@ update msg model =
         Nothing ->
           model |> updateStandard
 
-    OpenAddTransaction ->
+    OpenAddTransaction income ->
       case model.accounts of
         Just accounts ->
-          let (addTransaction, cmd) = AddTransaction.init False accounts in
+          let (addTransaction, cmd) = AddTransaction.init income accounts in
           Just
           ( { model |
               addTransaction = Just addTransaction
