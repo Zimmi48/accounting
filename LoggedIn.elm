@@ -62,14 +62,25 @@ init session =
 
 view : Model -> Html Msg
 view model =
+  let
+    existAccount =
+      Maybe.withDefault False
+      <| Maybe.map (List.any (always True)) model.accounts
+  in
   case (model.transactions, model.accounts) of
     (Just transactions, Just accounts) ->
       div []
-        [ successButton "Add a new expense" <| OpenAddTransaction False
+        [ successButton
+            "Add a new expense"
+            (OpenAddTransaction False)
+            existAccount
         , text " " -- for spacing
-        , successButton "Add a new income" <| OpenAddTransaction True
+        , successButton
+            "Add a new income"
+             (OpenAddTransaction True)
+             existAccount
         , text " " -- for spacing
-        , successButton "Create a new account" OpenAddAccount
+        , successButton "Create a new account" OpenAddAccount True
         , div
             [ class "text-danger" ]
             [ text model.recentError ]
@@ -121,14 +132,15 @@ viewTransaction { object , value , date } =
     ]
 
 
-successButton : String -> Msg -> Html Msg
-successButton buttonText msg =
+successButton : String -> Msg -> Bool -> Html Msg
+successButton buttonText msg enabled =
   button
     [ onClick msg
     , classList
         [ ("btn", True)
         , ("btn-success", True)
         ]
+    , disabled (not enabled)
     ]
   [ text buttonText ]
 
