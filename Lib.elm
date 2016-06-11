@@ -5,7 +5,7 @@ import Date exposing (Date)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
-import Json.Decode as Decode exposing ((:=), Decoder)
+import Json.Decode as Json exposing ((:=), Decoder)
 import Positive exposing (Positive)
 
 
@@ -22,15 +22,15 @@ type alias Transaction =
 
 decodeTransaction : Decoder Transaction
 decodeTransaction =
-  Decode.object4 Transaction
-    ("object" := Decode.string)
+  Json.object4 Transaction
+    ("object" := Json.string)
     ("value" :=
-       Decode.customDecoder
-         Decode.float
+       Json.customDecoder
+         Json.float
          (Positive.fromNum >> Result.fromMaybe "")
     )
-    ("date" := Decode.customDecoder Decode.string Date.fromString)
-    ("account" := Decode.string)
+    ("date" := Json.customDecoder Json.string Date.fromString)
+    ("account" := Json.string)
 
 
 type alias Account =
@@ -42,10 +42,10 @@ type alias Account =
 
 decodeAccount : Decoder Account
 decodeAccount =
-  Decode.object3 Account
-    ("name" := Decode.string)
-    ("value" := Decode.float)
-    ("_id" := Decode.string)
+  Json.object3 Account
+    ("name" := Json.string)
+    ("value" := Json.float)
+    ("_id" := Json.string)
 
 
 -- helpers for Views
@@ -76,7 +76,7 @@ accountSelector accounts updateAccount addClasses =
         , class "form-control"
         , on
             "change"
-            (Decode.object1 updateAccount targetValue)
+            (Json.object1 updateAccount targetValue)
         ]
         (List.indexedMap
            (\i { name , id } ->
