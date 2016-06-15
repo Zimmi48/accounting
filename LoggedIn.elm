@@ -123,8 +123,18 @@ view model =
             CloseAddTransaction
             AddTransactionMsg
             AddTransaction.view
-        , Dialog.view
-          <| Maybe.map addAccountIntoConfig model.addAccount
+        , viewDialog
+            "Create a new account"          
+            model.addAccount
+            CloseAddAccount
+            AddAccountMsg
+            AddAccount.view
+        , viewDialog
+            "Add a new contact"
+            model.addContact
+            CloseAddContact
+            AddContactMsg
+            AddContact.view
         ]
 
     _ ->
@@ -168,15 +178,6 @@ viewDialog title model closeMsg forwardMsg view =
   |> Dialog.view
 
 
-addAccountIntoConfig : AddAccount.Model -> Dialog.Config Msg
-addAccountIntoConfig model =
-  { closeMessage = Just CloseAddAccount
-  , header = Just (h4 [] [text "Create a new account"])
-  , body = Just (App.map AddAccountMsg <| AddAccount.view model)
-  , footer = Nothing
-  }
-
-
 filterTransactions : Maybe Account -> List Transaction -> List Transaction
 filterTransactions selected =
   case selected of
@@ -207,6 +208,7 @@ type Msg
   | UpdateSelectedAccount String
   | OpenAddContact
   | CloseAddContact
+  | AddContactMsg AddContact.Msg
   | Error Kinvey.Error
 
 
@@ -326,6 +328,22 @@ update msg model =
       , selectedAccountValue =
           Maybe.map2 accountValue selectedAccount model.transactions
       } |> updateStandard
+
+    AddContactMsg msg ->
+      case (Maybe.map (AddContact.update msg) model.addContact) of
+        Just (addContact, Nothing) ->
+          { model | addContact = Just addContact } |> updateStandard
+
+        Just (addContact, Just contact) ->
+          Just
+            ( { model | addContact = Just addContact }
+            , Cmd.none
+            -- , Task.perform Error CreatedContact
+            --   <| createData model.session contactTable decodeContact contact
+            )
+
+        Nothing ->
+          model |> updateStandard
 
     OpenAddContact ->
       { model | addContact = Just AddContact.init } |> updateStandard
