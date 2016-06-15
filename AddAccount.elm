@@ -3,9 +3,8 @@ module AddAccount exposing (Model, init, Msg, update, view)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (..)
 import Json.Encode as Json
-import Lib exposing (inputGr)
+import Lib exposing (..)
 import Maybe.Extra as Maybe
 import String
 
@@ -36,7 +35,8 @@ update msg model =
       ( { model |
           name = String.left 50 s
         }
-      , Nothing)
+      , Nothing
+      )
 
     UpdateValue s ->
       ( { model |
@@ -64,34 +64,23 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-  let
-    notready =
-      String.isEmpty model.name
-        || Maybe.isNothing model.initialValue
-
-  in
-  Html.form
-    (if notready then [] else [ onSubmit Submit ])
+  viewForm
+    (String.isEmpty model.name || Maybe.isNothing model.initialValue)
+    Submit
+    "Create account"
     [ inputGr "accountname" "Name" UpdateName
         [ placeholder "Current account"
         , value model.name
         , required True
         ]
     , inputGr "value" "Initial value" UpdateValue
-        [ value <| Maybe.withDefault "" <| Maybe.map toString model.initialValue
+        [ value
+          <| Maybe.withDefault ""
+          <| Maybe.map toString model.initialValue
         , type' "number"
         , step "0.01"
         , required True
         ]
-    , button
-        [ type' "submit"
-        , classList
-            [ ("btn", True)
-            , ("btn-success", True)
-            ]
-        , disabled notready
-        ]
-        [ text "Create account" ]
     ]
 
 

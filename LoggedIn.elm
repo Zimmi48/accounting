@@ -2,6 +2,7 @@ module LoggedIn exposing (Model, init, view, Msg, update)
 
 
 import AddAccount
+import AddContact
 import AddTransaction
 import Date.Format as Date
 import Dialog
@@ -28,6 +29,7 @@ type alias Model =
   , selectedAccount : Maybe Account
   , selectedAccountValue : Maybe Float
   , addAccount : Maybe AddAccount.Model
+  , addContact : Maybe AddContact.Model
   , recentError : String
   }
 
@@ -49,6 +51,7 @@ init session =
   , selectedAccount = Nothing
   , selectedAccountValue = Nothing
   , addAccount = Nothing
+  , addContact = Nothing
   , recentError = ""
   } !
     [ Task.perform Error FetchTransactions
@@ -81,6 +84,8 @@ view model =
              existAccount
         , text " " -- for spacing
         , successButton "Create a new account" OpenAddAccount True
+        , text " " -- for spacing
+        , successButton "Add a new contact" OpenAddContact True
         , div
             [ class "text-danger" ]
             [ text model.recentError ]
@@ -112,8 +117,12 @@ view model =
             <| List.map viewTransaction
             <| filterTransactions model.selectedAccount
             <| transactions
-        , Dialog.view
-          <| Maybe.map addTransactionIntoConfig model.addTransaction
+        , viewDialog
+            "Add a new transaction"
+            model.addTransaction
+            CloseAddTransaction
+            AddTransactionMsg
+            AddTransaction.view
         , Dialog.view
           <| Maybe.map addAccountIntoConfig model.addAccount
         ]
@@ -145,13 +154,18 @@ successButton buttonText msg enabled =
   [ text buttonText ]
 
 
-addTransactionIntoConfig : AddTransaction.Model -> Dialog.Config Msg
-addTransactionIntoConfig model =
-  { closeMessage = Just CloseAddTransaction
-  , header = Just (h4 [] [text "Add a new transaction"])
-  , body = Just (App.map AddTransactionMsg <| AddTransaction.view model)
-  , footer = Nothing
-  }
+viewDialog : String -> Maybe dialogModel -> msg -> (dialogMsg -> msg) -> (dialogModel -> Html dialogMsg) -> Html msg
+viewDialog title model closeMsg forwardMsg view =
+  Maybe.map
+    (\model ->
+       { closeMessage = Just closeMsg
+       , header = Just (h4 [] [text title])
+       , body = Just (App.map forwardMsg <| view model)
+       , footer = Nothing
+       }
+    )
+    model
+  |> Dialog.view
 
 
 addAccountIntoConfig : AddAccount.Model -> Dialog.Config Msg
@@ -191,6 +205,8 @@ type Msg
   | CreatedAccount Account
   | FetchAccounts (List Account)
   | UpdateSelectedAccount String
+  | OpenAddContact
+  | CloseAddContact
   | Error Kinvey.Error
 
 
@@ -310,6 +326,12 @@ update msg model =
       , selectedAccountValue =
           Maybe.map2 accountValue selectedAccount model.transactions
       } |> updateStandard
+
+    OpenAddContact ->
+      { model | addContact = Just AddContact.init } |> updateStandard
+
+    CloseAddContact ->
+      { model | addContact = Nothing } |> updateStandard
 
     Error e ->
       case e of

@@ -7,7 +7,6 @@ import DatePicker exposing (DatePicker, defaultSettings)
 import Html exposing (..)
 import Html.App as App
 import Html.Attributes exposing (..)
-import Html.Events exposing (..)
 import Json.Encode as Json
 import Lib exposing (..)
 import List.Extra as List
@@ -148,16 +147,14 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-  let
-    notready =
-      String.isEmpty model.object
-      || Maybe.isNothing model.value
-      || Maybe.isNothing model.date
-      || Maybe.isNothing model.account
-  in
-
-  Html.form
-    [ onSubmit Submit ]
+  viewForm
+    ( String.isEmpty model.object
+    || Maybe.isNothing model.value
+    || Maybe.isNothing model.date
+    || Maybe.isNothing model.account
+    )
+    Submit
+    (if model.income then "Add income" else "Add expense")
     [ inputGr "object" "Object" UpdateObject
         [ placeholder "Groceries"
         , value model.object
@@ -177,15 +174,6 @@ view model =
         , App.map UpdateDate <| DatePicker.view model.datePicker
         ]
     , accountSelector model.accounts UpdateAccount []
-    , button
-        [ type' "submit"
-        , disabled notready
-        , classList
-            [ ("btn", True)
-            , ("btn-success", True)
-            ]
-        ]
-        [ text <| if model.income then "Add income" else "Add expense" ]
     ]
 
 

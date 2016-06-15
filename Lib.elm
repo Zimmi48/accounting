@@ -84,3 +84,22 @@ accountSelector accounts updateAccount addClasses =
            accounts
         )
     ]
+
+
+viewForm : Bool -> msg -> String -> List (Html msg) -> Html msg
+viewForm notready submitMsg submitText content =
+  Html.form
+    (if notready then [] else [ onSubmit submitMsg ])
+    ( content ++
+      [ button
+          [ type' "submit"
+          , classList
+              [ ("btn", True)
+              , ("btn-success", True)
+              ]
+          , disabled notready
+          ]
+          [ text submitText ]
+      ]
+    )
+  
