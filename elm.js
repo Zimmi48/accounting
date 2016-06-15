@@ -12571,6 +12571,9 @@ var _user$project$LoggedIn$Model = F9(
 var _user$project$LoggedIn$Error = function (a) {
 	return {ctor: 'Error', _0: a};
 };
+var _user$project$LoggedIn$AddContactMsg = function (a) {
+	return {ctor: 'AddContactMsg', _0: a};
+};
 var _user$project$LoggedIn$CloseAddContact = {ctor: 'CloseAddContact'};
 var _user$project$LoggedIn$OpenAddContact = {ctor: 'OpenAddContact'};
 var _user$project$LoggedIn$UpdateSelectedAccount = function (a) {
@@ -12586,26 +12589,6 @@ var _user$project$LoggedIn$CloseAddAccount = {ctor: 'CloseAddAccount'};
 var _user$project$LoggedIn$OpenAddAccount = {ctor: 'OpenAddAccount'};
 var _user$project$LoggedIn$AddAccountMsg = function (a) {
 	return {ctor: 'AddAccountMsg', _0: a};
-};
-var _user$project$LoggedIn$addAccountIntoConfig = function (model) {
-	return {
-		closeMessage: _elm_lang$core$Maybe$Just(_user$project$LoggedIn$CloseAddAccount),
-		header: _elm_lang$core$Maybe$Just(
-			A2(
-				_elm_lang$html$Html$h4,
-				_elm_lang$core$Native_List.fromArray(
-					[]),
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$html$Html$text('Create a new account')
-					]))),
-		body: _elm_lang$core$Maybe$Just(
-			A2(
-				_elm_lang$html$Html_App$map,
-				_user$project$LoggedIn$AddAccountMsg,
-				_user$project$AddAccount$view(model))),
-		footer: _elm_lang$core$Maybe$Nothing
-	};
 };
 var _user$project$LoggedIn$FetchTransactions = function (a) {
 	return {ctor: 'FetchTransactions', _0: a};
@@ -12763,8 +12746,8 @@ var _user$project$LoggedIn$view = function (model) {
 							_user$project$LoggedIn$viewTransaction,
 							A2(_user$project$LoggedIn$filterTransactions, model.selectedAccount, _p6._0._0)))),
 					A5(_user$project$LoggedIn$viewDialog, 'Add a new transaction', model.addTransaction, _user$project$LoggedIn$CloseAddTransaction, _user$project$LoggedIn$AddTransactionMsg, _user$project$AddTransaction$view),
-					_krisajenkins$elm_dialog$Dialog$view(
-					A2(_elm_lang$core$Maybe$map, _user$project$LoggedIn$addAccountIntoConfig, model.addAccount))
+					A5(_user$project$LoggedIn$viewDialog, 'Create a new account', model.addAccount, _user$project$LoggedIn$CloseAddAccount, _user$project$LoggedIn$AddAccountMsg, _user$project$AddAccount$view),
+					A5(_user$project$LoggedIn$viewDialog, 'Add a new contact', model.addContact, _user$project$LoggedIn$CloseAddContact, _user$project$LoggedIn$AddContactMsg, _user$project$AddContact$view)
 				]));
 	} else {
 		return A2(
@@ -12968,6 +12951,34 @@ var _user$project$LoggedIn$update = F2(
 							selectedAccount: selectedAccount,
 							selectedAccountValue: A3(_elm_lang$core$Maybe$map2, _user$project$LoggedIn$accountValue, selectedAccount, model.transactions)
 						}));
+			case 'AddContactMsg':
+				var _p16 = A2(
+					_elm_lang$core$Maybe$map,
+					_user$project$AddContact$update(_p8._0),
+					model.addContact);
+				if (_p16.ctor === 'Just') {
+					if (_p16._0._1.ctor === 'Nothing') {
+						return _user$project$LoggedIn$updateStandard(
+							_elm_lang$core$Native_Utils.update(
+								model,
+								{
+									addContact: _elm_lang$core$Maybe$Just(_p16._0._0)
+								}));
+					} else {
+						return _elm_lang$core$Maybe$Just(
+							{
+								ctor: '_Tuple2',
+								_0: _elm_lang$core$Native_Utils.update(
+									model,
+									{
+										addContact: _elm_lang$core$Maybe$Just(_p16._0._0)
+									}),
+								_1: _elm_lang$core$Platform_Cmd$none
+							});
+					}
+				} else {
+					return _user$project$LoggedIn$updateStandard(model);
+				}
 			case 'OpenAddContact':
 				return _user$project$LoggedIn$updateStandard(
 					_elm_lang$core$Native_Utils.update(
@@ -12981,16 +12992,16 @@ var _user$project$LoggedIn$update = F2(
 						model,
 						{addContact: _elm_lang$core$Maybe$Nothing}));
 			default:
-				var _p17 = _p8._0;
-				var _p16 = _p17;
-				if (((_p16.ctor === 'HttpError') && (_p16._0.ctor === 'BadResponse')) && (_p16._0._0 === 401)) {
+				var _p18 = _p8._0;
+				var _p17 = _p18;
+				if (((_p17.ctor === 'HttpError') && (_p17._0.ctor === 'BadResponse')) && (_p17._0._0 === 401)) {
 					return _elm_lang$core$Maybe$Nothing;
 				} else {
 					return _user$project$LoggedIn$updateStandard(
 						_elm_lang$core$Native_Utils.update(
 							model,
 							{
-								recentError: _user$project$Kinvey$errorToString(_p17)
+								recentError: _user$project$Kinvey$errorToString(_p18)
 							}));
 				}
 		}
