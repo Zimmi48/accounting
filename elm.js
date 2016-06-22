@@ -11607,6 +11607,15 @@ var _user$project$Lib$decodeAccount = A4(
 	A2(_elm_lang$core$Json_Decode_ops[':='], 'name', _elm_lang$core$Json_Decode$string),
 	A2(_elm_lang$core$Json_Decode_ops[':='], 'value', _elm_lang$core$Json_Decode$float),
 	A2(_elm_lang$core$Json_Decode_ops[':='], '_id', _elm_lang$core$Json_Decode$string));
+var _user$project$Lib$Contact = F2(
+	function (a, b) {
+		return {name: a, email: b};
+	});
+var _user$project$Lib$decodeContact = A3(
+	_elm_lang$core$Json_Decode$object2,
+	_user$project$Lib$Contact,
+	A2(_elm_lang$core$Json_Decode_ops[':='], 'name', _elm_lang$core$Json_Decode$string),
+	A2(_elm_lang$core$Json_Decode_ops[':='], 'email', _elm_lang$core$Json_Decode$string));
 
 var _user$project$AddAccount$update = F2(
 	function (msg, model) {
@@ -11711,356 +11720,6 @@ var _user$project$AddAccount$view = function (model) {
 						_elm_lang$html$Html_Attributes$required(true)
 					]))
 			]));
-};
-
-var _user$project$AddContact$notready = function (_p0) {
-	var _p1 = _p0;
-	return _elm_lang$core$String$isEmpty(_p1.name) || _elm_lang$core$String$isEmpty(_p1.email);
-};
-var _user$project$AddContact$update = F2(
-	function (msg, model) {
-		var _p2 = msg;
-		switch (_p2.ctor) {
-			case 'UpdateName':
-				return {
-					ctor: '_Tuple2',
-					_0: _elm_lang$core$Native_Utils.update(
-						model,
-						{
-							name: A2(_elm_lang$core$String$left, 50, _p2._0)
-						}),
-					_1: _elm_lang$core$Maybe$Nothing
-				};
-			case 'UpdateEmail':
-				return {
-					ctor: '_Tuple2',
-					_0: _elm_lang$core$Native_Utils.update(
-						model,
-						{
-							email: A2(_elm_lang$core$String$left, 50, _p2._0)
-						}),
-					_1: _elm_lang$core$Maybe$Nothing
-				};
-			default:
-				return _user$project$AddContact$notready(model) ? {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Maybe$Nothing} : {
-					ctor: '_Tuple2',
-					_0: model,
-					_1: _elm_lang$core$Maybe$Just(
-						_elm_lang$core$Json_Encode$object(
-							_elm_lang$core$Native_List.fromArray(
-								[
-									{
-									ctor: '_Tuple2',
-									_0: 'name',
-									_1: _elm_lang$core$Json_Encode$string(model.name)
-								},
-									{
-									ctor: '_Tuple2',
-									_0: 'email',
-									_1: _elm_lang$core$Json_Encode$string(model.email)
-								}
-								])))
-				};
-		}
-	});
-var _user$project$AddContact$Model = F2(
-	function (a, b) {
-		return {name: a, email: b};
-	});
-var _user$project$AddContact$init = A2(_user$project$AddContact$Model, '', '');
-var _user$project$AddContact$Submit = {ctor: 'Submit'};
-var _user$project$AddContact$UpdateEmail = function (a) {
-	return {ctor: 'UpdateEmail', _0: a};
-};
-var _user$project$AddContact$UpdateName = function (a) {
-	return {ctor: 'UpdateName', _0: a};
-};
-var _user$project$AddContact$view = function (model) {
-	return A4(
-		_user$project$Lib$viewForm,
-		_user$project$AddContact$notready(model),
-		_user$project$AddContact$Submit,
-		'Add contact',
-		_elm_lang$core$Native_List.fromArray(
-			[
-				A4(
-				_user$project$Lib$inputGr,
-				'contactname',
-				'Name',
-				_user$project$AddContact$UpdateName,
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$html$Html_Attributes$placeholder('John Smith'),
-						_elm_lang$html$Html_Attributes$value(model.name),
-						_elm_lang$html$Html_Attributes$required(true)
-					])),
-				A4(
-				_user$project$Lib$inputGr,
-				'contactemail',
-				'Email',
-				_user$project$AddContact$UpdateEmail,
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$html$Html_Attributes$placeholder('john.smith@nasa.gov'),
-						_elm_lang$html$Html_Attributes$value(model.email),
-						_elm_lang$html$Html_Attributes$required(true)
-					]))
-			]));
-};
-
-var _user$project$AddTransaction$Model = F8(
-	function (a, b, c, d, e, f, g, h) {
-		return {object: a, value: b, valueString: c, datePicker: d, date: e, account: f, accounts: g, income: h};
-	});
-var _user$project$AddTransaction$Submit = {ctor: 'Submit'};
-var _user$project$AddTransaction$UpdateAccount = function (a) {
-	return {ctor: 'UpdateAccount', _0: a};
-};
-var _user$project$AddTransaction$UpdateDate = function (a) {
-	return {ctor: 'UpdateDate', _0: a};
-};
-var _user$project$AddTransaction$init = F2(
-	function (income, accounts) {
-		var _p0 = _Bogdanp$elm_datepicker$DatePicker$init(
-			_elm_lang$core$Native_Utils.update(
-				_Bogdanp$elm_datepicker$DatePicker$defaultSettings,
-				{
-					placeholder: '1 Jan 1970',
-					dateFormatter: _mgold$elm_date_format$Date_Format$format('%e %b %Y'),
-					firstDayOfWeek: _elm_lang$core$Date$Mon,
-					inputClassList: _elm_lang$core$Native_List.fromArray(
-						[
-							{ctor: '_Tuple2', _0: 'form-control', _1: true}
-						]),
-					inputName: _elm_lang$core$Maybe$Just('date')
-				}));
-		var dateModel = _p0._0;
-		var dateCmd = _p0._1;
-		return A2(
-			_elm_lang$core$Platform_Cmd_ops['!'],
-			{
-				object: '',
-				value: _elm_lang$core$Maybe$Nothing,
-				valueString: '',
-				datePicker: dateModel,
-				date: _elm_lang$core$Maybe$Nothing,
-				account: _elm_lang$core$List$head(accounts),
-				accounts: accounts,
-				income: income
-			},
-			_elm_lang$core$Native_List.fromArray(
-				[
-					A2(_elm_lang$core$Platform_Cmd$map, _user$project$AddTransaction$UpdateDate, dateCmd)
-				]));
-	});
-var _user$project$AddTransaction$update = F2(
-	function (msg, model) {
-		var _p1 = msg;
-		switch (_p1.ctor) {
-			case 'UpdateObject':
-				return {
-					ctor: '_Tuple3',
-					_0: _elm_lang$core$Native_Utils.update(
-						model,
-						{
-							object: A2(_elm_lang$core$String$left, 50, _p1._0)
-						}),
-					_1: _elm_lang$core$Platform_Cmd$none,
-					_2: _elm_lang$core$Maybe$Nothing
-				};
-			case 'UpdateValue':
-				var _p2 = _p1._0;
-				return {
-					ctor: '_Tuple3',
-					_0: _elm_lang$core$Native_Utils.update(
-						model,
-						{
-							value: A2(
-								_elm_lang$core$Maybe$andThen,
-								_elm_lang$core$Result$toMaybe(
-									_elm_lang$core$String$toFloat(_p2)),
-								_Fresheyeball$elm_restrict_number$Positive$fromNum),
-							valueString: _p2
-						}),
-					_1: _elm_lang$core$Platform_Cmd$none,
-					_2: _elm_lang$core$Maybe$Nothing
-				};
-			case 'UpdateDate':
-				var _p3 = A2(_Bogdanp$elm_datepicker$DatePicker$update, _p1._0, model.datePicker);
-				var dateModel = _p3._0;
-				var dateCmd = _p3._1;
-				var date = _p3._2;
-				return {
-					ctor: '_Tuple3',
-					_0: _elm_lang$core$Native_Utils.update(
-						model,
-						{
-							datePicker: dateModel,
-							date: _elm_lang$core$Maybe$oneOf(
-								_elm_lang$core$Native_List.fromArray(
-									[date, model.date]))
-						}),
-					_1: A2(_elm_lang$core$Platform_Cmd$map, _user$project$AddTransaction$UpdateDate, dateCmd),
-					_2: _elm_lang$core$Maybe$Nothing
-				};
-			case 'UpdateAccount':
-				return {
-					ctor: '_Tuple3',
-					_0: _elm_lang$core$Native_Utils.update(
-						model,
-						{
-							account: A2(
-								_elm_community$list_extra$List_Extra$find,
-								function (_p4) {
-									return A2(
-										F2(
-											function (x, y) {
-												return _elm_lang$core$Native_Utils.eq(x, y);
-											}),
-										_p1._0,
-										function (_) {
-											return _.id;
-										}(_p4));
-								},
-								model.accounts)
-						}),
-					_1: _elm_lang$core$Platform_Cmd$none,
-					_2: _elm_lang$core$Maybe$Nothing
-				};
-			default:
-				var _p5 = {ctor: '_Tuple3', _0: model.value, _1: model.date, _2: model.account};
-				if ((((_p5.ctor === '_Tuple3') && (_p5._0.ctor === 'Just')) && (_p5._1.ctor === 'Just')) && (_p5._2.ctor === 'Just')) {
-					return _elm_lang$core$String$isEmpty(model.object) ? {ctor: '_Tuple3', _0: model, _1: _elm_lang$core$Platform_Cmd$none, _2: _elm_lang$core$Maybe$Nothing} : {
-						ctor: '_Tuple3',
-						_0: model,
-						_1: _elm_lang$core$Platform_Cmd$none,
-						_2: _elm_lang$core$Maybe$Just(
-							_elm_lang$core$Json_Encode$object(
-								_elm_lang$core$Native_List.fromArray(
-									[
-										{
-										ctor: '_Tuple2',
-										_0: 'object',
-										_1: _elm_lang$core$Json_Encode$string(model.object)
-									},
-										{
-										ctor: '_Tuple2',
-										_0: 'value',
-										_1: _elm_lang$core$Json_Encode$float(
-											(model.income ? _elm_lang$core$Basics$identity : F2(
-												function (x, y) {
-													return x - y;
-												})(0))(
-												_Fresheyeball$elm_restrict_number$Positive$toNum(_p5._0._0)))
-									},
-										{
-										ctor: '_Tuple2',
-										_0: 'date',
-										_1: _elm_lang$core$Json_Encode$string(
-											_mgold$elm_date_format$Date_Format$formatISO8601(_p5._1._0))
-									},
-										{
-										ctor: '_Tuple2',
-										_0: 'account',
-										_1: _elm_lang$core$Json_Encode$string(_p5._2._0.id)
-									}
-									])))
-					};
-				} else {
-					return {ctor: '_Tuple3', _0: model, _1: _elm_lang$core$Platform_Cmd$none, _2: _elm_lang$core$Maybe$Nothing};
-				}
-		}
-	});
-var _user$project$AddTransaction$UpdateValue = function (a) {
-	return {ctor: 'UpdateValue', _0: a};
-};
-var _user$project$AddTransaction$UpdateObject = function (a) {
-	return {ctor: 'UpdateObject', _0: a};
-};
-var _user$project$AddTransaction$view = function (model) {
-	return A4(
-		_user$project$Lib$viewForm,
-		_elm_lang$core$String$isEmpty(model.object) || (_elm_community$maybe_extra$Maybe_Extra$isNothing(model.value) || (_elm_community$maybe_extra$Maybe_Extra$isNothing(model.date) || _elm_community$maybe_extra$Maybe_Extra$isNothing(model.account))),
-		_user$project$AddTransaction$Submit,
-		model.income ? 'Add income' : 'Add expense',
-		_elm_lang$core$Native_List.fromArray(
-			[
-				A4(
-				_user$project$Lib$inputGr,
-				'object',
-				'Object',
-				_user$project$AddTransaction$UpdateObject,
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$html$Html_Attributes$placeholder('Groceries'),
-						_elm_lang$html$Html_Attributes$value(model.object),
-						_elm_lang$html$Html_Attributes$required(true)
-					])),
-				A4(
-				_user$project$Lib$inputGr,
-				'value',
-				'Value',
-				_user$project$AddTransaction$UpdateValue,
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$html$Html_Attributes$placeholder('23.33'),
-						_elm_lang$html$Html_Attributes$value(model.valueString),
-						_elm_lang$html$Html_Attributes$type$('number'),
-						_elm_lang$html$Html_Attributes$min('0.01'),
-						_elm_lang$html$Html_Attributes$step('0.01'),
-						_elm_lang$html$Html_Attributes$required(true)
-					])),
-				A2(
-				_elm_lang$html$Html$div,
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$html$Html_Attributes$class('form-group')
-					]),
-				_elm_lang$core$Native_List.fromArray(
-					[
-						A2(
-						_elm_lang$html$Html$label,
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html_Attributes$for('date')
-							]),
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html$text('Date')
-							])),
-						A2(
-						_elm_lang$html$Html_App$map,
-						_user$project$AddTransaction$UpdateDate,
-						_Bogdanp$elm_datepicker$DatePicker$view(model.datePicker))
-					])),
-				A3(
-				_user$project$Lib$accountSelector,
-				model.accounts,
-				_user$project$AddTransaction$UpdateAccount,
-				_elm_lang$core$Native_List.fromArray(
-					[]))
-			]));
-};
-var _user$project$AddTransaction$main = {
-	main: _elm_lang$html$Html_App$program(
-		{
-			init: A2(
-				_user$project$AddTransaction$init,
-				true,
-				_elm_lang$core$Native_List.fromArray(
-					[])),
-			update: F2(
-				function (msg, model) {
-					var _p6 = A2(_user$project$AddTransaction$update, msg, model);
-					var model = _p6._0;
-					var cmd = _p6._1;
-					return {ctor: '_Tuple2', _0: model, _1: cmd};
-				}),
-			view: _user$project$AddTransaction$view,
-			subscriptions: function (_p7) {
-				return _elm_lang$core$Platform_Sub$none;
-			}
-		})
 };
 
 var _user$project$Kinvey$baseDataUrl = function (_p0) {
@@ -12427,6 +12086,553 @@ var _user$project$MyKinvey$createData = _user$project$Kinvey$createData(_user$pr
 var _user$project$MyKinvey$createDataSimple = _user$project$Kinvey$createDataSimple(_user$project$MyKinvey$auth);
 var _user$project$MyKinvey$getData = _user$project$Kinvey$getData(_user$project$MyKinvey$auth);
 
+var _user$project$AddButton$Model = F9(
+	function (a, b, c, d, e, f, g, h, i) {
+		return {componentModel: a, session: b, table: c, decoder: d, title: e, objects: f, componentInit: g, componentUpdate: h, componentView: i};
+	});
+var _user$project$AddButton$Error = function (a) {
+	return {ctor: 'Error', _0: a};
+};
+var _user$project$AddButton$Fetch = function (a) {
+	return {ctor: 'Fetch', _0: a};
+};
+var _user$project$AddButton$init = function (_p0) {
+	var _p1 = _p0;
+	var _p4 = _p1.table;
+	var _p3 = _p1.session;
+	var _p2 = _p1.decoder;
+	return {
+		ctor: '_Tuple2',
+		_0: {componentModel: _elm_lang$core$Maybe$Nothing, session: _p3, table: _p4, decoder: _p2, title: _p1.title, objects: _elm_lang$core$Maybe$Nothing, componentInit: _p1.init, componentUpdate: _p1.update, componentView: _p1.view},
+		_1: A3(
+			_elm_lang$core$Task$perform,
+			_user$project$AddButton$Error,
+			_user$project$AddButton$Fetch,
+			A4(_user$project$MyKinvey$getData, _p3, _p4, _user$project$Kinvey$NoSort, _p2))
+	};
+};
+var _user$project$AddButton$Created = function (a) {
+	return {ctor: 'Created', _0: a};
+};
+var _user$project$AddButton$update = F2(
+	function (msg, model) {
+		var _p5 = msg;
+		switch (_p5.ctor) {
+			case 'Open':
+				return {
+					ctor: '_Tuple3',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{
+							componentModel: _elm_lang$core$Maybe$Just(model.componentInit)
+						}),
+					_1: _elm_lang$core$Platform_Cmd$none,
+					_2: _elm_lang$core$Maybe$Nothing
+				};
+			case 'Close':
+				return {
+					ctor: '_Tuple3',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{componentModel: _elm_lang$core$Maybe$Nothing}),
+					_1: _elm_lang$core$Platform_Cmd$none,
+					_2: _elm_lang$core$Maybe$Nothing
+				};
+			case 'Created':
+				var objects = A2(
+					_elm_lang$core$Maybe$map,
+					F2(
+						function (x, y) {
+							return A2(_elm_lang$core$List_ops['::'], x, y);
+						})(_p5._0),
+					model.objects);
+				return {
+					ctor: '_Tuple3',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{objects: objects, componentModel: _elm_lang$core$Maybe$Nothing}),
+					_1: _elm_lang$core$Platform_Cmd$none,
+					_2: A2(_elm_lang$core$Maybe$map, _elm_lang$core$Result$Ok, objects)
+				};
+			case 'Fetch':
+				var _p6 = _p5._0;
+				return {
+					ctor: '_Tuple3',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{
+							objects: _elm_lang$core$Maybe$Just(_p6)
+						}),
+					_1: _elm_lang$core$Platform_Cmd$none,
+					_2: _elm_lang$core$Maybe$Just(
+						_elm_lang$core$Result$Ok(_p6))
+				};
+			case 'Error':
+				return {
+					ctor: '_Tuple3',
+					_0: model,
+					_1: _elm_lang$core$Platform_Cmd$none,
+					_2: _elm_lang$core$Maybe$Just(
+						_elm_lang$core$Result$Err(_p5._0))
+				};
+			default:
+				var _p7 = A2(
+					_elm_lang$core$Maybe$map,
+					model.componentUpdate(_p5._0),
+					model.componentModel);
+				if (_p7.ctor === 'Just') {
+					if (_p7._0._1.ctor === 'Nothing') {
+						return {
+							ctor: '_Tuple3',
+							_0: _elm_lang$core$Native_Utils.update(
+								model,
+								{
+									componentModel: _elm_lang$core$Maybe$Just(_p7._0._0)
+								}),
+							_1: _elm_lang$core$Platform_Cmd$none,
+							_2: _elm_lang$core$Maybe$Nothing
+						};
+					} else {
+						return {
+							ctor: '_Tuple3',
+							_0: _elm_lang$core$Native_Utils.update(
+								model,
+								{
+									componentModel: _elm_lang$core$Maybe$Just(_p7._0._0)
+								}),
+							_1: A3(
+								_elm_lang$core$Task$perform,
+								_user$project$AddButton$Error,
+								_user$project$AddButton$Created,
+								A4(_user$project$MyKinvey$createData, model.session, model.table, model.decoder, _p7._0._1._0)),
+							_2: _elm_lang$core$Maybe$Nothing
+						};
+					}
+				} else {
+					return {ctor: '_Tuple3', _0: model, _1: _elm_lang$core$Platform_Cmd$none, _2: _elm_lang$core$Maybe$Nothing};
+				}
+		}
+	});
+var _user$project$AddButton$ComponentMsg = function (a) {
+	return {ctor: 'ComponentMsg', _0: a};
+};
+var _user$project$AddButton$Close = {ctor: 'Close'};
+var _user$project$AddButton$Open = {ctor: 'Open'};
+var _user$project$AddButton$view = function (model) {
+	var notready = _elm_community$maybe_extra$Maybe_Extra$isNothing(model.objects);
+	return A2(
+		_elm_lang$html$Html$div,
+		_elm_lang$core$Native_List.fromArray(
+			[
+				_elm_lang$html$Html_Attributes$style(
+				_elm_lang$core$Native_List.fromArray(
+					[
+						{ctor: '_Tuple2', _0: 'display', _1: 'inline-block'}
+					]))
+			]),
+		_elm_lang$core$Native_List.fromArray(
+			[
+				A2(
+				_elm_lang$html$Html$button,
+				A2(
+					_elm_lang$core$Basics_ops['++'],
+					_elm_lang$core$Native_List.fromArray(
+						[
+							_elm_lang$html$Html_Attributes$classList(
+							_elm_lang$core$Native_List.fromArray(
+								[
+									{ctor: '_Tuple2', _0: 'btn', _1: true},
+									{ctor: '_Tuple2', _0: 'btn-success', _1: true}
+								]))
+						]),
+					notready ? _elm_lang$core$Native_List.fromArray(
+						[
+							_elm_lang$html$Html_Attributes$disabled(notready)
+						]) : _elm_lang$core$Native_List.fromArray(
+						[
+							_elm_lang$html$Html_Events$onClick(_user$project$AddButton$Open)
+						])),
+				_elm_lang$core$Native_List.fromArray(
+					[
+						_elm_lang$html$Html$text(model.title)
+					])),
+				_krisajenkins$elm_dialog$Dialog$view(
+				A2(
+					_elm_lang$core$Maybe$map,
+					function (m) {
+						return {
+							closeMessage: _elm_lang$core$Maybe$Just(_user$project$AddButton$Close),
+							header: _elm_lang$core$Maybe$Just(
+								A2(
+									_elm_lang$html$Html$h4,
+									_elm_lang$core$Native_List.fromArray(
+										[]),
+									_elm_lang$core$Native_List.fromArray(
+										[
+											_elm_lang$html$Html$text(model.title)
+										]))),
+							body: _elm_lang$core$Maybe$Just(
+								A2(
+									_elm_lang$html$Html_App$map,
+									_user$project$AddButton$ComponentMsg,
+									model.componentView(m))),
+							footer: _elm_lang$core$Maybe$Nothing
+						};
+					},
+					model.componentModel))
+			]));
+};
+
+var _user$project$AddContact$notready = function (_p0) {
+	var _p1 = _p0;
+	return _elm_lang$core$String$isEmpty(_p1.name) || _elm_lang$core$String$isEmpty(_p1.email);
+};
+var _user$project$AddContact$update = F2(
+	function (msg, model) {
+		var _p2 = msg;
+		switch (_p2.ctor) {
+			case 'UpdateName':
+				return {
+					ctor: '_Tuple2',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{
+							name: A2(_elm_lang$core$String$left, 50, _p2._0)
+						}),
+					_1: _elm_lang$core$Maybe$Nothing
+				};
+			case 'UpdateEmail':
+				return {
+					ctor: '_Tuple2',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{
+							email: A2(_elm_lang$core$String$left, 50, _p2._0)
+						}),
+					_1: _elm_lang$core$Maybe$Nothing
+				};
+			default:
+				return _user$project$AddContact$notready(model) ? {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Maybe$Nothing} : {
+					ctor: '_Tuple2',
+					_0: model,
+					_1: _elm_lang$core$Maybe$Just(
+						_elm_lang$core$Json_Encode$object(
+							_elm_lang$core$Native_List.fromArray(
+								[
+									{
+									ctor: '_Tuple2',
+									_0: 'name',
+									_1: _elm_lang$core$Json_Encode$string(model.name)
+								},
+									{
+									ctor: '_Tuple2',
+									_0: 'email',
+									_1: _elm_lang$core$Json_Encode$string(model.email)
+								}
+								])))
+				};
+		}
+	});
+var _user$project$AddContact$Model = F2(
+	function (a, b) {
+		return {name: a, email: b};
+	});
+var _user$project$AddContact$init = A2(_user$project$AddContact$Model, '', '');
+var _user$project$AddContact$Submit = {ctor: 'Submit'};
+var _user$project$AddContact$UpdateEmail = function (a) {
+	return {ctor: 'UpdateEmail', _0: a};
+};
+var _user$project$AddContact$UpdateName = function (a) {
+	return {ctor: 'UpdateName', _0: a};
+};
+var _user$project$AddContact$view = function (model) {
+	return A4(
+		_user$project$Lib$viewForm,
+		_user$project$AddContact$notready(model),
+		_user$project$AddContact$Submit,
+		'Add contact',
+		_elm_lang$core$Native_List.fromArray(
+			[
+				A4(
+				_user$project$Lib$inputGr,
+				'contactname',
+				'Name',
+				_user$project$AddContact$UpdateName,
+				_elm_lang$core$Native_List.fromArray(
+					[
+						_elm_lang$html$Html_Attributes$placeholder('John Smith'),
+						_elm_lang$html$Html_Attributes$value(model.name),
+						_elm_lang$html$Html_Attributes$required(true)
+					])),
+				A4(
+				_user$project$Lib$inputGr,
+				'contactemail',
+				'Email',
+				_user$project$AddContact$UpdateEmail,
+				_elm_lang$core$Native_List.fromArray(
+					[
+						_elm_lang$html$Html_Attributes$placeholder('john.smith@nasa.gov'),
+						_elm_lang$html$Html_Attributes$value(model.email),
+						_elm_lang$html$Html_Attributes$required(true)
+					]))
+			]));
+};
+
+var _user$project$AddTransaction$Model = F8(
+	function (a, b, c, d, e, f, g, h) {
+		return {object: a, value: b, valueString: c, datePicker: d, date: e, account: f, accounts: g, income: h};
+	});
+var _user$project$AddTransaction$Submit = {ctor: 'Submit'};
+var _user$project$AddTransaction$UpdateAccount = function (a) {
+	return {ctor: 'UpdateAccount', _0: a};
+};
+var _user$project$AddTransaction$UpdateDate = function (a) {
+	return {ctor: 'UpdateDate', _0: a};
+};
+var _user$project$AddTransaction$init = F2(
+	function (income, accounts) {
+		var _p0 = _Bogdanp$elm_datepicker$DatePicker$init(
+			_elm_lang$core$Native_Utils.update(
+				_Bogdanp$elm_datepicker$DatePicker$defaultSettings,
+				{
+					placeholder: '1 Jan 1970',
+					dateFormatter: _mgold$elm_date_format$Date_Format$format('%e %b %Y'),
+					firstDayOfWeek: _elm_lang$core$Date$Mon,
+					inputClassList: _elm_lang$core$Native_List.fromArray(
+						[
+							{ctor: '_Tuple2', _0: 'form-control', _1: true}
+						]),
+					inputName: _elm_lang$core$Maybe$Just('date')
+				}));
+		var dateModel = _p0._0;
+		var dateCmd = _p0._1;
+		return A2(
+			_elm_lang$core$Platform_Cmd_ops['!'],
+			{
+				object: '',
+				value: _elm_lang$core$Maybe$Nothing,
+				valueString: '',
+				datePicker: dateModel,
+				date: _elm_lang$core$Maybe$Nothing,
+				account: _elm_lang$core$List$head(accounts),
+				accounts: accounts,
+				income: income
+			},
+			_elm_lang$core$Native_List.fromArray(
+				[
+					A2(_elm_lang$core$Platform_Cmd$map, _user$project$AddTransaction$UpdateDate, dateCmd)
+				]));
+	});
+var _user$project$AddTransaction$update = F2(
+	function (msg, model) {
+		var _p1 = msg;
+		switch (_p1.ctor) {
+			case 'UpdateObject':
+				return {
+					ctor: '_Tuple3',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{
+							object: A2(_elm_lang$core$String$left, 50, _p1._0)
+						}),
+					_1: _elm_lang$core$Platform_Cmd$none,
+					_2: _elm_lang$core$Maybe$Nothing
+				};
+			case 'UpdateValue':
+				var _p2 = _p1._0;
+				return {
+					ctor: '_Tuple3',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{
+							value: A2(
+								_elm_lang$core$Maybe$andThen,
+								_elm_lang$core$Result$toMaybe(
+									_elm_lang$core$String$toFloat(_p2)),
+								_Fresheyeball$elm_restrict_number$Positive$fromNum),
+							valueString: _p2
+						}),
+					_1: _elm_lang$core$Platform_Cmd$none,
+					_2: _elm_lang$core$Maybe$Nothing
+				};
+			case 'UpdateDate':
+				var _p3 = A2(_Bogdanp$elm_datepicker$DatePicker$update, _p1._0, model.datePicker);
+				var dateModel = _p3._0;
+				var dateCmd = _p3._1;
+				var date = _p3._2;
+				return {
+					ctor: '_Tuple3',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{
+							datePicker: dateModel,
+							date: _elm_lang$core$Maybe$oneOf(
+								_elm_lang$core$Native_List.fromArray(
+									[date, model.date]))
+						}),
+					_1: A2(_elm_lang$core$Platform_Cmd$map, _user$project$AddTransaction$UpdateDate, dateCmd),
+					_2: _elm_lang$core$Maybe$Nothing
+				};
+			case 'UpdateAccount':
+				return {
+					ctor: '_Tuple3',
+					_0: _elm_lang$core$Native_Utils.update(
+						model,
+						{
+							account: A2(
+								_elm_community$list_extra$List_Extra$find,
+								function (_p4) {
+									return A2(
+										F2(
+											function (x, y) {
+												return _elm_lang$core$Native_Utils.eq(x, y);
+											}),
+										_p1._0,
+										function (_) {
+											return _.id;
+										}(_p4));
+								},
+								model.accounts)
+						}),
+					_1: _elm_lang$core$Platform_Cmd$none,
+					_2: _elm_lang$core$Maybe$Nothing
+				};
+			default:
+				var _p5 = {ctor: '_Tuple3', _0: model.value, _1: model.date, _2: model.account};
+				if ((((_p5.ctor === '_Tuple3') && (_p5._0.ctor === 'Just')) && (_p5._1.ctor === 'Just')) && (_p5._2.ctor === 'Just')) {
+					return _elm_lang$core$String$isEmpty(model.object) ? {ctor: '_Tuple3', _0: model, _1: _elm_lang$core$Platform_Cmd$none, _2: _elm_lang$core$Maybe$Nothing} : {
+						ctor: '_Tuple3',
+						_0: model,
+						_1: _elm_lang$core$Platform_Cmd$none,
+						_2: _elm_lang$core$Maybe$Just(
+							_elm_lang$core$Json_Encode$object(
+								_elm_lang$core$Native_List.fromArray(
+									[
+										{
+										ctor: '_Tuple2',
+										_0: 'object',
+										_1: _elm_lang$core$Json_Encode$string(model.object)
+									},
+										{
+										ctor: '_Tuple2',
+										_0: 'value',
+										_1: _elm_lang$core$Json_Encode$float(
+											(model.income ? _elm_lang$core$Basics$identity : F2(
+												function (x, y) {
+													return x - y;
+												})(0))(
+												_Fresheyeball$elm_restrict_number$Positive$toNum(_p5._0._0)))
+									},
+										{
+										ctor: '_Tuple2',
+										_0: 'date',
+										_1: _elm_lang$core$Json_Encode$string(
+											_mgold$elm_date_format$Date_Format$formatISO8601(_p5._1._0))
+									},
+										{
+										ctor: '_Tuple2',
+										_0: 'account',
+										_1: _elm_lang$core$Json_Encode$string(_p5._2._0.id)
+									}
+									])))
+					};
+				} else {
+					return {ctor: '_Tuple3', _0: model, _1: _elm_lang$core$Platform_Cmd$none, _2: _elm_lang$core$Maybe$Nothing};
+				}
+		}
+	});
+var _user$project$AddTransaction$UpdateValue = function (a) {
+	return {ctor: 'UpdateValue', _0: a};
+};
+var _user$project$AddTransaction$UpdateObject = function (a) {
+	return {ctor: 'UpdateObject', _0: a};
+};
+var _user$project$AddTransaction$view = function (model) {
+	return A4(
+		_user$project$Lib$viewForm,
+		_elm_lang$core$String$isEmpty(model.object) || (_elm_community$maybe_extra$Maybe_Extra$isNothing(model.value) || (_elm_community$maybe_extra$Maybe_Extra$isNothing(model.date) || _elm_community$maybe_extra$Maybe_Extra$isNothing(model.account))),
+		_user$project$AddTransaction$Submit,
+		model.income ? 'Add income' : 'Add expense',
+		_elm_lang$core$Native_List.fromArray(
+			[
+				A4(
+				_user$project$Lib$inputGr,
+				'object',
+				'Object',
+				_user$project$AddTransaction$UpdateObject,
+				_elm_lang$core$Native_List.fromArray(
+					[
+						_elm_lang$html$Html_Attributes$placeholder('Groceries'),
+						_elm_lang$html$Html_Attributes$value(model.object),
+						_elm_lang$html$Html_Attributes$required(true)
+					])),
+				A4(
+				_user$project$Lib$inputGr,
+				'value',
+				'Value',
+				_user$project$AddTransaction$UpdateValue,
+				_elm_lang$core$Native_List.fromArray(
+					[
+						_elm_lang$html$Html_Attributes$placeholder('23.33'),
+						_elm_lang$html$Html_Attributes$value(model.valueString),
+						_elm_lang$html$Html_Attributes$type$('number'),
+						_elm_lang$html$Html_Attributes$min('0.01'),
+						_elm_lang$html$Html_Attributes$step('0.01'),
+						_elm_lang$html$Html_Attributes$required(true)
+					])),
+				A2(
+				_elm_lang$html$Html$div,
+				_elm_lang$core$Native_List.fromArray(
+					[
+						_elm_lang$html$Html_Attributes$class('form-group')
+					]),
+				_elm_lang$core$Native_List.fromArray(
+					[
+						A2(
+						_elm_lang$html$Html$label,
+						_elm_lang$core$Native_List.fromArray(
+							[
+								_elm_lang$html$Html_Attributes$for('date')
+							]),
+						_elm_lang$core$Native_List.fromArray(
+							[
+								_elm_lang$html$Html$text('Date')
+							])),
+						A2(
+						_elm_lang$html$Html_App$map,
+						_user$project$AddTransaction$UpdateDate,
+						_Bogdanp$elm_datepicker$DatePicker$view(model.datePicker))
+					])),
+				A3(
+				_user$project$Lib$accountSelector,
+				model.accounts,
+				_user$project$AddTransaction$UpdateAccount,
+				_elm_lang$core$Native_List.fromArray(
+					[]))
+			]));
+};
+var _user$project$AddTransaction$main = {
+	main: _elm_lang$html$Html_App$program(
+		{
+			init: A2(
+				_user$project$AddTransaction$init,
+				true,
+				_elm_lang$core$Native_List.fromArray(
+					[])),
+			update: F2(
+				function (msg, model) {
+					var _p6 = A2(_user$project$AddTransaction$update, msg, model);
+					var model = _p6._0;
+					var cmd = _p6._1;
+					return {ctor: '_Tuple2', _0: model, _1: cmd};
+				}),
+			view: _user$project$AddTransaction$view,
+			subscriptions: function (_p7) {
+				return _elm_lang$core$Platform_Sub$none;
+			}
+		})
+};
+
 var _user$project$LoggedIn$updateStandard = function (model) {
 	return _elm_lang$core$Maybe$Just(
 		{ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none});
@@ -12574,8 +12780,6 @@ var _user$project$LoggedIn$Error = function (a) {
 var _user$project$LoggedIn$AddContactMsg = function (a) {
 	return {ctor: 'AddContactMsg', _0: a};
 };
-var _user$project$LoggedIn$CloseAddContact = {ctor: 'CloseAddContact'};
-var _user$project$LoggedIn$OpenAddContact = {ctor: 'OpenAddContact'};
 var _user$project$LoggedIn$UpdateSelectedAccount = function (a) {
 	return {ctor: 'UpdateSelectedAccount', _0: a};
 };
@@ -12594,9 +12798,13 @@ var _user$project$LoggedIn$FetchTransactions = function (a) {
 	return {ctor: 'FetchTransactions', _0: a};
 };
 var _user$project$LoggedIn$init = function (session) {
+	var _p6 = _user$project$AddButton$init(
+		{session: session, table: 'contacts', decoder: _user$project$Lib$decodeContact, title: 'Add a new contact', init: _user$project$AddContact$init, update: _user$project$AddContact$update, view: _user$project$AddContact$view});
+	var addContactModel = _p6._0;
+	var addContactCmd = _p6._1;
 	return A2(
 		_elm_lang$core$Platform_Cmd_ops['!'],
-		{session: session, transactions: _elm_lang$core$Maybe$Nothing, addTransaction: _elm_lang$core$Maybe$Nothing, accounts: _elm_lang$core$Maybe$Nothing, selectedAccount: _elm_lang$core$Maybe$Nothing, selectedAccountValue: _elm_lang$core$Maybe$Nothing, addAccount: _elm_lang$core$Maybe$Nothing, addContact: _elm_lang$core$Maybe$Nothing, recentError: ''},
+		{session: session, transactions: _elm_lang$core$Maybe$Nothing, addTransaction: _elm_lang$core$Maybe$Nothing, accounts: _elm_lang$core$Maybe$Nothing, selectedAccount: _elm_lang$core$Maybe$Nothing, selectedAccountValue: _elm_lang$core$Maybe$Nothing, addAccount: _elm_lang$core$Maybe$Nothing, addContact: addContactModel, recentError: ''},
 		_elm_lang$core$Native_List.fromArray(
 			[
 				A3(
@@ -12613,7 +12821,8 @@ var _user$project$LoggedIn$init = function (session) {
 				_elm_lang$core$Task$perform,
 				_user$project$LoggedIn$Error,
 				_user$project$LoggedIn$FetchAccounts,
-				A4(_user$project$MyKinvey$getData, session, _user$project$LoggedIn$accountTable, _user$project$Kinvey$NoSort, _user$project$Lib$decodeAccount))
+				A4(_user$project$MyKinvey$getData, session, _user$project$LoggedIn$accountTable, _user$project$Kinvey$NoSort, _user$project$Lib$decodeAccount)),
+				A2(_elm_lang$core$Platform_Cmd$map, _user$project$LoggedIn$AddContactMsg, addContactCmd)
 			]));
 };
 var _user$project$LoggedIn$CreatedTransaction = function (a) {
@@ -12635,8 +12844,8 @@ var _user$project$LoggedIn$view = function (model) {
 			_elm_lang$core$List$any(
 				_elm_lang$core$Basics$always(true)),
 			model.accounts));
-	var _p6 = {ctor: '_Tuple2', _0: model.transactions, _1: model.accounts};
-	if (((_p6.ctor === '_Tuple2') && (_p6._0.ctor === 'Just')) && (_p6._1.ctor === 'Just')) {
+	var _p7 = {ctor: '_Tuple2', _0: model.transactions, _1: model.accounts};
+	if (((_p7.ctor === '_Tuple2') && (_p7._0.ctor === 'Just')) && (_p7._1.ctor === 'Just')) {
 		return A2(
 			_elm_lang$html$Html$div,
 			_elm_lang$core$Native_List.fromArray(
@@ -12657,7 +12866,10 @@ var _user$project$LoggedIn$view = function (model) {
 					_elm_lang$html$Html$text(' '),
 					A3(_user$project$LoggedIn$successButton, 'Create a new account', _user$project$LoggedIn$OpenAddAccount, true),
 					_elm_lang$html$Html$text(' '),
-					A3(_user$project$LoggedIn$successButton, 'Add a new contact', _user$project$LoggedIn$OpenAddContact, true),
+					A2(
+					_elm_lang$html$Html_App$map,
+					_user$project$LoggedIn$AddContactMsg,
+					_user$project$AddButton$view(model.addContact)),
 					A2(
 					_elm_lang$html$Html$div,
 					_elm_lang$core$Native_List.fromArray(
@@ -12689,7 +12901,7 @@ var _user$project$LoggedIn$view = function (model) {
 							A2(
 								_elm_lang$core$List_ops['::'],
 								{name: 'All accounts', value: 0, id: ''},
-								_p6._1._0),
+								_p7._1._0),
 							_user$project$LoggedIn$UpdateSelectedAccount,
 							_elm_lang$core$Native_List.fromArray(
 								[
@@ -12715,14 +12927,14 @@ var _user$project$LoggedIn$view = function (model) {
 										'',
 										A2(
 											_elm_lang$core$Maybe$map,
-											function (_p7) {
+											function (_p8) {
 												return A2(
 													F2(
 														function (x, y) {
 															return A2(_elm_lang$core$Basics_ops['++'], x, y);
 														}),
 													'Total: ',
-													_elm_lang$core$Basics$toString(_p7));
+													_elm_lang$core$Basics$toString(_p8));
 											},
 											model.selectedAccountValue)))
 								]))
@@ -12744,10 +12956,9 @@ var _user$project$LoggedIn$view = function (model) {
 						A2(
 							_elm_lang$core$List$map,
 							_user$project$LoggedIn$viewTransaction,
-							A2(_user$project$LoggedIn$filterTransactions, model.selectedAccount, _p6._0._0)))),
+							A2(_user$project$LoggedIn$filterTransactions, model.selectedAccount, _p7._0._0)))),
 					A5(_user$project$LoggedIn$viewDialog, 'Add a new transaction', model.addTransaction, _user$project$LoggedIn$CloseAddTransaction, _user$project$LoggedIn$AddTransactionMsg, _user$project$AddTransaction$view),
-					A5(_user$project$LoggedIn$viewDialog, 'Create a new account', model.addAccount, _user$project$LoggedIn$CloseAddAccount, _user$project$LoggedIn$AddAccountMsg, _user$project$AddAccount$view),
-					A5(_user$project$LoggedIn$viewDialog, 'Add a new contact', model.addContact, _user$project$LoggedIn$CloseAddContact, _user$project$LoggedIn$AddContactMsg, _user$project$AddContact$view)
+					A5(_user$project$LoggedIn$viewDialog, 'Create a new account', model.addAccount, _user$project$LoggedIn$CloseAddAccount, _user$project$LoggedIn$AddAccountMsg, _user$project$AddAccount$view)
 				]));
 	} else {
 		return A2(
@@ -12764,24 +12975,24 @@ var _user$project$LoggedIn$view = function (model) {
 };
 var _user$project$LoggedIn$update = F2(
 	function (msg, model) {
-		var _p8 = msg;
-		switch (_p8.ctor) {
+		var _p9 = msg;
+		switch (_p9.ctor) {
 			case 'AddTransactionMsg':
-				var _p9 = A2(
+				var _p10 = A2(
 					_elm_lang$core$Maybe$map,
-					_user$project$AddTransaction$update(_p8._0),
+					_user$project$AddTransaction$update(_p9._0),
 					model.addTransaction);
-				if (_p9.ctor === 'Just') {
-					if (_p9._0._2.ctor === 'Nothing') {
+				if (_p10.ctor === 'Just') {
+					if (_p10._0._2.ctor === 'Nothing') {
 						return _elm_lang$core$Maybe$Just(
 							{
 								ctor: '_Tuple2',
 								_0: _elm_lang$core$Native_Utils.update(
 									model,
 									{
-										addTransaction: _elm_lang$core$Maybe$Just(_p9._0._0)
+										addTransaction: _elm_lang$core$Maybe$Just(_p10._0._0)
 									}),
-								_1: A2(_elm_lang$core$Platform_Cmd$map, _user$project$LoggedIn$AddTransactionMsg, _p9._0._1)
+								_1: A2(_elm_lang$core$Platform_Cmd$map, _user$project$LoggedIn$AddTransactionMsg, _p10._0._1)
 							});
 					} else {
 						return _elm_lang$core$Maybe$Just(
@@ -12790,7 +13001,7 @@ var _user$project$LoggedIn$update = F2(
 								_elm_lang$core$Native_Utils.update(
 									model,
 									{
-										addTransaction: _elm_lang$core$Maybe$Just(_p9._0._0),
+										addTransaction: _elm_lang$core$Maybe$Just(_p10._0._0),
 										recentError: ''
 									}),
 								_elm_lang$core$Native_List.fromArray(
@@ -12799,19 +13010,19 @@ var _user$project$LoggedIn$update = F2(
 										_elm_lang$core$Task$perform,
 										_user$project$LoggedIn$Error,
 										_user$project$LoggedIn$CreatedTransaction,
-										A4(_user$project$MyKinvey$createData, model.session, _user$project$LoggedIn$transactionTable, _user$project$Lib$decodeTransaction, _p9._0._2._0)),
-										A2(_elm_lang$core$Platform_Cmd$map, _user$project$LoggedIn$AddTransactionMsg, _p9._0._1)
+										A4(_user$project$MyKinvey$createData, model.session, _user$project$LoggedIn$transactionTable, _user$project$Lib$decodeTransaction, _p10._0._2._0)),
+										A2(_elm_lang$core$Platform_Cmd$map, _user$project$LoggedIn$AddTransactionMsg, _p10._0._1)
 									])));
 					}
 				} else {
 					return _user$project$LoggedIn$updateStandard(model);
 				}
 			case 'OpenAddTransaction':
-				var _p10 = model.accounts;
-				if (_p10.ctor === 'Just') {
-					var _p11 = A2(_user$project$AddTransaction$init, _p8._0, _p10._0);
-					var addTransaction = _p11._0;
-					var cmd = _p11._1;
+				var _p11 = model.accounts;
+				if (_p11.ctor === 'Just') {
+					var _p12 = A2(_user$project$AddTransaction$init, _p9._0, _p11._0);
+					var addTransaction = _p12._0;
+					var cmd = _p12._1;
 					return _elm_lang$core$Maybe$Just(
 						{
 							ctor: '_Tuple2',
@@ -12831,7 +13042,7 @@ var _user$project$LoggedIn$update = F2(
 						model,
 						{addTransaction: _elm_lang$core$Maybe$Nothing}));
 			case 'CreatedTransaction':
-				var _p13 = _p8._0;
+				var _p14 = _p9._0;
 				return _user$project$LoggedIn$updateStandard(
 					_elm_lang$core$Native_Utils.update(
 						model,
@@ -12841,13 +13052,13 @@ var _user$project$LoggedIn$update = F2(
 								F2(
 									function (x, y) {
 										return A2(_elm_lang$core$List_ops['::'], x, y);
-									})(_p13),
+									})(_p14),
 								model.transactions),
 							addTransaction: _elm_lang$core$Maybe$Nothing,
 							selectedAccountValue: function () {
-								var _p12 = {ctor: '_Tuple2', _0: model.selectedAccount, _1: model.selectedAccountValue};
-								if (((_p12.ctor === '_Tuple2') && (_p12._0.ctor === 'Just')) && (_p12._1.ctor === 'Just')) {
-									return _elm_lang$core$Native_Utils.eq(_p13.accountId, _p12._0._0.id) ? _elm_lang$core$Maybe$Just(_p12._1._0 + _p13.value) : model.selectedAccountValue;
+								var _p13 = {ctor: '_Tuple2', _0: model.selectedAccount, _1: model.selectedAccountValue};
+								if (((_p13.ctor === '_Tuple2') && (_p13._0.ctor === 'Just')) && (_p13._1.ctor === 'Just')) {
+									return _elm_lang$core$Native_Utils.eq(_p14.accountId, _p13._0._0.id) ? _elm_lang$core$Maybe$Just(_p13._1._0 + _p14.value) : model.selectedAccountValue;
 								} else {
 									return model.selectedAccountValue;
 								}
@@ -12858,20 +13069,20 @@ var _user$project$LoggedIn$update = F2(
 					_elm_lang$core$Native_Utils.update(
 						model,
 						{
-							transactions: _elm_lang$core$Maybe$Just(_p8._0)
+							transactions: _elm_lang$core$Maybe$Just(_p9._0)
 						}));
 			case 'AddAccountMsg':
-				var _p14 = A2(
+				var _p15 = A2(
 					_elm_lang$core$Maybe$map,
-					_user$project$AddAccount$update(_p8._0),
+					_user$project$AddAccount$update(_p9._0),
 					model.addAccount);
-				if (_p14.ctor === 'Just') {
-					if (_p14._0._1.ctor === 'Nothing') {
+				if (_p15.ctor === 'Just') {
+					if (_p15._0._1.ctor === 'Nothing') {
 						return _user$project$LoggedIn$updateStandard(
 							_elm_lang$core$Native_Utils.update(
 								model,
 								{
-									addAccount: _elm_lang$core$Maybe$Just(_p14._0._0)
+									addAccount: _elm_lang$core$Maybe$Just(_p15._0._0)
 								}));
 					} else {
 						return _elm_lang$core$Maybe$Just(
@@ -12880,13 +13091,13 @@ var _user$project$LoggedIn$update = F2(
 								_0: _elm_lang$core$Native_Utils.update(
 									model,
 									{
-										addAccount: _elm_lang$core$Maybe$Just(_p14._0._0)
+										addAccount: _elm_lang$core$Maybe$Just(_p15._0._0)
 									}),
 								_1: A3(
 									_elm_lang$core$Task$perform,
 									_user$project$LoggedIn$Error,
 									_user$project$LoggedIn$CreatedAccount,
-									A4(_user$project$MyKinvey$createData, model.session, _user$project$LoggedIn$accountTable, _user$project$Lib$decodeAccount, _p14._0._1._0))
+									A4(_user$project$MyKinvey$createData, model.session, _user$project$LoggedIn$accountTable, _user$project$Lib$decodeAccount, _p15._0._1._0))
 							});
 					}
 				} else {
@@ -12916,7 +13127,7 @@ var _user$project$LoggedIn$update = F2(
 										_elm_lang$core$Basics_ops['++'],
 										accounts,
 										_elm_lang$core$Native_List.fromArray(
-											[_p8._0]));
+											[_p9._0]));
 								},
 								model.accounts),
 							addAccount: _elm_lang$core$Maybe$Nothing
@@ -12926,23 +13137,23 @@ var _user$project$LoggedIn$update = F2(
 					_elm_lang$core$Native_Utils.update(
 						model,
 						{
-							accounts: _elm_lang$core$Maybe$Just(_p8._0)
+							accounts: _elm_lang$core$Maybe$Just(_p9._0)
 						}));
 			case 'UpdateSelectedAccount':
 				var selectedAccount = A2(
 					_elm_lang$core$Maybe$andThen,
 					model.accounts,
 					_elm_community$list_extra$List_Extra$find(
-						function (_p15) {
+						function (_p16) {
 							return A2(
 								F2(
 									function (x, y) {
 										return _elm_lang$core$Native_Utils.eq(x, y);
 									}),
-								_p8._0,
+								_p9._0,
 								function (_) {
 									return _.id;
-								}(_p15));
+								}(_p16));
 						}));
 				return _user$project$LoggedIn$updateStandard(
 					_elm_lang$core$Native_Utils.update(
@@ -12952,56 +13163,59 @@ var _user$project$LoggedIn$update = F2(
 							selectedAccountValue: A3(_elm_lang$core$Maybe$map2, _user$project$LoggedIn$accountValue, selectedAccount, model.transactions)
 						}));
 			case 'AddContactMsg':
-				var _p16 = A2(
-					_elm_lang$core$Maybe$map,
-					_user$project$AddContact$update(_p8._0),
-					model.addContact);
-				if (_p16.ctor === 'Just') {
-					if (_p16._0._1.ctor === 'Nothing') {
-						return _user$project$LoggedIn$updateStandard(
-							_elm_lang$core$Native_Utils.update(
+				var _p17 = A2(_user$project$AddButton$update, _p9._0, model.addContact);
+				var addContact = _p17._0;
+				var cmd = _p17._1;
+				var ret = _p17._2;
+				var _p18 = ret;
+				if (_p18.ctor === 'Nothing') {
+					return _elm_lang$core$Maybe$Just(
+						{
+							ctor: '_Tuple2',
+							_0: _elm_lang$core$Native_Utils.update(
 								model,
-								{
-									addContact: _elm_lang$core$Maybe$Just(_p16._0._0)
-								}));
-					} else {
+								{addContact: addContact}),
+							_1: A2(_elm_lang$core$Platform_Cmd$map, _user$project$LoggedIn$AddContactMsg, cmd)
+						});
+				} else {
+					if (_p18._0.ctor === 'Ok') {
 						return _elm_lang$core$Maybe$Just(
 							{
 								ctor: '_Tuple2',
 								_0: _elm_lang$core$Native_Utils.update(
 									model,
-									{
-										addContact: _elm_lang$core$Maybe$Just(_p16._0._0)
-									}),
-								_1: _elm_lang$core$Platform_Cmd$none
+									{addContact: addContact}),
+								_1: A2(_elm_lang$core$Platform_Cmd$map, _user$project$LoggedIn$AddContactMsg, cmd)
 							});
+					} else {
+						if (((_p18._0._0.ctor === 'HttpError') && (_p18._0._0._0.ctor === 'BadResponse')) && (_p18._0._0._0._0 === 401)) {
+							return _elm_lang$core$Maybe$Nothing;
+						} else {
+							return _elm_lang$core$Maybe$Just(
+								{
+									ctor: '_Tuple2',
+									_0: _elm_lang$core$Native_Utils.update(
+										model,
+										{
+											addContact: addContact,
+											recentError: _user$project$Kinvey$errorToString(_p18._0._0)
+										}),
+									_1: A2(_elm_lang$core$Platform_Cmd$map, _user$project$LoggedIn$AddContactMsg, cmd)
+								});
+						}
 					}
-				} else {
-					return _user$project$LoggedIn$updateStandard(model);
 				}
-			case 'OpenAddContact':
-				return _user$project$LoggedIn$updateStandard(
-					_elm_lang$core$Native_Utils.update(
-						model,
-						{
-							addContact: _elm_lang$core$Maybe$Just(_user$project$AddContact$init)
-						}));
-			case 'CloseAddContact':
-				return _user$project$LoggedIn$updateStandard(
-					_elm_lang$core$Native_Utils.update(
-						model,
-						{addContact: _elm_lang$core$Maybe$Nothing}));
 			default:
-				var _p18 = _p8._0;
-				var _p17 = _p18;
-				if (((_p17.ctor === 'HttpError') && (_p17._0.ctor === 'BadResponse')) && (_p17._0._0 === 401)) {
+				var _p20 = _p9._0;
+				var _p19 = _p20;
+				if (((_p19.ctor === 'HttpError') && (_p19._0.ctor === 'BadResponse')) && (_p19._0._0 === 401)) {
 					return _elm_lang$core$Maybe$Nothing;
 				} else {
 					return _user$project$LoggedIn$updateStandard(
 						_elm_lang$core$Native_Utils.update(
 							model,
 							{
-								recentError: _user$project$Kinvey$errorToString(_p18)
+								recentError: _user$project$Kinvey$errorToString(_p20)
 							}));
 				}
 		}
