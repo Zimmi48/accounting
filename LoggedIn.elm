@@ -2,6 +2,7 @@ module LoggedIn exposing (Model, init, view, Msg, update)
 
 
 import AddAccount
+import AddButton
 import AddContact
 import AddTransaction
 import Date.Format as Date
@@ -29,7 +30,7 @@ type alias Model =
   , selectedAccount : Maybe Account
   , selectedAccountValue : Maybe Float
   , addAccount : Maybe AddAccount.Model
-  , addContact : Maybe AddContact.Model
+  , addContact : AddButton.Model AddContact.Model AddContact.Msg Contact
   , recentError : String
   }
 
@@ -44,6 +45,19 @@ accountTable = "accounts"
 
 init : Session -> (Model, Cmd Msg)
 init session =
+  let
+    (addContactModel, addContactCmd) =
+      AddButton.init
+        { session = session
+        , table = "contacts"
+        , decoder = decodeContact
+        , title = "Add a new contact"
+        , init = AddContact.init
+        , update = AddContact.update
+        , view = AddContact.view
+        }
+  in
+    
   { session = session
   , transactions = Nothing
   , addTransaction = Nothing
@@ -51,7 +65,7 @@ init session =
   , selectedAccount = Nothing
   , selectedAccountValue = Nothing
   , addAccount = Nothing
-  , addContact = Nothing
+  , addContact = addContactModel
   , recentError = ""
   } !
     [ Task.perform Error FetchTransactions
@@ -60,6 +74,7 @@ init session =
     , Task.perform Error FetchAccounts
         <| getData session accountTable Kinvey.NoSort
         <| decodeAccount
+    , Cmd.map AddContactMsg addContactCmd
     ]
 
 
@@ -85,7 +100,7 @@ view model =
         , text " " -- for spacing
         , successButton "Create a new account" OpenAddAccount True
         , text " " -- for spacing
-        , successButton "Add a new contact" OpenAddContact True
+        , AddButton.view model.addContact |> App.map AddContactMsg
         , div
             [ class "text-danger" ]
             [ text model.recentError ]
@@ -129,12 +144,6 @@ view model =
             CloseAddAccount
             AddAccountMsg
             AddAccount.view
-        , viewDialog
-            "Add a new contact"
-            model.addContact
-            CloseAddContact
-            AddContactMsg
-            AddContact.view
         ]
 
     _ ->
@@ -206,9 +215,7 @@ type Msg
   | CreatedAccount Account
   | FetchAccounts (List Account)
   | UpdateSelectedAccount String
-  | OpenAddContact
-  | CloseAddContact
-  | AddContactMsg AddContact.Msg
+  | AddContactMsg (AddButton.Msg AddContact.Msg Contact)
   | Error Kinvey.Error
 
 
@@ -330,26 +337,31 @@ update msg model =
       } |> updateStandard
 
     AddContactMsg msg ->
-      case (Maybe.map (AddContact.update msg) model.addContact) of
-        Just (addContact, Nothing) ->
-          { model | addContact = Just addContact } |> updateStandard
-
-        Just (addContact, Just contact) ->
+      let (addContact, cmd, ret) = AddButton.update msg model.addContact in
+      case ret of
+        Nothing ->
           Just
-            ( { model | addContact = Just addContact }
-            , Cmd.none
-            -- , Task.perform Error CreatedContact
-            --   <| createData model.session contactTable decodeContact contact
+            ( { model | addContact = addContact }
+            , Cmd.map AddContactMsg cmd
             )
 
-        Nothing ->
-          model |> updateStandard
+        Just (Ok contacts) ->
+          Just
+            ( { model | addContact = addContact }
+            , Cmd.map AddContactMsg cmd
+            )
 
-    OpenAddContact ->
-      { model | addContact = Just AddContact.init } |> updateStandard
+        Just (Err (Kinvey.HttpError (Http.BadResponse 401 _))) ->
+          Nothing
 
-    CloseAddContact ->
-      { model | addContact = Nothing } |> updateStandard
+        Just (Err e) ->
+          Just
+            ( { model |
+                addContact = addContact
+              , recentError = Kinvey.errorToString e
+              }
+            , Cmd.map AddContactMsg cmd
+            )          
 
     Error e ->
       case e of

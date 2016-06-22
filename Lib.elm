@@ -43,6 +43,19 @@ decodeAccount =
     ("_id" := Json.string)
 
 
+type alias Contact =
+  { name : String
+  , email : String
+  }
+
+
+decodeContact : Decoder Contact
+decodeContact =
+  Json.object2 Contact
+    ("name" := Json.string)
+    ("email" := Json.string)
+
+
 -- helpers for Views
 
 inputGr : String -> String -> (String -> msg) -> List (Attribute msg) -> Html msg
