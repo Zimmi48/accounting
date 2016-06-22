@@ -6,7 +6,6 @@ import AddButton
 import AddContact
 import AddTransaction
 import Date.Format as Date
-import Dialog
 import Html exposing (..)
 import Html.App as App
 import Html.Attributes exposing (..)
@@ -98,13 +97,11 @@ view model =
       div []
         [ successButton
             "Add a new expense"
-            (OpenAddTransaction False)
-            existAccount
+            (if existAccount then Just (OpenAddTransaction False) else Nothing)
         , text " " -- for spacing
         , successButton
             "Add a new income"
-             (OpenAddTransaction True)
-             existAccount
+            (if existAccount then Just (OpenAddTransaction True) else Nothing)
         , text " " -- for spacing
         , AddButton.view model.addAccount |> App.map AddAccountMsg
         , text " " -- for spacing
@@ -162,31 +159,7 @@ viewTransaction { object , value , date } =
     ]
 
 
-successButton : String -> Msg -> Bool -> Html Msg
-successButton buttonText msg enabled =
-  button
-    [ onClick msg
-    , classList
-        [ ("btn", True)
-        , ("btn-success", True)
-        ]
-    , disabled (not enabled)
-    ]
-  [ text buttonText ]
 
-
-viewDialog : String -> Maybe dialogModel -> msg -> (dialogMsg -> msg) -> (dialogModel -> Html dialogMsg) -> Html msg
-viewDialog title model closeMsg forwardMsg view =
-  Maybe.map
-    (\model ->
-       { closeMessage = Just closeMsg
-       , header = Just (h4 [] [text title])
-       , body = Just (App.map forwardMsg <| view model)
-       , footer = Nothing
-       }
-    )
-    model
-  |> Dialog.view
 
 
 filterTransactions : Maybe Account -> List Transaction -> List Transaction

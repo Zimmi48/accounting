@@ -1,6 +1,8 @@
 module Lib exposing (..)
 
 
+import Dialog
+import Html.App as App
 import Date exposing (Date)
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -115,4 +117,37 @@ viewForm notready submitMsg submitText content =
           [ text submitText ]
       ]
     )
-  
+
+
+successButton : String -> Maybe msg -> Html msg
+successButton buttonText msg =
+  button
+    [ case msg of
+        Just msg ->
+          onClick msg
+
+        Nothing ->
+          disabled True
+        
+    , classList
+        [ ("btn", True)
+        , ("btn-success", True)
+        ]
+    ]
+  [ text buttonText ]
+
+
+viewDialog
+  : String -> Maybe dialogModel -> msg -> (dialogMsg -> msg) -> (dialogModel -> Html dialogMsg) -> Html msg
+viewDialog title model closeMsg forwardMsg view =
+  Maybe.map
+    (\model ->
+       { closeMessage = Just closeMsg
+       , header = Just (h4 [] [text title])
+       , body = Just (App.map forwardMsg <| view model)
+       , footer = Nothing
+       }
+    )
+    model
+  |> Dialog.view
+

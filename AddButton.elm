@@ -1,15 +1,12 @@
 module AddButton exposing (Model, init, view, Msg, update)
 
 
-import Dialog
 import Html exposing (..)
-import Html.App as App
 import Html.Attributes exposing (..)
-import Html.Events exposing (..)
 import Json.Decode exposing (Decoder)
 import Json.Encode exposing (Value)
 import Kinvey exposing (Session)
-import Maybe.Extra as Maybe
+import Lib exposing (..)
 import MyKinvey exposing (..)
 import Task
 
@@ -55,31 +52,10 @@ init { session, table, decoder, title, init, update, view } =
 
 view : Model model msg object -> Html (Msg msg object)
 view model =
-  let notready = Maybe.isNothing model.objects in
   div
     [ style [ ("display", "inline-block") ] ]
-    [ button
-        ( [ classList
-              [ ("btn", True)
-              , ("btn-success", True)
-              ]
-          ] ++
-            if notready then
-              [ disabled notready ]
-            else
-              [ onClick Open ]
-        )
-        [ text model.title ]
-    , Maybe.map
-      (\m ->
-         { closeMessage = Just Close
-         , header = Just (h4 [] [text model.title])
-         , body = Just (App.map ComponentMsg <| model.componentView m)
-         , footer = Nothing
-         }
-      )
-      model.componentModel
-      |> Dialog.view
+    [ successButton model.title <| Maybe.map (always Open) model.objects
+    , viewDialog model.title model.componentModel Close ComponentMsg model.componentView
     ]
 
 
