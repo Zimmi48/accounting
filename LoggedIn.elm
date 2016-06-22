@@ -29,7 +29,8 @@ type alias Model =
   , accounts : Maybe (List Account)
   , selectedAccount : Maybe Account
   , selectedAccountValue : Maybe Float
-  , addAccount : Maybe AddAccount.Model
+  , addAccount : AddButton.Model AddAccount.Model AddAccount.Msg Account
+  , contacts : Maybe (List Contact)
   , addContact : AddButton.Model AddContact.Model AddContact.Msg Contact
   , recentError : String
   }
@@ -37,10 +38,6 @@ type alias Model =
 
 transactionTable : String
 transactionTable = "transactions"
-
-
-accountTable : String
-accountTable = "accounts"
 
 
 init : Session -> (Model, Cmd Msg)
@@ -56,6 +53,18 @@ init session =
         , update = AddContact.update
         , view = AddContact.view
         }
+
+    (addAccountModel, addAccountCmd) =
+      AddButton.init
+        { session = session
+        , table = "accounts"
+        , decoder = decodeAccount
+        , title = "Create a new account"
+        , init = AddAccount.init
+        , update = AddAccount.update
+        , view = AddAccount.view
+        }
+
   in
     
   { session = session
@@ -64,16 +73,15 @@ init session =
   , accounts = Nothing
   , selectedAccount = Nothing
   , selectedAccountValue = Nothing
-  , addAccount = Nothing
+  , addAccount = addAccountModel
+  , contacts = Nothing
   , addContact = addContactModel
   , recentError = ""
   } !
     [ Task.perform Error FetchTransactions
         <| getData session transactionTable (Kinvey.ReverseSort "date")
         <| decodeTransaction
-    , Task.perform Error FetchAccounts
-        <| getData session accountTable Kinvey.NoSort
-        <| decodeAccount
+    , Cmd.map AddAccountMsg addAccountCmd
     , Cmd.map AddContactMsg addContactCmd
     ]
 
@@ -98,7 +106,7 @@ view model =
              (OpenAddTransaction True)
              existAccount
         , text " " -- for spacing
-        , successButton "Create a new account" OpenAddAccount True
+        , AddButton.view model.addAccount |> App.map AddAccountMsg
         , text " " -- for spacing
         , AddButton.view model.addContact |> App.map AddContactMsg
         , div
@@ -138,12 +146,6 @@ view model =
             CloseAddTransaction
             AddTransactionMsg
             AddTransaction.view
-        , viewDialog
-            "Create a new account"          
-            model.addAccount
-            CloseAddAccount
-            AddAccountMsg
-            AddAccount.view
         ]
 
     _ ->
@@ -209,11 +211,7 @@ type Msg
   | CloseAddTransaction
   | CreatedTransaction Transaction
   | FetchTransactions (List Transaction)
-  | AddAccountMsg AddAccount.Msg
-  | OpenAddAccount
-  | CloseAddAccount
-  | CreatedAccount Account
-  | FetchAccounts (List Account)
+  | AddAccountMsg (AddButton.Msg AddAccount.Msg Account)
   | UpdateSelectedAccount String
   | AddContactMsg (AddButton.Msg AddContact.Msg Contact)
   | Error Kinvey.Error
@@ -287,42 +285,34 @@ update msg model =
       { model | transactions = Just t } |> updateStandard
 
     AddAccountMsg msg ->
-      case (Maybe.map (AddAccount.update msg) model.addAccount) of
-        Just (addAccountModel, Nothing) ->
-          { model |
-            addAccount = Just addAccountModel
-          } |> updateStandard
-
-        Just (addAccountModel, Just account) ->
+      let (addAccount, cmd, ret) = AddButton.update msg model.addAccount in
+      case ret of
+        Nothing ->
           Just
-            ( { model |
-                addAccount = Just addAccountModel
-              }
-            , Task.perform Error CreatedAccount
-              <| createData model.session accountTable decodeAccount account
+            ( { model | addAccount = addAccount }
+            , Cmd.map AddAccountMsg cmd
             )
 
-        Nothing ->
-          model |> updateStandard
+        Just (Ok accounts) ->
+          Just
+            ( { model |
+                addAccount = addAccount
+              , accounts = Just accounts
+              }
+            , Cmd.map AddAccountMsg cmd
+            )
 
-    OpenAddAccount ->
-      { model | addAccount = Just AddAccount.init } |> updateStandard
+        Just (Err (Kinvey.HttpError (Http.BadResponse 401 _))) ->
+          Nothing
 
-    CloseAddAccount ->
-      { model | addAccount = Nothing } |> updateStandard
-
-    CreatedAccount account ->
-      { model |
-        accounts =
-          Maybe.map
-            (\accounts -> accounts ++ [ account ])
-            model.accounts
-      , addAccount = Nothing
-      } |> updateStandard
-
-    FetchAccounts a ->
-      { model | accounts = Just a } |> updateStandard
-
+        Just (Err e) ->
+          Just
+            ( { model |
+                addAccount = addAccount
+              , recentError = Kinvey.errorToString e
+              }
+            , Cmd.map AddAccountMsg cmd
+            )          
 
     UpdateSelectedAccount id ->
       let
@@ -347,7 +337,10 @@ update msg model =
 
         Just (Ok contacts) ->
           Just
-            ( { model | addContact = addContact }
+            ( { model |
+                addContact = addContact
+              , contacts = Just contacts
+              }
             , Cmd.map AddContactMsg cmd
             )
 
