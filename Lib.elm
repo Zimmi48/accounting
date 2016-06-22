@@ -48,14 +48,16 @@ decodeAccount =
 type alias Contact =
   { name : String
   , email : String
+  , id : String
   }
 
 
 decodeContact : Decoder Contact
 decodeContact =
-  Json.object2 Contact
+  Json.object3 Contact
     ("name" := Json.string)
     ("email" := Json.string)
+    ("_id" := Json.string)
 
 
 -- helpers for Views
@@ -65,6 +67,7 @@ inputGr inputName helper updateInput attrs =
   div
     [ class "form-group" ]
     [ label [ for inputName ] [ text helper ]
+    , text " "
     , input
         ( [ name inputName
           , onInput updateInput
@@ -74,19 +77,26 @@ inputGr inputName helper updateInput attrs =
     ]
 
 
-accountSelector : List Account -> (String -> msg) -> List (String, Bool) -> Html msg
-accountSelector accounts updateAccount addClasses =
+selector
+  : String
+  -> String
+  -> List { a | name : String, id : String }
+  -> (String -> msg)
+  -> List (String, Bool)
+  -> Bool
+  -> Html msg
+selector selectName helper objects updateSelect addClasses isRequired =
   div
     [ classList ( [ ("form-group", True) ] ++ addClasses ) ]
-    [ label [ for "account" ] [ text "Account" ]
+    [ label [ for selectName ] [ text helper ]
     , text " "
     , select
-        [ name "account"
-        , required True
+        [ name selectName
+        , required isRequired
         , class "form-control"
         , on
             "change"
-            (Json.object1 updateAccount targetValue)
+            (Json.object1 updateSelect targetValue)
         ]
         (List.indexedMap
            (\i { name , id } ->
@@ -96,7 +106,7 @@ accountSelector accounts updateAccount addClasses =
               ]
               [ text name ]
            )
-           accounts
+           objects
         )
     ]
 

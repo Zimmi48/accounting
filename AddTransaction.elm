@@ -19,7 +19,7 @@ import String
 main : Program Never
 main =
   App.program
-    { init = init True []
+    { init = init True [] []
     , update =
         (\msg model ->
            let (model, cmd, _) = update msg model in
@@ -38,12 +38,14 @@ type alias Model =
   , date : Maybe Date
   , account : Maybe Account
   , accounts : List Account
+  , for : List Contact
+  , contacts : List Contact
   , income : Bool
   }
 
 
-init : Bool -> List Account -> (Model, Cmd Msg)
-init income accounts =
+init : Bool -> List Account -> List Contact -> (Model, Cmd Msg)
+init income accounts contacts =
   let
     (dateModel, dateCmd) =
       DatePicker.init
@@ -63,6 +65,8 @@ init income accounts =
     , date = Nothing
     , account = List.head accounts
     , accounts = accounts
+    , for = []
+    , contacts = contacts
     , income = income
     }
   ! [ Cmd.map UpdateDate dateCmd
@@ -74,6 +78,8 @@ type Msg
   | UpdateValue String
   | UpdateDate DatePicker.Msg
   | UpdateAccount String
+  | UpdateShare String String
+  | AddContact String
   | Submit
 
 
@@ -119,6 +125,19 @@ update msg model =
       , Cmd.none
       , Nothing
       )
+
+    UpdateShare _ _ ->
+      (model, Cmd.none, Nothing)
+
+    AddContact id ->
+      let (newContacts, remains) = List.partition (.id >> ((==) id)) model.contacts in
+      ( { model |
+          for = model.for ++ newContacts
+        , contacts = remains
+        }
+      , Cmd.none
+      , Nothing
+      )      
 
     Submit ->
       case (model.value , model.date, model.account) of
@@ -173,7 +192,34 @@ view model =
         [ label [ for "date" ] [ text "Date" ]
         , App.map UpdateDate <| DatePicker.view model.datePicker
         ]
-    , accountSelector model.accounts UpdateAccount []
+    , div []
+        ( if List.isEmpty model.contacts && List.isEmpty model.for then
+            []
+          else
+            [ selector
+                "contact"
+                "Share with"
+                ({ name = "", email = "", id = ""} :: model.contacts)
+                AddContact
+                []
+                False
+            , List.map
+                (\contact ->
+                   inputGr
+                     ("share-" ++ contact.id)
+                     contact.name
+                     (UpdateShare contact.id)
+                     [ placeholder "What is their share?"
+                     , type' "number"
+                     , Html.Attributes.min "0"
+                     , step "0.01"
+                     ]
+                )
+                model.for
+              |> div [ class "form-inline" ]
+            ]
+        )
+    , selector "account" "Account" model.accounts UpdateAccount [] True
     ]
 
 

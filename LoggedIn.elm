@@ -9,7 +9,6 @@ import Date.Format as Date
 import Html exposing (..)
 import Html.App as App
 import Html.Attributes exposing (..)
-import Html.Events exposing (..)
 import Http
 import Kinvey exposing (Session)
 import Lib exposing (..)
@@ -112,13 +111,16 @@ view model =
         , h2 [] [ text "List of recent transactions" ]
         , div
             [ class "row" ]
-            [ accountSelector
+            [ selector
+                "account"
+                "Account"
                 ({ name = "All accounts" , value = 0 , id = "" }
                 :: accounts)
                 UpdateSelectedAccount
                 [ ("form-inline", True)
                 , ("col-md-4", True)
                 ]
+                False
             , div
                 [ classList
                     [ ("col-md-4", True)
@@ -224,7 +226,11 @@ update msg model =
     OpenAddTransaction income ->
       case model.accounts of
         Just accounts ->
-          let (addTransaction, cmd) = AddTransaction.init income accounts in
+          let
+            (addTransaction, cmd) =
+              AddTransaction.init income accounts (Maybe.withDefault [] model.contacts)
+
+          in
           Just
           ( { model |
               addTransaction = Just addTransaction
