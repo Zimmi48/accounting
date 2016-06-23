@@ -199,25 +199,56 @@ view model =
             [ selector
                 "contact"
                 "Share with"
-                ({ name = "", email = "", id = ""} :: model.contacts)
+                ( { name = ""
+                  , email = ""
+                  , id = toString <| List.length model.contacts
+                  -- by changing the id of the first element when the list changes
+                  -- it forces it to be selected again
+                  } :: model.contacts
+                )
                 AddContact
                 []
                 False
-            , List.map
+            ] ++
+            ( List.map
                 (\contact ->
-                   inputGr
-                     ("share-" ++ contact.id)
-                     contact.name
-                     (UpdateShare contact.id)
-                     [ placeholder "What is their share?"
-                     , type' "number"
-                     , Html.Attributes.min "0"
-                     , step "0.01"
+                   div
+                     [ class "form-group" ]
+                     [ div [ class "col-md-4" ] [ text contact.name ]
+                     , div
+                         [ class "col-md-4" ]
+                         [ label
+                             [ for <| "percent-" ++ contact.id
+                             , class "sr-only"
+                             ]
+                             [ text "Their share in percents" ]
+                         , input
+                             [ name <| "percent-" ++ contact.id
+                             , class "form-control"
+                             , placeholder "50%"
+                             , type' "text"
+                             ] []
+                         ]
+                     , div
+                         [ class "col-md-4" ]
+                         [ label
+                             [ for <| ("exact-share-" ++ contact.id)
+                             , class "sr-only"
+                             ]
+                             [ text "Their exact share" ]
+                         , input
+                             [ name <| "percent-" ++ contact.id
+                             , class "form-control"
+                             , placeholder "50€"
+                             , type' "number"
+                             , Html.Attributes.min "0"
+                             , step "0.01"
+                             ] []
+                         ]
                      ]
                 )
                 model.for
-              |> div [ class "form-inline" ]
-            ]
+            )
         )
     , selector "account" "Account" model.accounts UpdateAccount [] True
     ]
