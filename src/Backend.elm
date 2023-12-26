@@ -38,13 +38,43 @@ update msg model =
             ( model, Cmd.none )
 
 
+
 -- Warning: currently, this function does not check that the account or group does not already exist before possibly overwriting it.
 -- Warning: currently, this function does not check that all the persons in the account or group are already in the persons set.
+
+
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
 updateFromFrontend sessionId clientId msg model =
     case msg of
         NoOpToBackend ->
             ( model, Cmd.none )
+
+        CheckNoPerson name ->
+            ( model
+            , if Set.member name model.persons then
+                Lamdera.sendToFrontend clientId (PersonAlreadyExists name)
+
+              else
+                Cmd.none
+            )
+
+        CheckNoAccount name ->
+            ( model
+            , if Dict.member name model.accounts then
+                Lamdera.sendToFrontend clientId (AccountAlreadyExists name)
+
+              else
+                Cmd.none
+            )
+
+        CheckNoGroup name ->
+            ( model
+            , if Dict.member name model.groups then
+                Lamdera.sendToFrontend clientId (GroupAlreadyExists name)
+
+              else
+                Cmd.none
+            )
 
         AddPerson person ->
             ( { model | persons = Set.insert person model.persons }

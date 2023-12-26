@@ -119,14 +119,30 @@ update msg model =
         UpdateName name ->
             case model.showDialog of
                 Just (AddPersonDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddPersonDialog { dialogModel | name = name }) }
-                    , Cmd.none
-                    )
+                    if name == "" then
+                        ( { model | showDialog = Just (AddPersonDialog { dialogModel | name = "", nameInvalid = True }) }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( { model | showDialog = Just (AddPersonDialog { dialogModel | name = name, nameInvalid = False }) }
+                        , Lamdera.sendToBackend (CheckNoPerson name)
+                        )
 
                 Just (AddAccountOrGroupDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | name = name }) }
-                    , Cmd.none
-                    )
+                    if name == "" then
+                        ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | name = "", nameInvalid = True }) }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | name = name, nameInvalid = False }) }
+                        , if dialogModel.account then
+                            Lamdera.sendToBackend (CheckNoAccount name)
+
+                          else
+                            Lamdera.sendToBackend (CheckNoGroup name)
+                        )
 
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model | showDialog = Just (AddSpendingDialog { dialogModel | description = name }) }
@@ -170,6 +186,48 @@ updateFromBackend msg model =
             ( { model | showDialog = Nothing }
             , Cmd.none
             )
+
+        PersonAlreadyExists name ->
+            case model.showDialog of
+                Just (AddPersonDialog dialogModel) ->
+                    if dialogModel.name == name then
+                        ( { model | showDialog = Just (AddPersonDialog { dialogModel | nameInvalid = True }) }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        AccountAlreadyExists name ->
+            case model.showDialog of
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    if dialogModel.name == name && dialogModel.account then
+                        ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | nameInvalid = True }) }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        GroupAlreadyExists name ->
+            case model.showDialog of
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    if dialogModel.name == name && not dialogModel.account then
+                        ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | nameInvalid = True }) }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
 
 view : Model -> Browser.Document FrontendMsg
@@ -234,10 +292,11 @@ view model =
                         case dialog of
                             AddPersonDialog dialogModel ->
                                 config "Add Person"
-                                    (addPersonInputs dialogModel)
+                                    (nameInput dialogModel)
                                     (String.length dialogModel.name
                                         > 0
                                         && not dialogModel.submitted
+                                        && not dialogModel.nameInvalid
                                     )
 
                             AddAccountOrGroupDialog dialogModel ->
@@ -260,6 +319,7 @@ view model =
                                                 |> Maybe.withDefault False
                                            )
                                         && not dialogModel.submitted
+                                        && not dialogModel.nameInvalid
                                     )
 
                             AddSpendingDialog dialogModel ->
@@ -281,6 +341,7 @@ view model =
                                 (ShowDialog
                                     (AddPersonDialog
                                         { name = ""
+                                        , nameInvalid = False
                                         , submitted = False
                                         }
                                     )
@@ -293,6 +354,7 @@ view model =
                                 (ShowDialog
                                     (AddAccountOrGroupDialog
                                         { name = ""
+                                        , nameInvalid = False
                                         , ownersOrMembers = []
                                         , submitted = False
                                         , account = True
@@ -307,6 +369,7 @@ view model =
                                 (ShowDialog
                                     (AddAccountOrGroupDialog
                                         { name = ""
+                                        , nameInvalid = False
                                         , ownersOrMembers = []
                                         , submitted = False
                                         , account = False
@@ -358,15 +421,27 @@ green =
 
 
 redButtonStyle =
-    buttonStyle ++ [ Background.color (rgb 1 0.5 0.5) ]
+    buttonStyle ++ [ Background.color red ]
+
+
+red =
+    rgb 1 0.5 0.5
 
 
 grayButtonStyle =
     buttonStyle ++ [ Background.color (rgb 0.8 0.8 0.8) ]
 
 
-addPersonInputs { name } =
-    [ Input.text []
+nameInput { name, nameInvalid } =
+    let
+        attributes =
+            if nameInvalid then
+                [ Background.color red ]
+
+            else
+                []
+    in
+    [ Input.text attributes
         { label = Input.labelLeft [] (text "Name")
         , placeholder = Nothing
         , onChange = UpdateName
@@ -375,7 +450,7 @@ addPersonInputs { name } =
     ]
 
 
-addAccountOrGroupInputs { name, ownersOrMembers, account } =
+addAccountOrGroupInputs ({ ownersOrMembers, account } as model) =
     let
         label =
             if account then
@@ -384,13 +459,7 @@ addAccountOrGroupInputs { name, ownersOrMembers, account } =
             else
                 "Member "
     in
-    [ Input.text []
-        { label = Input.labelLeft [] (text "Name")
-        , placeholder = Nothing
-        , onChange = UpdateName
-        , text = name
-        }
-    ]
+    nameInput model
         ++ List.indexedMap
             (\index ( ownerOrMember, share ) ->
                 row [ spacing 20 ]

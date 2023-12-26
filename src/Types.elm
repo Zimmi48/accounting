@@ -35,6 +35,9 @@ type FrontendMsg
 
 type ToBackend
     = NoOpToBackend
+    | CheckNoPerson String
+    | CheckNoAccount String
+    | CheckNoGroup String
     | AddPerson String
     | AddAccount String (Dict String Share)
     | AddGroup String (Dict String Share)
@@ -47,6 +50,9 @@ type BackendMsg
 type ToFrontend
     = NoOpToFrontend
     | OperationSuccessful
+    | PersonAlreadyExists String
+    | AccountAlreadyExists String
+    | GroupAlreadyExists String
 
 
 type Dialog
@@ -57,12 +63,14 @@ type Dialog
 
 type alias AddPersonDialogModel =
     { name : String
+    , nameInvalid : Bool
     , submitted : Bool
     }
 
 
 type alias AddAccountOrGroupDialogModel =
     { name : String
+    , nameInvalid : Bool
     , ownersOrMembers : List ( String, String )
     , submitted : Bool
     , account : Bool
