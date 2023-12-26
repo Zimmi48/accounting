@@ -44,6 +44,9 @@ app =
 init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
 init url key =
     ( { showDialog = Nothing
+      , showSpendingFor = ""
+      , nameValidity = Incomplete
+      , spendings = Nothing
       , key = key
       }
     , Cmd.none
@@ -292,7 +295,9 @@ update msg model =
                     )
 
                 Nothing ->
-                    ( model, Cmd.none )
+                    ( { model | showSpendingFor = name, nameValidity = Incomplete }
+                    , Lamdera.sendToBackend (AutocompletePerson name)
+                    )
 
         UpdateOwnerOrMember index ownerOrMember share ->
             case model.showDialog of
@@ -502,6 +507,15 @@ updateFromBackend msg model =
                     , Cmd.none
                     )
 
+                Nothing ->
+                    ( if String.startsWith prefix model.showSpendingFor then
+                        { model | nameValidity = InvalidPrefix }
+
+                      else
+                        model
+                    , Cmd.none
+                    )
+
                 _ ->
                     ( model, Cmd.none )
 
@@ -529,6 +543,16 @@ updateFromBackend msg model =
                     , Cmd.none
                     )
 
+                Nothing ->
+                    if String.startsWith prefix model.showSpendingFor then
+                        ( { model | showSpendingFor = name, nameValidity = Complete }
+                        , Cmd.none
+                          -- TODO: request spendings for name
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
                 _ ->
                     ( model, Cmd.none )
 
@@ -555,6 +579,16 @@ updateFromBackend msg model =
                       }
                     , Cmd.none
                     )
+
+                Nothing ->
+                    if model.showSpendingFor == name then
+                        ( { model | nameValidity = Complete }
+                        , Cmd.none
+                          -- TODO: request spendings for name
+                        )
+
+                    else
+                        ( model, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -805,6 +839,14 @@ view model =
                                     (addSpendingInputs dialogModel)
                                     (canSubmitSpending dialogModel)
                     )
+        
+        showSpendingForAttributes =
+            case model.nameValidity of
+                InvalidPrefix ->
+                    [ Background.color red ]
+
+                _ ->
+                    []
     in
     { title = "Accounting"
     , body =
@@ -820,20 +862,23 @@ view model =
                         }
                     , Input.button greenButtonStyle
                         { label = text "Add Account"
-                        , onPress =
-                            Just ShowAddAccountDialog
+                        , onPress = Just ShowAddAccountDialog
                         }
                     , Input.button greenButtonStyle
                         { label = text "Add Group"
-                        , onPress =
-                            Just ShowAddGroupDialog
+                        , onPress = Just ShowAddGroupDialog
                         }
                     , Input.button greenButtonStyle
                         { label = text "Add Spending"
-                        , onPress =
-                            Just ShowAddSpendingDialog
+                        , onPress = Just ShowAddSpendingDialog
                         }
                     ]
+                , Input.text showSpendingForAttributes
+                    { label = Input.labelLeft [] (text "Show spending for")
+                    , placeholder = Nothing
+                    , onChange = UpdateName
+                    , text = model.showSpendingFor
+                    }
                 ]
             )
         ]

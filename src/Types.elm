@@ -11,6 +11,9 @@ import Url exposing (Url)
 
 type alias FrontendModel =
     { showDialog : Maybe Dialog
+    , showSpendingFor : String
+    , nameValidity : NameValidity
+    , spendings : Maybe (List Spending)
     , key : Key
     }
 
