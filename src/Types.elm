@@ -38,6 +38,7 @@ type ToBackend
     | CheckNoPerson String
     | CheckNoAccount String
     | CheckNoGroup String
+    | AutocompletePerson String
     | AddPerson String
     | AddAccount String (Dict String Share)
     | AddGroup String (Dict String Share)
@@ -53,6 +54,10 @@ type ToFrontend
     | PersonAlreadyExists String
     | AccountAlreadyExists String
     | GroupAlreadyExists String
+    | InvalidPersonPrefix String
+      -- prefix, name
+    | UniquePersonPrefix String String
+    | CompleteNotUniquePerson String
 
 
 type Dialog
@@ -71,10 +76,18 @@ type alias AddPersonDialogModel =
 type alias AddAccountOrGroupDialogModel =
     { name : String
     , nameInvalid : Bool
-    , ownersOrMembers : List ( String, String )
+
+    -- name, share, name validity
+    , ownersOrMembers : List ( String, String, NameValidity )
     , submitted : Bool
     , account : Bool
     }
+
+
+type NameValidity
+    = Complete
+    | Incomplete
+    | InvalidPrefix
 
 
 type alias AddSpendingDialogModel =

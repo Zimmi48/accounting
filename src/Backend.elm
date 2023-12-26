@@ -90,3 +90,25 @@ updateFromFrontend sessionId clientId msg model =
             ( { model | groups = Dict.insert name members model.groups }
             , Lamdera.sendToFrontend clientId OperationSuccessful
             )
+
+        AutocompletePerson prefix ->
+            let
+                matches =
+                    Set.filter (\name -> String.startsWith prefix name) model.persons
+                        |> Set.toList
+            in
+            ( model
+            , case matches of
+                [] ->
+                    Lamdera.sendToFrontend clientId (InvalidPersonPrefix prefix)
+
+                [ name ] ->
+                    Lamdera.sendToFrontend clientId (UniquePersonPrefix prefix name)
+
+                _ ->
+                    if List.member prefix matches then
+                        Lamdera.sendToFrontend clientId (CompleteNotUniquePerson prefix)
+
+                    else
+                        Cmd.none
+            )

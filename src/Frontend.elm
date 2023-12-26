@@ -85,7 +85,7 @@ update msg model =
                         ownersOrMembers =
                             dialogModel.ownersOrMembers
                                 |> List.map
-                                    (\( ownerOrMember, share ) ->
+                                    (\( ownerOrMember, share, _ ) ->
                                         ( ownerOrMember
                                         , share
                                             |> String.toInt
@@ -162,14 +162,18 @@ update msg model =
                                     { dialogModel
                                         | ownersOrMembers =
                                             if index == List.length dialogModel.ownersOrMembers then
-                                                dialogModel.ownersOrMembers ++ [ ( ownerOrMember, share ) ]
+                                                dialogModel.ownersOrMembers ++ [ ( ownerOrMember, share, Incomplete ) ]
 
                                             else
-                                                List.setAt index ( ownerOrMember, share ) dialogModel.ownersOrMembers
+                                                List.setAt index ( ownerOrMember, share, Incomplete ) dialogModel.ownersOrMembers
                                     }
                                 )
                       }
-                    , Cmd.none
+                    , if String.length ownerOrMember > 0 then
+                        Lamdera.sendToBackend (AutocompletePerson ownerOrMember)
+
+                      else
+                        Cmd.none
                     )
 
                 _ ->
@@ -225,6 +229,87 @@ updateFromBackend msg model =
 
                     else
                         ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        InvalidPersonPrefix prefix ->
+            case model.showDialog of
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddAccountOrGroupDialog
+                                    { dialogModel
+                                        | ownersOrMembers =
+                                            dialogModel.ownersOrMembers
+                                                |> List.map
+                                                    (\( ownerOrMember, share, nameValidity ) ->
+                                                        if String.startsWith prefix ownerOrMember then
+                                                            ( ownerOrMember, share, InvalidPrefix )
+
+                                                        else
+                                                            ( ownerOrMember, share, nameValidity )
+                                                    )
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UniquePersonPrefix prefix name ->
+            case model.showDialog of
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddAccountOrGroupDialog
+                                    { dialogModel
+                                        | ownersOrMembers =
+                                            dialogModel.ownersOrMembers
+                                                |> List.map
+                                                    (\( ownerOrMember, share, nameValidity ) ->
+                                                        if String.startsWith prefix ownerOrMember then
+                                                            ( name, share, Complete )
+
+                                                        else
+                                                            ( ownerOrMember, share, nameValidity )
+                                                    )
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        CompleteNotUniquePerson name ->
+            case model.showDialog of
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddAccountOrGroupDialog
+                                    { dialogModel
+                                        | ownersOrMembers =
+                                            dialogModel.ownersOrMembers
+                                                |> List.map
+                                                    (\( ownerOrMember, share, nameValidity ) ->
+                                                        if ownerOrMember == name then
+                                                            ( ownerOrMember, share, Complete )
+
+                                                        else
+                                                            ( ownerOrMember, share, nameValidity )
+                                                    )
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
 
                 _ ->
                     ( model, Cmd.none )
@@ -313,8 +398,16 @@ view model =
                                     (String.length dialogModel.name
                                         > 0
                                         && (dialogModel.ownersOrMembers
-                                                |> List.map second
-                                                |> Maybe.traverse String.toInt
+                                                |> List.map
+                                                    (\( _, share, nameValidity ) ->
+                                                        case nameValidity of
+                                                            Complete ->
+                                                                String.toInt share
+
+                                                            _ ->
+                                                                Nothing
+                                                    )
+                                                |> Maybe.combine
                                                 |> Maybe.map (List.sum >> (\sum -> sum > 0))
                                                 |> Maybe.withDefault False
                                            )
@@ -461,9 +554,18 @@ addAccountOrGroupInputs ({ ownersOrMembers, account } as model) =
     in
     nameInput model
         ++ List.indexedMap
-            (\index ( ownerOrMember, share ) ->
+            (\index ( ownerOrMember, share, nameValidity ) ->
+                let
+                    attributes =
+                        case nameValidity of
+                            InvalidPrefix ->
+                                [ Background.color red ]
+
+                            _ ->
+                                []
+                in
                 row [ spacing 20 ]
-                    [ Input.text []
+                    [ Input.text attributes
                         { label = Input.labelLeft [] (label ++ (index + 1 |> String.fromInt) |> text)
                         , placeholder = Nothing
                         , onChange = flip (UpdateOwnerOrMember index) share
@@ -478,7 +580,7 @@ addAccountOrGroupInputs ({ ownersOrMembers, account } as model) =
                     ]
             )
             ownersOrMembers
-        ++ (if List.all (\( ownerOrMember, _ ) -> String.length ownerOrMember > 0) ownersOrMembers then
+        ++ (if List.all (\( ownerOrMember, _, _ ) -> String.length ownerOrMember > 0) ownersOrMembers then
                 [ row [ spacing 20 ]
                     [ Input.text []
                         { label = Input.labelLeft [] (label ++ (List.length ownersOrMembers + 1 |> String.fromInt) |> text)
