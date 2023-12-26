@@ -3,6 +3,8 @@ module Frontend exposing (..)
 import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
+import Date
+import DatePicker
 import Dialog
 import Dict
 import Dict.Extra as Dict
@@ -17,6 +19,7 @@ import Lamdera
 import List.Extra as List
 import Maybe.Extra as Maybe
 import String
+import Task
 import Tuple exposing (..)
 import Types exposing (..)
 import Url
@@ -68,10 +71,88 @@ update msg model =
         NoOpFrontendMsg ->
             ( model, Cmd.none )
 
-        ShowDialog dialog ->
-            ( { model | showDialog = Just dialog }
+        ShowAddPersonDialog ->
+            ( { model
+                | showDialog =
+                    Just
+                        (AddPersonDialog
+                            { name = ""
+                            , nameInvalid = False
+                            , submitted = False
+                            }
+                        )
+              }
             , Cmd.none
             )
+
+        ShowAddAccountDialog ->
+            ( { model
+                | showDialog =
+                    Just
+                        (AddAccountOrGroupDialog
+                            { name = ""
+                            , nameInvalid = False
+                            , ownersOrMembers = []
+                            , submitted = False
+                            , account = True
+                            }
+                        )
+              }
+            , Cmd.none
+            )
+
+        ShowAddGroupDialog ->
+            ( { model
+                | showDialog =
+                    Just
+                        (AddAccountOrGroupDialog
+                            { name = ""
+                            , nameInvalid = False
+                            , ownersOrMembers = []
+                            , submitted = False
+                            , account = False
+                            }
+                        )
+              }
+            , Cmd.none
+            )
+
+        ShowAddSpendingDialog ->
+            ( { model
+                | showDialog =
+                    Just
+                        (AddSpendingDialog
+                            { description = ""
+                            , date = Nothing
+                            , dateText = ""
+                            , datePickerModel = DatePicker.init
+                            , totalSpending = ""
+                            , sharedSpending = []
+                            , transactions = []
+                            , submitted = False
+                            }
+                        )
+              }
+            , Task.perform SetToday Date.today
+            )
+
+        SetToday today ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | datePickerModel = DatePicker.setToday today dialogModel.datePickerModel
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         Submit ->
             case model.showDialog of
@@ -177,6 +258,98 @@ update msg model =
 
                       else
                         Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateTotalSpending totalSpending ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model | showDialog = Just (AddSpendingDialog { dialogModel | totalSpending = totalSpending }) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        ChangeDatePicker changeEvent ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (case changeEvent of
+                                        DatePicker.DateChanged date ->
+                                            { dialogModel | date = Just date, dateText = Date.toIsoString date }
+
+                                        DatePicker.TextChanged dateText ->
+                                            { dialogModel
+                                                | date =
+                                                    Date.fromIsoString dateText
+                                                        |> Result.toMaybe
+                                                , dateText = dateText
+                                            }
+
+                                        DatePicker.PickerChanged subMsg ->
+                                            { dialogModel | datePickerModel = DatePicker.update subMsg dialogModel.datePickerModel }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateGroupSpending index description amount ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | sharedSpending =
+                                            if index == 0 then
+                                                ( description, amount, Incomplete ) :: dialogModel.sharedSpending
+
+                                            else if index == 1 && description == "" then
+                                                List.drop 1 dialogModel.sharedSpending
+
+                                            else
+                                                List.setAt (index - 1) ( description, amount, Incomplete ) dialogModel.sharedSpending
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateTransaction index account amount ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | transactions =
+                                            if index == 0 then
+                                                ( account, amount, Incomplete ) :: dialogModel.transactions
+
+                                            else if index == 1 && account == "" then
+                                                List.drop 1 dialogModel.transactions
+
+                                            else
+                                                List.setAt (index - 1) ( account, amount, Incomplete ) dialogModel.transactions
+                                    }
+                                )
+                      }
+                    , Cmd.none
                     )
 
                 _ ->
@@ -419,7 +592,7 @@ view model =
                                     )
 
                             AddSpendingDialog dialogModel ->
-                                config "Add Spending" [] False
+                                config "Add Spending" (addSpendingInputs dialogModel) False
                     )
     in
     { title = "Accounting"
@@ -432,64 +605,22 @@ view model =
                 [ row [ centerX, spacing 70, padding 20 ]
                     [ Input.button greenButtonStyle
                         { label = text "Add Person"
-                        , onPress =
-                            Just
-                                (ShowDialog
-                                    (AddPersonDialog
-                                        { name = ""
-                                        , nameInvalid = False
-                                        , submitted = False
-                                        }
-                                    )
-                                )
+                        , onPress = Just ShowAddPersonDialog
                         }
                     , Input.button greenButtonStyle
                         { label = text "Add Account"
                         , onPress =
-                            Just
-                                (ShowDialog
-                                    (AddAccountOrGroupDialog
-                                        { name = ""
-                                        , nameInvalid = False
-                                        , ownersOrMembers = []
-                                        , submitted = False
-                                        , account = True
-                                        }
-                                    )
-                                )
+                            Just ShowAddAccountDialog
                         }
                     , Input.button greenButtonStyle
                         { label = text "Add Group"
                         , onPress =
-                            Just
-                                (ShowDialog
-                                    (AddAccountOrGroupDialog
-                                        { name = ""
-                                        , nameInvalid = False
-                                        , ownersOrMembers = []
-                                        , submitted = False
-                                        , account = False
-                                        }
-                                    )
-                                )
+                            Just ShowAddGroupDialog
                         }
                     , Input.button greenButtonStyle
                         { label = text "Add Spending"
                         , onPress =
-                            Just
-                                (ShowDialog
-                                    (AddSpendingDialog
-                                        { description = ""
-                                        , day = 1
-                                        , month = 1
-                                        , year = 1970
-                                        , totalSpending = 0
-                                        , sharedSpending = []
-                                        , transactions = []
-                                        , submitted = False
-                                        }
-                                    )
-                                )
+                            Just ShowAddSpendingDialog
                         }
                     ]
                 ]
@@ -549,61 +680,130 @@ addAccountOrGroupInputs ({ ownersOrMembers, account } as model) =
     let
         label =
             if account then
-                "Owner "
+                "Owner"
 
             else
-                "Member "
+                "Member"
 
         nbOwnersOrMembers =
             List.length ownersOrMembers
     in
     nameInput model
-        ++ ((if List.all (\( ownerOrMember, _, _ ) -> String.length ownerOrMember > 0) ownersOrMembers then
-                [ row [ spacing 20 ]
-                    [ Input.text []
-                        { label = Input.labelLeft [] (label ++ (nbOwnersOrMembers + 1 |> String.fromInt) |> text)
+        ++ listInputs label "Share" UpdateOwnerOrMember "1" ownersOrMembers
+
+
+addSpendingInputs { description, date, dateText, datePickerModel, totalSpending, sharedSpending, transactions } =
+    let
+        remainingSpendingAmount =
+            (totalSpending |> String.toInt |> Maybe.withDefault 0)
+                - (sharedSpending
+                    |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
+                    |> List.sum
+                  )
+                |> String.fromInt
+
+        remainingTransactionAmount =
+            (totalSpending |> String.toInt |> Maybe.withDefault 0)
+                - (transactions
+                    |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
+                    |> List.sum
+                  )
+                |> String.fromInt
+    in
+    [ Input.text []
+        { label = Input.labelLeft [] (text "Description")
+        , placeholder = Nothing
+        , onChange = UpdateName
+        , text = description
+        }
+    , DatePicker.input []
+        { label = Input.labelLeft [] (text "Date")
+        , placeholder = Nothing
+        , onChange = ChangeDatePicker
+        , selected = date
+        , text = dateText
+        , settings = DatePicker.defaultSettings
+        , model = datePickerModel
+        }
+    , Input.text []
+        { label = Input.labelLeft [] (text "Total Spending")
+        , placeholder = Nothing
+        , onChange = UpdateTotalSpending
+        , text = totalSpending
+        }
+    , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+        ([ text "Group Spendings" ]
+            ++ listInputs "Description" "Amount" UpdateGroupSpending remainingSpendingAmount sharedSpending
+        )
+    , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+        ([ text "Transactions" ]
+            ++ listInputs "Account" "Amount" UpdateTransaction remainingTransactionAmount transactions
+        )
+    ]
+
+
+listInputs nameLabel valueLabel msg defaultValue items =
+    let
+        listSize =
+            List.length items
+    in
+    (if List.all (\( name, _, _ ) -> String.length name > 0) items then
+        [ row [ spacing 20 ]
+            [ Input.text []
+                { label =
+                    Input.labelLeft []
+                        (nameLabel
+                            ++ " "
+                            ++ (listSize + 1 |> String.fromInt)
+                            |> text
+                        )
+                , placeholder = Nothing
+                , onChange = flip (msg 0) defaultValue
+                , text = ""
+                }
+            , Input.text []
+                { label = Input.labelLeft [] (text valueLabel)
+                , placeholder = Nothing
+                , onChange = msg 0 ""
+                , text = ""
+                }
+            ]
+        ]
+
+     else
+        []
+    )
+        ++ List.indexedMap
+            (\index ( name, value, nameValidity ) ->
+                let
+                    attributes =
+                        case nameValidity of
+                            InvalidPrefix ->
+                                [ Background.color red ]
+
+                            _ ->
+                                []
+                in
+                row [ spacing 20 ]
+                    [ Input.text attributes
+                        { label =
+                            Input.labelLeft []
+                                (nameLabel
+                                    ++ " "
+                                    ++ (listSize - index |> String.fromInt)
+                                    |> text
+                                )
                         , placeholder = Nothing
-                        , onChange = flip (UpdateOwnerOrMember 0) "1"
-                        , text = ""
+                        , onChange = flip (msg (index + 1)) value
+                        , text = name
                         }
                     , Input.text []
-                        { label = Input.labelLeft [] (text "Share")
+                        { label = Input.labelLeft [] (text valueLabel)
                         , placeholder = Nothing
-                        , onChange = UpdateOwnerOrMember 0 ""
-                        , text = ""
+                        , onChange = msg (index + 1) name
+                        , text = value
                         }
                     ]
-                ]
-
-             else
-                []
             )
-                ++ List.indexedMap
-                    (\index ( ownerOrMember, share, nameValidity ) ->
-                        let
-                            attributes =
-                                case nameValidity of
-                                    InvalidPrefix ->
-                                        [ Background.color red ]
-
-                                    _ ->
-                                        []
-                        in
-                        row [ spacing 20 ]
-                            [ Input.text attributes
-                                { label = Input.labelLeft [] (label ++ (nbOwnersOrMembers - index |> String.fromInt) |> text)
-                                , placeholder = Nothing
-                                , onChange = flip (UpdateOwnerOrMember (index + 1)) share
-                                , text = ownerOrMember
-                                }
-                            , Input.text []
-                                { label = Input.labelLeft [] (text "Share")
-                                , placeholder = Nothing
-                                , onChange = UpdateOwnerOrMember (index + 1) ownerOrMember
-                                , text = share
-                                }
-                            ]
-                    )
-                    ownersOrMembers
-                |> List.reverse
-           )
+            items
+        |> List.reverse

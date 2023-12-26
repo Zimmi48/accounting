@@ -2,6 +2,8 @@ module Types exposing (..)
 
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
+import Date exposing (Date)
+import DatePicker
 import Dict exposing (Dict)
 import Set exposing (Set)
 import Url exposing (Url)
@@ -25,12 +27,22 @@ type FrontendMsg
     = UrlClicked UrlRequest
     | UrlChanged Url
     | NoOpFrontendMsg
-    | ShowDialog Dialog
+    | ShowAddPersonDialog
+    | ShowAddAccountDialog
+    | ShowAddGroupDialog
+    | ShowAddSpendingDialog
+    | SetToday Date
     | Submit
     | Cancel
     | UpdateName String
       -- index, name, share
     | UpdateOwnerOrMember Int String String
+    | ChangeDatePicker DatePicker.ChangeEvent
+    | UpdateTotalSpending String
+      -- index, name, amount
+    | UpdateGroupSpending Int String String
+      -- index, name, amount
+    | UpdateTransaction Int String String
 
 
 type ToBackend
@@ -77,7 +89,7 @@ type alias AddAccountOrGroupDialogModel =
     { name : String
     , nameInvalid : Bool
 
-    -- name, share, name validity
+    -- person name, share, name validity
     , ownersOrMembers : List ( String, String, NameValidity )
     , submitted : Bool
     , account : Bool
@@ -92,12 +104,16 @@ type NameValidity
 
 type alias AddSpendingDialogModel =
     { description : String
-    , day : Int
-    , month : Int
-    , year : Int
-    , totalSpending : Int
-    , sharedSpending : List ( String, Int )
-    , transactions : List ( String, Int )
+    , date : Maybe Date
+    , dateText : String
+    , datePickerModel : DatePicker.Model
+    , totalSpending : String
+
+    -- group name, amount, name validity
+    , sharedSpending : List ( String, String, NameValidity )
+
+    -- account name, amount, name validity
+    , transactions : List ( String, String, NameValidity )
     , submitted : Bool
     }
 
