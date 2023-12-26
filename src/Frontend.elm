@@ -485,7 +485,6 @@ view model =
                                         , year = 1970
                                         , totalSpending = 0
                                         , sharedSpending = []
-                                        , personalSpending = []
                                         , transactions = []
                                         , submitted = False
                                         }

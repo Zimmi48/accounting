@@ -97,7 +97,6 @@ type alias AddSpendingDialogModel =
     , year : Int
     , totalSpending : Int
     , sharedSpending : List ( String, Int )
-    , personalSpending : List ( String, Int )
     , transactions : List ( String, Int )
     , submitted : Bool
     }
@@ -106,7 +105,6 @@ type alias AddSpendingDialogModel =
 type alias Year =
     { months : Dict Int Month
     , totalSharedSpending : Dict String Amount
-    , totalPersonalSpending : Dict String Amount
     , totalAccountTransactions : Dict String Amount
     }
 
@@ -114,7 +112,6 @@ type alias Year =
 type alias Month =
     { spendings : List Spending
     , totalSharedSpending : Dict String Amount
-    , totalPersonalSpending : Dict String Amount
     , totalAccountTransactions : Dict String Amount
     }
 
@@ -128,9 +125,6 @@ type alias Spending =
 
     -- associates each group with the shared spending in this item
     , sharedSpending : Dict String Amount
-
-    -- associates each person with the personal share in this item
-    , personalSpending : Dict String Amount
 
     -- associates each account with the amount spent on this item
     , transactions : Dict String Amount
