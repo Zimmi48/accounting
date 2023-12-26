@@ -51,6 +51,8 @@ type ToBackend
     | CheckNoAccount String
     | CheckNoGroup String
     | AutocompletePerson String
+    | AutocompleteGroup String
+    | AutocompleteAccount String
     | AddPerson String
     | AddAccount String (Dict String Share)
     | AddGroup String (Dict String Share)
@@ -70,6 +72,14 @@ type ToFrontend
       -- prefix, name
     | UniquePersonPrefix String String
     | CompleteNotUniquePerson String
+    | InvalidGroupPrefix String
+      -- prefix, name
+    | UniqueGroupPrefix String String
+    | CompleteNotUniqueGroup String
+    | InvalidAccountPrefix String
+      -- prefix, name
+    | UniqueAccountPrefix String String
+    | CompleteNotUniqueAccount String
 
 
 type Dialog

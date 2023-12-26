@@ -112,3 +112,47 @@ updateFromFrontend sessionId clientId msg model =
                     else
                         Cmd.none
             )
+
+        AutocompleteGroup prefix ->
+            let
+                matches =
+                    Dict.filter (\name _ -> String.startsWith prefix name) model.groups
+                        |> Dict.keys
+            in
+            ( model
+            , case matches of
+                [] ->
+                    Lamdera.sendToFrontend clientId (InvalidGroupPrefix prefix)
+
+                [ name ] ->
+                    Lamdera.sendToFrontend clientId (UniqueGroupPrefix prefix name)
+
+                _ ->
+                    if List.member prefix matches then
+                        Lamdera.sendToFrontend clientId (CompleteNotUniqueGroup prefix)
+
+                    else
+                        Cmd.none
+            )
+
+        AutocompleteAccount prefix ->
+            let
+                matches =
+                    Dict.filter (\name _ -> String.startsWith prefix name) model.accounts
+                        |> Dict.keys
+            in
+            ( model
+            , case matches of
+                [] ->
+                    Lamdera.sendToFrontend clientId (InvalidAccountPrefix prefix)
+
+                [ name ] ->
+                    Lamdera.sendToFrontend clientId (UniqueAccountPrefix prefix name)
+
+                _ ->
+                    if List.member prefix matches then
+                        Lamdera.sendToFrontend clientId (CompleteNotUniqueAccount prefix)
+
+                    else
+                        Cmd.none
+            )

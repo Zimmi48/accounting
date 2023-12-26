@@ -303,7 +303,7 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateGroupSpending index description amount ->
+        UpdateGroupSpending index group amount ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -313,17 +313,21 @@ update msg model =
                                     { dialogModel
                                         | sharedSpending =
                                             if index == 0 then
-                                                ( description, amount, Incomplete ) :: dialogModel.sharedSpending
+                                                ( group, amount, Incomplete ) :: dialogModel.sharedSpending
 
-                                            else if index == 1 && description == "" then
+                                            else if index == 1 && group == "" then
                                                 List.drop 1 dialogModel.sharedSpending
 
                                             else
-                                                List.setAt (index - 1) ( description, amount, Incomplete ) dialogModel.sharedSpending
+                                                List.setAt (index - 1) ( group, amount, Incomplete ) dialogModel.sharedSpending
                                     }
                                 )
                       }
-                    , Cmd.none
+                    , if String.length group > 0 then
+                        Lamdera.sendToBackend (AutocompleteGroup group)
+
+                      else
+                        Cmd.none
                     )
 
                 _ ->
@@ -349,7 +353,11 @@ update msg model =
                                     }
                                 )
                       }
-                    , Cmd.none
+                    , if String.length account > 0 then
+                        Lamdera.sendToBackend (AutocompleteAccount account)
+
+                      else
+                        Cmd.none
                     )
 
                 _ ->
@@ -484,6 +492,168 @@ updateFromBackend msg model =
                                     }
                                 )
                       }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        InvalidGroupPrefix prefix ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | sharedSpending =
+                                            dialogModel.sharedSpending
+                                                |> List.map
+                                                    (\( group, amount, nameValidity ) ->
+                                                        if String.startsWith prefix group then
+                                                            ( group, amount, InvalidPrefix )
+
+                                                        else
+                                                            ( group, amount, nameValidity )
+                                                    )
+                                    }
+                                )
+                        }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UniqueGroupPrefix prefix name ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | sharedSpending =
+                                            dialogModel.sharedSpending
+                                                |> List.map
+                                                    (\( group, amount, nameValidity ) ->
+                                                        if String.startsWith prefix group then
+                                                            ( name, amount, Complete )
+
+                                                        else
+                                                            ( group, amount, nameValidity )
+                                                    )
+                                    }
+                                )
+                        }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        CompleteNotUniqueGroup name ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | sharedSpending =
+                                            dialogModel.sharedSpending
+                                                |> List.map
+                                                    (\( group, amount, nameValidity ) ->
+                                                        if group == name then
+                                                            ( group, amount, Complete )
+
+                                                        else
+                                                            ( group, amount, nameValidity )
+                                                    )
+                                    }
+                                )
+                        }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        InvalidAccountPrefix prefix ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | transactions =
+                                            dialogModel.transactions
+                                                |> List.map
+                                                    (\( account, amount, nameValidity ) ->
+                                                        if String.startsWith prefix account then
+                                                            ( account, amount, InvalidPrefix )
+
+                                                        else
+                                                            ( account, amount, nameValidity )
+                                                    )
+                                    }
+                                )
+                        }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UniqueAccountPrefix prefix name ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | transactions =
+                                            dialogModel.transactions
+                                                |> List.map
+                                                    (\( account, amount, nameValidity ) ->
+                                                        if String.startsWith prefix account then
+                                                            ( name, amount, Complete )
+
+                                                        else
+                                                            ( account, amount, nameValidity )
+                                                    )
+                                    }
+                                )
+                        }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        CompleteNotUniqueAccount name ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | transactions =
+                                            dialogModel.transactions
+                                                |> List.map
+                                                    (\( account, amount, nameValidity ) ->
+                                                        if account == name then
+                                                            ( account, amount, Complete )
+
+                                                        else
+                                                            ( account, amount, nameValidity )
+                                                    )
+                                    }
+                                )
+                        }
                     , Cmd.none
                     )
 
@@ -713,7 +883,7 @@ addSpendingInputs { description, date, dateText, datePickerModel, totalSpending,
         }
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
         ([ text "Group Spendings" ]
-            ++ listInputs "Description" "Amount" UpdateGroupSpending remainingSpendingAmount sharedSpending
+            ++ listInputs "Group" "Amount" UpdateGroupSpending remainingSpendingAmount sharedSpending
         )
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
         ([ text "Transactions" ]
