@@ -554,11 +554,7 @@ view model =
                             AddPersonDialog dialogModel ->
                                 config "Add Person"
                                     (nameInput dialogModel)
-                                    (String.length dialogModel.name
-                                        > 0
-                                        && not dialogModel.submitted
-                                        && not dialogModel.nameInvalid
-                                    )
+                                    (canSubmitPerson dialogModel)
 
                             AddAccountOrGroupDialog dialogModel ->
                                 let
@@ -571,28 +567,12 @@ view model =
                                 in
                                 config label
                                     (addAccountOrGroupInputs dialogModel)
-                                    (String.length dialogModel.name
-                                        > 0
-                                        && (dialogModel.ownersOrMembers
-                                                |> List.map
-                                                    (\( _, share, nameValidity ) ->
-                                                        case nameValidity of
-                                                            Complete ->
-                                                                String.toInt share
-
-                                                            _ ->
-                                                                Nothing
-                                                    )
-                                                |> Maybe.combine
-                                                |> Maybe.map (List.sum >> (\sum -> sum > 0))
-                                                |> Maybe.withDefault False
-                                           )
-                                        && not dialogModel.submitted
-                                        && not dialogModel.nameInvalid
-                                    )
+                                    (canSubmitAccountOrGroup dialogModel)
 
                             AddSpendingDialog dialogModel ->
-                                config "Add Spending" (addSpendingInputs dialogModel) False
+                                config "Add Spending"
+                                    (addSpendingInputs dialogModel)
+                                    (canSubmitSpending dialogModel)
                     )
     in
     { title = "Accounting"
@@ -807,3 +787,71 @@ listInputs nameLabel valueLabel msg defaultValue items =
             )
             items
         |> List.reverse
+
+
+canSubmitPerson { name, nameInvalid, submitted } =
+    not submitted && not nameInvalid && String.length name > 0
+
+
+canSubmitAccountOrGroup { name, nameInvalid, ownersOrMembers, submitted } =
+    not submitted
+        && not nameInvalid
+        && String.length name
+        > 0
+        && (ownersOrMembers
+                |> List.map
+                    (\( _, share, nameValidity ) ->
+                        case nameValidity of
+                            Complete ->
+                                String.toInt share
+
+                            _ ->
+                                Nothing
+                    )
+                |> Maybe.combine
+                |> Maybe.map (List.sum >> (\sum -> sum > 0))
+                |> Maybe.withDefault False
+           )
+
+
+canSubmitSpending { description, date, totalSpending, sharedSpending, transactions, submitted } =
+    not submitted
+        && Maybe.isJust date
+        && String.length description
+        > 0
+        && (totalSpending
+                |> String.toInt
+                |> Maybe.andThen
+                    (\totalSpendingInt ->
+                        Maybe.combine
+                            [ sharedSpending
+                                |> List.map
+                                    (\( _, amount, nameValidity ) ->
+                                        case nameValidity of
+                                            Complete ->
+                                                String.toInt amount
+
+                                            _ ->
+                                                Nothing
+                                    )
+                                |> Maybe.combine
+                                |> Maybe.map List.sum
+                                |> Maybe.map ((==) totalSpendingInt)
+                            , transactions
+                                |> List.map
+                                    (\( _, amount, nameValidity ) ->
+                                        case nameValidity of
+                                            Complete ->
+                                                String.toInt amount
+
+                                            _ ->
+                                                Nothing
+                                    )
+                                |> Maybe.combine
+                                |> Maybe.map List.sum
+                                |> Maybe.map ((==) totalSpendingInt)
+                            ]
+                    )
+                |> Maybe.map (List.all identity)
+                |> Maybe.withDefault False
+           )
