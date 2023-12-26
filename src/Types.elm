@@ -3,6 +3,7 @@ module Types exposing (..)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Dict exposing (Dict)
+import Set exposing (Set)
 import Url exposing (Url)
 
 
@@ -16,7 +17,7 @@ type alias BackendModel =
     { years : Dict String Year
     , groups : Dict String Group
     , accounts : Dict String Account
-    , persons : List String
+    , persons : Set String
     }
 
 
@@ -28,10 +29,15 @@ type FrontendMsg
     | Submit
     | Cancel
     | UpdateName String
+      -- index, name, share
+    | UpdateOwnerOrMember Int String String
 
 
 type ToBackend
     = NoOpToBackend
+    | AddPerson String
+    | AddAccount String (Dict String Share)
+    | AddGroup String (Dict String Share)
 
 
 type BackendMsg
@@ -40,30 +46,26 @@ type BackendMsg
 
 type ToFrontend
     = NoOpToFrontend
+    | OperationSuccessful
 
 
 type Dialog
     = AddPersonDialog AddPersonDialogModel
-    | AddAccountDialog AddAccountDialogModel
-    | AddGroupDialog AddGroupDialogModel
+    | AddAccountOrGroupDialog AddAccountOrGroupDialogModel
     | AddSpendingDialog AddSpendingDialogModel
 
 
 type alias AddPersonDialogModel =
     { name : String
+    , submitted : Bool
     }
 
 
-type alias AddAccountDialogModel =
+type alias AddAccountOrGroupDialogModel =
     { name : String
-    , owner : String
-    , bank : String
-    }
-
-
-type alias AddGroupDialogModel =
-    { name : String
-    , members : List ( String, Int )
+    , ownersOrMembers : List ( String, String )
+    , submitted : Bool
+    , account : Bool
     }
 
 
@@ -76,22 +78,23 @@ type alias AddSpendingDialogModel =
     , sharedSpending : List ( String, Int )
     , personalSpending : List ( String, Int )
     , transactions : List ( String, Int )
+    , submitted : Bool
     }
 
 
 type alias Year =
     { months : Dict Int Month
-    , totalSharedSpending : Dict String Int
-    , totalPersonalSpending : Dict String Int
-    , totalAccountTransactions : Dict String Int
+    , totalSharedSpending : Dict String Amount
+    , totalPersonalSpending : Dict String Amount
+    , totalAccountTransactions : Dict String Amount
     }
 
 
 type alias Month =
     { spendings : List Spending
-    , totalSharedSpending : Dict String Int
-    , totalPersonalSpending : Dict String Int
-    , totalAccountTransactions : Dict String Int
+    , totalSharedSpending : Dict String Amount
+    , totalPersonalSpending : Dict String Amount
+    , totalAccountTransactions : Dict String Amount
     }
 
 
@@ -100,24 +103,30 @@ type alias Spending =
     , day : Int
 
     -- total amount spent on this item
-    , totalSpending : Int
+    , totalSpending : Amount
 
     -- associates each group with the shared spending in this item
-    , sharedSpending : Dict String Int
+    , sharedSpending : Dict String Amount
 
     -- associates each person with the personal share in this item
-    , personalSpending : Dict String Int
+    , personalSpending : Dict String Amount
 
     -- associates each account with the amount spent on this item
-    , transactions : Dict String Int
+    , transactions : Dict String Amount
     }
 
 
 type alias Account =
-    { owner : String
-    , bank : String
-    }
+    Dict String Share
 
 
 type alias Group =
-    Dict String Int
+    Dict String Share
+
+
+type Share
+    = Share Int
+
+
+type Amount
+    = Amount Int

@@ -1,8 +1,11 @@
 module Frontend exposing (..)
 
+import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
 import Dialog
+import Dict
+import Dict.Extra as Dict
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
@@ -11,6 +14,10 @@ import Html
 import Html.Attributes as Attr
 import Html.Events exposing (..)
 import Lamdera
+import List.Extra as List
+import Maybe.Extra as Maybe
+import String
+import Tuple exposing (..)
 import Types exposing (..)
 import Url
 
@@ -67,9 +74,42 @@ update msg model =
             )
 
         Submit ->
-            ( { model | showDialog = Nothing }
-            , Cmd.none
-            )
+            case model.showDialog of
+                Just (AddPersonDialog dialogModel) ->
+                    ( { model | showDialog = Just (AddPersonDialog { dialogModel | submitted = True }) }
+                    , Lamdera.sendToBackend (AddPerson dialogModel.name)
+                    )
+
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    let
+                        ownersOrMembers =
+                            dialogModel.ownersOrMembers
+                                |> List.map
+                                    (\( ownerOrMember, share ) ->
+                                        ( ownerOrMember
+                                        , share
+                                            |> String.toInt
+                                            |> Maybe.withDefault 0
+                                        )
+                                    )
+                                |> Dict.fromListDedupe (+)
+                                |> Dict.map (\_ -> Share)
+                    in
+                    ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | submitted = True }) }
+                    , if dialogModel.account then
+                        Lamdera.sendToBackend (AddAccount dialogModel.name ownersOrMembers)
+
+                      else
+                        Lamdera.sendToBackend (AddGroup dialogModel.name ownersOrMembers)
+                    )
+
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model | showDialog = Just (AddSpendingDialog { dialogModel | submitted = True }) }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         Cancel ->
             ( { model | showDialog = Nothing }
@@ -83,13 +123,8 @@ update msg model =
                     , Cmd.none
                     )
 
-                Just (AddAccountDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddAccountDialog { dialogModel | name = name }) }
-                    , Cmd.none
-                    )
-
-                Just (AddGroupDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddGroupDialog { dialogModel | name = name }) }
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | name = name }) }
                     , Cmd.none
                     )
 
@@ -101,6 +136,29 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
+        UpdateOwnerOrMember index ownerOrMember share ->
+            case model.showDialog of
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddAccountOrGroupDialog
+                                    { dialogModel
+                                        | ownersOrMembers =
+                                            if index == List.length dialogModel.ownersOrMembers then
+                                                dialogModel.ownersOrMembers ++ [ ( ownerOrMember, share ) ]
+
+                                            else
+                                                List.setAt index ( ownerOrMember, share ) dialogModel.ownersOrMembers
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
 updateFromBackend msg model =
@@ -108,42 +166,62 @@ updateFromBackend msg model =
         NoOpToFrontend ->
             ( model, Cmd.none )
 
+        OperationSuccessful ->
+            ( { model | showDialog = Nothing }
+            , Cmd.none
+            )
+
 
 view : Model -> Browser.Document FrontendMsg
 view model =
     let
-        config title inputs =
+        config title inputs canSubmit =
             { closeMessage = Just Cancel
             , maskAttributes = []
             , containerAttributes =
-                [ padding 20
-                , Background.color (rgb 1 1 1)
+                [ Background.color (rgb 1 1 1)
                 , Border.solid
                 , Border.rounded 5
                 , Border.width 1
-                , width (px 400)
                 , centerX
                 , centerY
                 ]
-            , headerAttributes = [ padding 20 ]
-            , bodyAttributes = []
-            , footerAttributes = []
+            , headerAttributes =
+                [ padding 20
+                , Background.color green
+                ]
+            , bodyAttributes = [ padding 20 ]
+            , footerAttributes =
+                [ Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
+                , Border.solid
+                ]
             , header = Just (text title)
             , body =
                 Just
-                    (column []
+                    (column [ spacing 20 ]
                         inputs
                     )
             , footer =
                 Just
-                    (row [ centerX, spacing 70, padding 20 ]
+                    (row [ centerX, spacing 20, padding 20, alignRight ]
                         [ Input.button redButtonStyle
                             { label = text "Cancel"
                             , onPress = Just Cancel
                             }
-                        , Input.button greenButtonStyle
+                        , Input.button
+                            (if canSubmit then
+                                greenButtonStyle
+
+                             else
+                                grayButtonStyle
+                            )
                             { label = text "Submit"
-                            , onPress = Just Submit
+                            , onPress =
+                                if canSubmit then
+                                    Just Submit
+
+                                else
+                                    Nothing
                             }
                         ]
                     )
@@ -155,16 +233,37 @@ view model =
                     (\dialog ->
                         case dialog of
                             AddPersonDialog dialogModel ->
-                                config "Add Person" (addPersonInputs dialogModel)
+                                config "Add Person"
+                                    (addPersonInputs dialogModel)
+                                    (String.length dialogModel.name
+                                        > 0
+                                        && not dialogModel.submitted
+                                    )
 
-                            AddAccountDialog dialogModel ->
-                                config "Add Account" []
+                            AddAccountOrGroupDialog dialogModel ->
+                                let
+                                    label =
+                                        if dialogModel.account then
+                                            "Add Account"
 
-                            AddGroupDialog dialogModel ->
-                                config "Add Group" []
+                                        else
+                                            "Add Group"
+                                in
+                                config label
+                                    (addAccountOrGroupInputs dialogModel)
+                                    (String.length dialogModel.name
+                                        > 0
+                                        && (dialogModel.ownersOrMembers
+                                                |> List.map second
+                                                |> Maybe.traverse String.toInt
+                                                |> Maybe.map (List.sum >> (\sum -> sum > 0))
+                                                |> Maybe.withDefault False
+                                           )
+                                        && not dialogModel.submitted
+                                    )
 
                             AddSpendingDialog dialogModel ->
-                                config "Add Spending" []
+                                config "Add Spending" [] False
                     )
     in
     { title = "Accounting"
@@ -181,7 +280,9 @@ view model =
                             Just
                                 (ShowDialog
                                     (AddPersonDialog
-                                        { name = "" }
+                                        { name = ""
+                                        , submitted = False
+                                        }
                                     )
                                 )
                         }
@@ -190,10 +291,11 @@ view model =
                         , onPress =
                             Just
                                 (ShowDialog
-                                    (AddAccountDialog
+                                    (AddAccountOrGroupDialog
                                         { name = ""
-                                        , owner = ""
-                                        , bank = ""
+                                        , ownersOrMembers = []
+                                        , submitted = False
+                                        , account = True
                                         }
                                     )
                                 )
@@ -203,9 +305,11 @@ view model =
                         , onPress =
                             Just
                                 (ShowDialog
-                                    (AddGroupDialog
+                                    (AddAccountOrGroupDialog
                                         { name = ""
-                                        , members = []
+                                        , ownersOrMembers = []
+                                        , submitted = False
+                                        , account = False
                                         }
                                     )
                                 )
@@ -224,6 +328,7 @@ view model =
                                         , sharedSpending = []
                                         , personalSpending = []
                                         , transactions = []
+                                        , submitted = False
                                         }
                                     )
                                 )
@@ -245,18 +350,82 @@ buttonStyle =
 
 
 greenButtonStyle =
-    buttonStyle ++ [ Background.color (rgb255 173 255 47) ]
+    buttonStyle ++ [ Background.color green ]
+
+
+green =
+    rgb255 152 251 152
 
 
 redButtonStyle =
     buttonStyle ++ [ Background.color (rgb 1 0.5 0.5) ]
 
 
+grayButtonStyle =
+    buttonStyle ++ [ Background.color (rgb 0.8 0.8 0.8) ]
+
+
 addPersonInputs { name } =
-    [ Input.text [ Input.focusedOnLoad ]
+    [ Input.text []
         { label = Input.labelLeft [] (text "Name")
         , placeholder = Nothing
         , onChange = UpdateName
         , text = name
         }
     ]
+
+
+addAccountOrGroupInputs { name, ownersOrMembers, account } =
+    let
+        label =
+            if account then
+                "Owner "
+
+            else
+                "Member "
+    in
+    [ Input.text []
+        { label = Input.labelLeft [] (text "Name")
+        , placeholder = Nothing
+        , onChange = UpdateName
+        , text = name
+        }
+    ]
+        ++ List.indexedMap
+            (\index ( ownerOrMember, share ) ->
+                row [ spacing 20 ]
+                    [ Input.text []
+                        { label = Input.labelLeft [] (label ++ (index + 1 |> String.fromInt) |> text)
+                        , placeholder = Nothing
+                        , onChange = flip (UpdateOwnerOrMember index) share
+                        , text = ownerOrMember
+                        }
+                    , Input.text []
+                        { label = Input.labelLeft [] (text "Share")
+                        , placeholder = Nothing
+                        , onChange = UpdateOwnerOrMember index ownerOrMember
+                        , text = share
+                        }
+                    ]
+            )
+            ownersOrMembers
+        ++ (if List.all (\( ownerOrMember, _ ) -> String.length ownerOrMember > 0) ownersOrMembers then
+                [ row [ spacing 20 ]
+                    [ Input.text []
+                        { label = Input.labelLeft [] (label ++ (List.length ownersOrMembers + 1 |> String.fromInt) |> text)
+                        , placeholder = Nothing
+                        , onChange = flip (UpdateOwnerOrMember (List.length ownersOrMembers)) "1"
+                        , text = ""
+                        }
+                    , Input.text []
+                        { label = Input.labelLeft [] (text "Share")
+                        , placeholder = Nothing
+                        , onChange = UpdateOwnerOrMember (List.length ownersOrMembers) ""
+                        , text = ""
+                        }
+                    ]
+                ]
+
+            else
+                []
+           )
