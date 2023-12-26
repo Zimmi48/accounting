@@ -16,7 +16,7 @@ type alias FrontendModel =
 
 
 type alias BackendModel =
-    { years : Dict String Year
+    { years : Dict Int Year
     , groups : Dict String Group
     , accounts : Dict String Account
     , persons : Set String
@@ -56,6 +56,8 @@ type ToBackend
     | AddPerson String
     | AddAccount String (Dict String Share)
     | AddGroup String (Dict String Share)
+      -- description, year, month, day, total spending, group spendings, transactions
+    | AddSpending String Int Int Int Amount (Dict String Amount) (Dict String Amount)
 
 
 type BackendMsg
@@ -120,7 +122,7 @@ type alias AddSpendingDialogModel =
     , totalSpending : String
 
     -- group name, amount, name validity
-    , sharedSpending : List ( String, String, NameValidity )
+    , groupSpendings : List ( String, String, NameValidity )
 
     -- account name, amount, name validity
     , transactions : List ( String, String, NameValidity )
@@ -130,14 +132,14 @@ type alias AddSpendingDialogModel =
 
 type alias Year =
     { months : Dict Int Month
-    , totalSharedSpending : Dict String Amount
+    , totalGroupSpendings : Dict String Amount
     , totalAccountTransactions : Dict String Amount
     }
 
 
 type alias Month =
     { spendings : List Spending
-    , totalSharedSpending : Dict String Amount
+    , totalGroupSpendings : Dict String Amount
     , totalAccountTransactions : Dict String Amount
     }
 
@@ -150,7 +152,7 @@ type alias Spending =
     , totalSpending : Amount
 
     -- associates each group with the shared spending in this item
-    , sharedSpending : Dict String Amount
+    , groupSpendings : Dict String Amount
 
     -- associates each account with the amount spent on this item
     , transactions : Dict String Amount

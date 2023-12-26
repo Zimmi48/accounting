@@ -127,7 +127,7 @@ update msg model =
                             , dateText = ""
                             , datePickerModel = DatePicker.init
                             , totalSpending = ""
-                            , sharedSpending = []
+                            , groupSpendings = []
                             , transactions = []
                             , submitted = False
                             }
@@ -185,9 +185,70 @@ update msg model =
                     )
 
                 Just (AddSpendingDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddSpendingDialog { dialogModel | submitted = True }) }
-                    , Cmd.none
-                    )
+                    let
+                        groupSpendings =
+                            dialogModel.groupSpendings
+                                |> List.map
+                                    (\( group, amount, _ ) ->
+                                        ( group
+                                        , amount
+                                            |> String.toInt
+                                            |> Maybe.withDefault 0
+                                        )
+                                    )
+                                |> Dict.fromListDedupe (+)
+                                |> Dict.map (\_ -> Amount)
+
+                        transactions =
+                            dialogModel.transactions
+                                |> List.map
+                                    (\( account, amount, _ ) ->
+                                        ( account
+                                        , amount
+                                            |> String.toInt
+                                            |> Maybe.withDefault 0
+                                        )
+                                    )
+                                |> Dict.fromListDedupe (+)
+                                |> Dict.map (\_ -> Amount)
+
+                        maybeYear =
+                            Maybe.map Date.year dialogModel.date
+
+                        maybeMonth =
+                            Maybe.map Date.monthNumber dialogModel.date
+
+                        maybeDay =
+                            Maybe.map Date.day dialogModel.date
+
+                        maybeTotalSpending =
+                            dialogModel.totalSpending
+                                |> String.toInt
+                                |> Maybe.map Amount
+                    in
+                    case ( ( maybeYear, maybeMonth, maybeDay ), maybeTotalSpending ) of
+                        ( ( Just year, Just month, Just day ), Just totalSpending ) ->
+                            ( { model
+                                | showDialog =
+                                    Just
+                                        (AddSpendingDialog
+                                            { dialogModel | submitted = True }
+                                        )
+                              }
+                            , Lamdera.sendToBackend
+                                (AddSpending
+                                    dialogModel.description
+                                    year
+                                    month
+                                    day
+                                    totalSpending
+                                    groupSpendings
+                                    transactions
+                                )
+                            )
+
+                        _ ->
+                            ( model, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -311,15 +372,15 @@ update msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | sharedSpending =
+                                        | groupSpendings =
                                             if index == 0 then
-                                                ( group, amount, Incomplete ) :: dialogModel.sharedSpending
+                                                ( group, amount, Incomplete ) :: dialogModel.groupSpendings
 
                                             else if index == 1 && group == "" then
-                                                List.drop 1 dialogModel.sharedSpending
+                                                List.drop 1 dialogModel.groupSpendings
 
                                             else
-                                                List.setAt (index - 1) ( group, amount, Incomplete ) dialogModel.sharedSpending
+                                                List.setAt (index - 1) ( group, amount, Incomplete ) dialogModel.groupSpendings
                                     }
                                 )
                       }
@@ -506,8 +567,8 @@ updateFromBackend msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | sharedSpending =
-                                            dialogModel.sharedSpending
+                                        | groupSpendings =
+                                            dialogModel.groupSpendings
                                                 |> List.map
                                                     (\( group, amount, nameValidity ) ->
                                                         if String.startsWith prefix group then
@@ -518,7 +579,7 @@ updateFromBackend msg model =
                                                     )
                                     }
                                 )
-                        }
+                      }
                     , Cmd.none
                     )
 
@@ -533,8 +594,8 @@ updateFromBackend msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | sharedSpending =
-                                            dialogModel.sharedSpending
+                                        | groupSpendings =
+                                            dialogModel.groupSpendings
                                                 |> List.map
                                                     (\( group, amount, nameValidity ) ->
                                                         if String.startsWith prefix group then
@@ -545,7 +606,7 @@ updateFromBackend msg model =
                                                     )
                                     }
                                 )
-                        }
+                      }
                     , Cmd.none
                     )
 
@@ -560,8 +621,8 @@ updateFromBackend msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | sharedSpending =
-                                            dialogModel.sharedSpending
+                                        | groupSpendings =
+                                            dialogModel.groupSpendings
                                                 |> List.map
                                                     (\( group, amount, nameValidity ) ->
                                                         if group == name then
@@ -572,7 +633,7 @@ updateFromBackend msg model =
                                                     )
                                     }
                                 )
-                        }
+                      }
                     , Cmd.none
                     )
 
@@ -599,7 +660,7 @@ updateFromBackend msg model =
                                                     )
                                     }
                                 )
-                        }
+                      }
                     , Cmd.none
                     )
 
@@ -626,7 +687,7 @@ updateFromBackend msg model =
                                                     )
                                     }
                                 )
-                        }
+                      }
                     , Cmd.none
                     )
 
@@ -653,7 +714,7 @@ updateFromBackend msg model =
                                                     )
                                     }
                                 )
-                        }
+                      }
                     , Cmd.none
                     )
 
@@ -842,11 +903,11 @@ addAccountOrGroupInputs ({ ownersOrMembers, account } as model) =
         ++ listInputs label "Share" UpdateOwnerOrMember "1" ownersOrMembers
 
 
-addSpendingInputs { description, date, dateText, datePickerModel, totalSpending, sharedSpending, transactions } =
+addSpendingInputs { description, date, dateText, datePickerModel, totalSpending, groupSpendings, transactions } =
     let
         remainingSpendingAmount =
             (totalSpending |> String.toInt |> Maybe.withDefault 0)
-                - (sharedSpending
+                - (groupSpendings
                     |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
                     |> List.sum
                   )
@@ -883,7 +944,7 @@ addSpendingInputs { description, date, dateText, datePickerModel, totalSpending,
         }
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
         ([ text "Group Spendings" ]
-            ++ listInputs "Group" "Amount" UpdateGroupSpending remainingSpendingAmount sharedSpending
+            ++ listInputs "Group" "Amount" UpdateGroupSpending remainingSpendingAmount groupSpendings
         )
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
         ([ text "Transactions" ]
@@ -984,7 +1045,7 @@ canSubmitAccountOrGroup { name, nameInvalid, ownersOrMembers, submitted } =
            )
 
 
-canSubmitSpending { description, date, totalSpending, sharedSpending, transactions, submitted } =
+canSubmitSpending { description, date, totalSpending, groupSpendings, transactions, submitted } =
     not submitted
         && Maybe.isJust date
         && String.length description
@@ -994,7 +1055,7 @@ canSubmitSpending { description, date, totalSpending, sharedSpending, transactio
                 |> Maybe.andThen
                     (\totalSpendingInt ->
                         Maybe.combine
-                            [ sharedSpending
+                            [ groupSpendings
                                 |> List.map
                                     (\( _, amount, nameValidity ) ->
                                         case nameValidity of

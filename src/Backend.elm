@@ -1,5 +1,6 @@
 module Backend exposing (..)
 
+import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Html
 import Lamdera exposing (ClientId, SessionId)
@@ -91,6 +92,24 @@ updateFromFrontend sessionId clientId msg model =
             , Lamdera.sendToFrontend clientId OperationSuccessful
             )
 
+        AddSpending description year month day amount groupSpendings transactions ->
+            let
+                spending =
+                    { description = description
+                    , day = day
+                    , totalSpending = amount
+                    , groupSpendings = groupSpendings
+                    , transactions = transactions
+                    }
+            in
+            ( { model
+                | years =
+                    model.years
+                        |> Dict.update year (addSpendingToYear month spending >> Just)
+              }
+            , Lamdera.sendToFrontend clientId OperationSuccessful
+            )
+
         AutocompletePerson prefix ->
             let
                 matches =
@@ -156,3 +175,72 @@ updateFromFrontend sessionId clientId msg model =
                     else
                         Cmd.none
             )
+
+
+addSpendingToYear : Int -> Spending -> Maybe Year -> Year
+addSpendingToYear month spending maybeYear =
+    case maybeYear of
+        Nothing ->
+            { months =
+                Dict.singleton month (addSpendingToMonth spending Nothing)
+            , totalGroupSpendings = spending.groupSpendings
+            , totalAccountTransactions = spending.transactions
+            }
+
+        Just year ->
+            { months =
+                year.months
+                    |> Dict.update month (addSpendingToMonth spending >> Just)
+            , totalGroupSpendings =
+                spending.groupSpendings
+                    |> flip Dict.foldl
+                        year.totalGroupSpendings
+                        (\key (Amount value) totalGroupSpendings ->
+                            Dict.update key (addAmount value) totalGroupSpendings
+                        )
+            , totalAccountTransactions =
+                spending.transactions
+                    |> flip Dict.foldl
+                        year.totalAccountTransactions
+                        (\key (Amount value) totalAccountTransactions ->
+                            Dict.update key (addAmount value) totalAccountTransactions
+                        )
+            }
+
+
+addSpendingToMonth : Spending -> Maybe Month -> Month
+addSpendingToMonth spending maybeMonth =
+    case maybeMonth of
+        Nothing ->
+            { spendings = [ spending ]
+            , totalGroupSpendings = spending.groupSpendings
+            , totalAccountTransactions = spending.transactions
+            }
+
+        Just month ->
+            { spendings = spending :: month.spendings
+            , totalGroupSpendings =
+                spending.groupSpendings
+                    |> flip Dict.foldl
+                        month.totalGroupSpendings
+                        (\key (Amount value) groupSpendings ->
+                            Dict.update key (addAmount value) groupSpendings
+                        )
+            , totalAccountTransactions =
+                spending.transactions
+                    |> flip Dict.foldl
+                        month.totalAccountTransactions
+                        (\key (Amount value) transactions ->
+                            Dict.update key (addAmount value) transactions
+                        )
+            }
+
+
+addAmount : Int -> Maybe Amount -> Maybe Amount
+addAmount value maybeAmount =
+    case maybeAmount of
+        Nothing ->
+            Just (Amount value)
+
+        Just (Amount amount) ->
+            Just (Amount (amount + value))
