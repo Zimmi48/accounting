@@ -161,11 +161,14 @@ update msg model =
                                 (AddAccountOrGroupDialog
                                     { dialogModel
                                         | ownersOrMembers =
-                                            if index == List.length dialogModel.ownersOrMembers then
-                                                dialogModel.ownersOrMembers ++ [ ( ownerOrMember, share, Incomplete ) ]
+                                            if index == 0 then
+                                                ( ownerOrMember, share, Incomplete ) :: dialogModel.ownersOrMembers
+
+                                            else if index == 1 && ownerOrMember == "" then
+                                                List.drop 1 dialogModel.ownersOrMembers
 
                                             else
-                                                List.setAt index ( ownerOrMember, share, Incomplete ) dialogModel.ownersOrMembers
+                                                List.setAt (index - 1) ( ownerOrMember, share, Incomplete ) dialogModel.ownersOrMembers
                                     }
                                 )
                       }
@@ -551,52 +554,57 @@ addAccountOrGroupInputs ({ ownersOrMembers, account } as model) =
 
             else
                 "Member "
+
+        nbOwnersOrMembers =
+            List.length ownersOrMembers
     in
     nameInput model
-        ++ List.indexedMap
-            (\index ( ownerOrMember, share, nameValidity ) ->
-                let
-                    attributes =
-                        case nameValidity of
-                            InvalidPrefix ->
-                                [ Background.color red ]
-
-                            _ ->
-                                []
-                in
-                row [ spacing 20 ]
-                    [ Input.text attributes
-                        { label = Input.labelLeft [] (label ++ (index + 1 |> String.fromInt) |> text)
-                        , placeholder = Nothing
-                        , onChange = flip (UpdateOwnerOrMember index) share
-                        , text = ownerOrMember
-                        }
-                    , Input.text []
-                        { label = Input.labelLeft [] (text "Share")
-                        , placeholder = Nothing
-                        , onChange = UpdateOwnerOrMember index ownerOrMember
-                        , text = share
-                        }
-                    ]
-            )
-            ownersOrMembers
-        ++ (if List.all (\( ownerOrMember, _, _ ) -> String.length ownerOrMember > 0) ownersOrMembers then
+        ++ ((if List.all (\( ownerOrMember, _, _ ) -> String.length ownerOrMember > 0) ownersOrMembers then
                 [ row [ spacing 20 ]
                     [ Input.text []
-                        { label = Input.labelLeft [] (label ++ (List.length ownersOrMembers + 1 |> String.fromInt) |> text)
+                        { label = Input.labelLeft [] (label ++ (nbOwnersOrMembers + 1 |> String.fromInt) |> text)
                         , placeholder = Nothing
-                        , onChange = flip (UpdateOwnerOrMember (List.length ownersOrMembers)) "1"
+                        , onChange = flip (UpdateOwnerOrMember 0) "1"
                         , text = ""
                         }
                     , Input.text []
                         { label = Input.labelLeft [] (text "Share")
                         , placeholder = Nothing
-                        , onChange = UpdateOwnerOrMember (List.length ownersOrMembers) ""
+                        , onChange = UpdateOwnerOrMember 0 ""
                         , text = ""
                         }
                     ]
                 ]
 
-            else
+             else
                 []
+            )
+                ++ List.indexedMap
+                    (\index ( ownerOrMember, share, nameValidity ) ->
+                        let
+                            attributes =
+                                case nameValidity of
+                                    InvalidPrefix ->
+                                        [ Background.color red ]
+
+                                    _ ->
+                                        []
+                        in
+                        row [ spacing 20 ]
+                            [ Input.text attributes
+                                { label = Input.labelLeft [] (label ++ (nbOwnersOrMembers - index |> String.fromInt) |> text)
+                                , placeholder = Nothing
+                                , onChange = flip (UpdateOwnerOrMember (index + 1)) share
+                                , text = ownerOrMember
+                                }
+                            , Input.text []
+                                { label = Input.labelLeft [] (text "Share")
+                                , placeholder = Nothing
+                                , onChange = UpdateOwnerOrMember (index + 1) ownerOrMember
+                                , text = share
+                                }
+                            ]
+                    )
+                    ownersOrMembers
+                |> List.reverse
            )
