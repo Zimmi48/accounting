@@ -316,7 +316,10 @@ update msg model =
                                     { dialogModel
                                         | ownersOrMembers =
                                             dialogModel.ownersOrMembers
-                                                |> updateNameInList index ownerOrMember
+                                                |> updateNameInList
+                                                    index
+                                                    ownerOrMember
+                                                    (\_ -> "1")
                                     }
                                 )
                       }
@@ -420,7 +423,10 @@ update msg model =
                                     { dialogModel
                                         | groupSpendings =
                                             dialogModel.groupSpendings
-                                                |> updateNameInList index group
+                                                |> updateNameInList
+                                                    index
+                                                    group
+                                                    (computeRemainder dialogModel)
                                     }
                                 )
                       }
@@ -484,7 +490,10 @@ update msg model =
                                     { dialogModel
                                         | transactions =
                                             dialogModel.transactions
-                                                |> updateNameInList index account
+                                                |> updateNameInList
+                                                    index
+                                                    account
+                                                    (computeRemainder dialogModel)
                                     }
                                 )
                       }
@@ -540,9 +549,18 @@ addNameInList name defaultValue list =
     ( name, defaultValue, Incomplete ) :: list
 
 
-updateNameInList index name list =
+updateNameInList index name computeDefaultValue list =
     if index == 0 && name == "" then
-        List.drop 1 list
+        case list of
+            [] ->
+                []
+
+            ( _, value, _ ) :: tail ->
+                if value == "" || value == computeDefaultValue tail then
+                    tail
+
+                else
+                    ( name, value, Incomplete ) :: tail
 
     else
         list
@@ -553,11 +571,24 @@ updateNameInList index name list =
 
 
 updateValueInList index value list =
-    list
-        |> List.updateAt index
-            (\( name, _, nameValidity ) ->
-                ( name, value, nameValidity )
-            )
+    if index == 0 && value == "" then
+        case list of
+            [] ->
+                []
+
+            ( name, _, nameValidity ) :: tail ->
+                if name == "" then
+                    tail
+
+                else
+                    ( name, value, nameValidity ) :: tail
+
+    else
+        list
+            |> List.updateAt index
+                (\( name, _, nameValidity ) ->
+                    ( name, value, nameValidity )
+                )
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
