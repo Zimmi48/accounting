@@ -39,11 +39,6 @@ update msg model =
             ( model, Cmd.none )
 
 
-
--- Warning: currently, this function does not check that the account or group does not already exist before possibly overwriting it.
--- Warning: currently, this function does not check that all the persons in the account or group are already in the persons set.
-
-
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
 updateFromFrontend sessionId clientId msg model =
     case msg of
@@ -60,19 +55,37 @@ updateFromFrontend sessionId clientId msg model =
             )
 
         AddPerson person ->
-            ( { model | persons = Set.insert person model.persons }
-            , Lamdera.sendToFrontend clientId OperationSuccessful
-            )
+            if checkValidName model person then
+                ( { model | persons = Set.insert person model.persons }
+                , Lamdera.sendToFrontend clientId OperationSuccessful
+                )
 
-        AddAccount name owners ->
-            ( { model | accounts = Dict.insert name owners model.accounts }
-            , Lamdera.sendToFrontend clientId OperationSuccessful
-            )
+            else
+                ( model
+                , Lamdera.sendToFrontend clientId (NameAlreadyExists person)
+                )
 
         AddGroup name members ->
-            ( { model | groups = Dict.insert name members model.groups }
-            , Lamdera.sendToFrontend clientId OperationSuccessful
-            )
+            if checkValidName model name then
+                ( { model | groups = Dict.insert name members model.groups }
+                , Lamdera.sendToFrontend clientId OperationSuccessful
+                )
+
+            else
+                ( model
+                , Lamdera.sendToFrontend clientId (NameAlreadyExists name)
+                )
+
+        AddAccount name owners ->
+            if checkValidName model name then
+                ( { model | accounts = Dict.insert name owners model.accounts }
+                , Lamdera.sendToFrontend clientId OperationSuccessful
+                )
+
+            else
+                ( model
+                , Lamdera.sendToFrontend clientId (NameAlreadyExists name)
+                )
 
         AddSpending description year month day amount groupSpendings transactions ->
             let
@@ -161,10 +174,11 @@ updateFromFrontend sessionId clientId msg model =
 
 checkValidName : Model -> String -> Bool
 checkValidName model name =
-    String.length name > 0
-    && not (Set.member name model.persons)
-    && not (Dict.member name model.groups)
-    && not (Dict.member name model.accounts)
+    String.length name
+        > 0
+        && not (Set.member name model.persons)
+        && not (Dict.member name model.groups)
+        && not (Dict.member name model.accounts)
 
 
 addSpendingToYear : Int -> Spending -> Maybe Year -> Year

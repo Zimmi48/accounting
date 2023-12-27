@@ -441,7 +441,19 @@ updateFromBackend msg model =
             case model.showDialog of
                 Just (AddPersonDialog dialogModel) ->
                     if dialogModel.name == name then
-                        ( { model | showDialog = Just (AddPersonDialog { dialogModel | nameInvalid = True }) }
+                        -- we reset submitted to False because this can be
+                        -- an error message we get from the backend in case
+                        -- of a race creating this person
+                        ( { model
+                            | showDialog =
+                                Just
+                                    (AddPersonDialog
+                                        { dialogModel
+                                            | nameInvalid = True
+                                            , submitted = False
+                                        }
+                                    )
+                          }
                         , Cmd.none
                         )
 
@@ -450,7 +462,19 @@ updateFromBackend msg model =
 
                 Just (AddAccountOrGroupDialog dialogModel) ->
                     if dialogModel.name == name then
-                        ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | nameInvalid = True }) }
+                        -- we reset submitted to False because this can be
+                        -- an error message we get from the backend in case
+                        -- of a race creating this group or account
+                        ( { model
+                            | showDialog =
+                                Just
+                                    (AddAccountOrGroupDialog
+                                        { dialogModel
+                                            | nameInvalid = True
+                                            , submitted = False
+                                        }
+                                    )
+                          }
                         , Cmd.none
                         )
 
@@ -816,7 +840,7 @@ view model =
                                     (addSpendingInputs dialogModel)
                                     (canSubmitSpending dialogModel)
                     )
-        
+
         showSpendingForAttributes =
             case model.nameValidity of
                 InvalidPrefix ->
