@@ -38,14 +38,17 @@ type FrontendMsg
     | Submit
     | Cancel
     | UpdateName String
-      -- index, name, share
-    | UpdateOwnerOrMember Int String String
+    | AddOwnerOrMemberName String
+    | UpdateOwnerOrMemberName Int String
+    | UpdateOwnerOrMemberShare Int String
     | ChangeDatePicker DatePicker.ChangeEvent
     | UpdateTotalSpending String
-      -- index, name, amount
-    | UpdateGroupSpending Int String String
-      -- index, name, amount
-    | UpdateTransaction Int String String
+    | AddGroupName String
+    | UpdateGroupName Int String
+    | UpdateGroupAmount Int String
+    | AddAccountName String
+    | UpdateAccountName Int String
+    | UpdateAccountAmount Int String
 
 
 type ToBackend

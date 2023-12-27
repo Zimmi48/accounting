@@ -286,7 +286,7 @@ update msg model =
                     , Lamdera.sendToBackend (AutocompletePerson name)
                     )
 
-        UpdateOwnerOrMember index ownerOrMember share ->
+        AddOwnerOrMemberName ownerOrMember ->
             case model.showDialog of
                 Just (AddAccountOrGroupDialog dialogModel) ->
                     ( { model
@@ -295,14 +295,34 @@ update msg model =
                                 (AddAccountOrGroupDialog
                                     { dialogModel
                                         | ownersOrMembers =
-                                            if index == 0 then
-                                                ( ownerOrMember, share, Incomplete ) :: dialogModel.ownersOrMembers
+                                            ( ownerOrMember, "1", Incomplete ) :: dialogModel.ownersOrMembers
+                                    }
+                                )
+                      }
+                    , Lamdera.sendToBackend (AutocompletePerson ownerOrMember)
+                    )
 
-                                            else if index == 1 && ownerOrMember == "" then
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateOwnerOrMemberName index ownerOrMember ->
+            case model.showDialog of
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddAccountOrGroupDialog
+                                    { dialogModel
+                                        | ownersOrMembers =
+                                            if index == 0 && ownerOrMember == "" then
                                                 List.drop 1 dialogModel.ownersOrMembers
 
                                             else
-                                                List.setAt (index - 1) ( ownerOrMember, share, Incomplete ) dialogModel.ownersOrMembers
+                                                dialogModel.ownersOrMembers
+                                                    |> List.updateAt index
+                                                        (\( _, share, _ ) ->
+                                                            ( ownerOrMember, share, Incomplete )
+                                                        )
                                     }
                                 )
                       }
@@ -311,6 +331,29 @@ update msg model =
 
                       else
                         Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateOwnerOrMemberShare index share ->
+            case model.showDialog of
+                Just (AddAccountOrGroupDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddAccountOrGroupDialog
+                                    { dialogModel
+                                        | ownersOrMembers =
+                                            dialogModel.ownersOrMembers
+                                                |> List.updateAt index
+                                                    (\( ownerOrMember, _, nameValidity ) ->
+                                                        ( ownerOrMember, share, nameValidity )
+                                                    )
+                                    }
+                                )
+                      }
+                    , Cmd.none
                     )
 
                 _ ->
@@ -356,7 +399,7 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateGroupSpending index group amount ->
+        AddGroupName group ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -365,14 +408,47 @@ update msg model =
                                 (AddSpendingDialog
                                     { dialogModel
                                         | groupSpendings =
-                                            if index == 0 then
-                                                ( group, amount, Incomplete ) :: dialogModel.groupSpendings
+                                            ( group
+                                            , ((dialogModel.totalSpending
+                                                    |> String.toInt
+                                                    |> Maybe.withDefault 0
+                                               )
+                                                - (dialogModel.groupSpendings
+                                                    |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
+                                                    |> List.sum
+                                                  )
+                                              )
+                                                |> String.fromInt
+                                            , Incomplete
+                                            )
+                                                :: dialogModel.groupSpendings
+                                    }
+                                )
+                      }
+                    , Lamdera.sendToBackend (AutocompleteGroup group)
+                    )
 
-                                            else if index == 1 && group == "" then
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateGroupName index group ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | groupSpendings =
+                                            if index == 0 && group == "" then
                                                 List.drop 1 dialogModel.groupSpendings
 
                                             else
-                                                List.setAt (index - 1) ( group, amount, Incomplete ) dialogModel.groupSpendings
+                                                dialogModel.groupSpendings
+                                                    |> List.updateAt index
+                                                        (\( _, amount, _ ) ->
+                                                            ( group, amount, Incomplete )
+                                                        )
                                     }
                                 )
                       }
@@ -386,7 +462,30 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateTransaction index account amount ->
+        UpdateGroupAmount index amount ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | groupSpendings =
+                                            dialogModel.groupSpendings
+                                                |> List.updateAt index
+                                                    (\( group, _, nameValidity ) ->
+                                                        ( group, amount, nameValidity )
+                                                    )
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        AddAccountName account ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -395,14 +494,47 @@ update msg model =
                                 (AddSpendingDialog
                                     { dialogModel
                                         | transactions =
-                                            if index == 0 then
-                                                ( account, amount, Incomplete ) :: dialogModel.transactions
+                                            ( account
+                                            , ((dialogModel.totalSpending
+                                                    |> String.toInt
+                                                    |> Maybe.withDefault 0
+                                               )
+                                                - (dialogModel.transactions
+                                                    |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
+                                                    |> List.sum
+                                                  )
+                                              )
+                                                |> String.fromInt
+                                            , Incomplete
+                                            )
+                                                :: dialogModel.transactions
+                                    }
+                                )
+                      }
+                    , Lamdera.sendToBackend (AutocompleteAccount account)
+                    )
 
-                                            else if index == 1 && account == "" then
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateAccountName index account ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | transactions =
+                                            if index == 0 && account == "" then
                                                 List.drop 1 dialogModel.transactions
 
                                             else
-                                                List.setAt (index - 1) ( account, amount, Incomplete ) dialogModel.transactions
+                                                dialogModel.transactions
+                                                    |> List.updateAt index
+                                                        (\( _, amount, _ ) ->
+                                                            ( account, amount, Incomplete )
+                                                        )
                                     }
                                 )
                       }
@@ -411,6 +543,29 @@ update msg model =
 
                       else
                         Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateAccountAmount index amount ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | transactions =
+                                            dialogModel.transactions
+                                                |> List.updateAt index
+                                                    (\( account, _, nameValidity ) ->
+                                                        ( account, amount, nameValidity )
+                                                    )
+                                    }
+                                )
+                      }
+                    , Cmd.none
                     )
 
                 _ ->
@@ -937,27 +1092,16 @@ addAccountOrGroupInputs ({ ownersOrMembers, account } as model) =
             List.length ownersOrMembers
     in
     nameInput model
-        ++ listInputs label "Share" UpdateOwnerOrMember "1" ownersOrMembers
+        ++ listInputs
+            label
+            "Share"
+            AddOwnerOrMemberName
+            UpdateOwnerOrMemberName
+            UpdateOwnerOrMemberShare
+            ownersOrMembers
 
 
 addSpendingInputs { description, date, dateText, datePickerModel, totalSpending, groupSpendings, transactions } =
-    let
-        remainingSpendingAmount =
-            (totalSpending |> String.toInt |> Maybe.withDefault 0)
-                - (groupSpendings
-                    |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
-                    |> List.sum
-                  )
-                |> String.fromInt
-
-        remainingTransactionAmount =
-            (totalSpending |> String.toInt |> Maybe.withDefault 0)
-                - (transactions
-                    |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
-                    |> List.sum
-                  )
-                |> String.fromInt
-    in
     [ Input.text []
         { label = Input.labelLeft [] (text "Description")
         , placeholder = Nothing
@@ -981,16 +1125,28 @@ addSpendingInputs { description, date, dateText, datePickerModel, totalSpending,
         }
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
         ([ text "Group Spendings" ]
-            ++ listInputs "Group" "Amount" UpdateGroupSpending remainingSpendingAmount groupSpendings
+            ++ listInputs
+                "Group"
+                "Amount"
+                AddGroupName
+                UpdateGroupName
+                UpdateGroupAmount
+                groupSpendings
         )
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
         ([ text "Transactions" ]
-            ++ listInputs "Account" "Amount" UpdateTransaction remainingTransactionAmount transactions
+            ++ listInputs
+                "Account"
+                "Amount"
+                AddAccountName
+                UpdateAccountName
+                UpdateAccountAmount
+                transactions
         )
     ]
 
 
-listInputs nameLabel valueLabel msg defaultValue items =
+listInputs nameLabel valueLabel addMsg updateNameMsg updateValueMsg items =
     let
         listSize =
             List.length items
@@ -1006,13 +1162,13 @@ listInputs nameLabel valueLabel msg defaultValue items =
                             |> text
                         )
                 , placeholder = Nothing
-                , onChange = flip (msg 0) defaultValue
+                , onChange = addMsg
                 , text = ""
                 }
             , Input.text []
                 { label = Input.labelLeft [] (text valueLabel)
                 , placeholder = Nothing
-                , onChange = msg 0 ""
+                , onChange = \_ -> NoOpFrontendMsg
                 , text = ""
                 }
             ]
@@ -1042,13 +1198,13 @@ listInputs nameLabel valueLabel msg defaultValue items =
                                     |> text
                                 )
                         , placeholder = Nothing
-                        , onChange = flip (msg (index + 1)) value
+                        , onChange = updateNameMsg index
                         , text = name
                         }
                     , Input.text []
                         { label = Input.labelLeft [] (text valueLabel)
                         , placeholder = Nothing
-                        , onChange = msg (index + 1) name
+                        , onChange = updateValueMsg index
                         , text = value
                         }
                     ]
