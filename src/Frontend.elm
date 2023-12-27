@@ -295,7 +295,8 @@ update msg model =
                                 (AddAccountOrGroupDialog
                                     { dialogModel
                                         | ownersOrMembers =
-                                            ( ownerOrMember, "1", Incomplete ) :: dialogModel.ownersOrMembers
+                                            dialogModel.ownersOrMembers
+                                                |> addNameInList ownerOrMember "1"
                                     }
                                 )
                       }
@@ -314,15 +315,8 @@ update msg model =
                                 (AddAccountOrGroupDialog
                                     { dialogModel
                                         | ownersOrMembers =
-                                            if index == 0 && ownerOrMember == "" then
-                                                List.drop 1 dialogModel.ownersOrMembers
-
-                                            else
-                                                dialogModel.ownersOrMembers
-                                                    |> List.updateAt index
-                                                        (\( _, share, _ ) ->
-                                                            ( ownerOrMember, share, Incomplete )
-                                                        )
+                                            dialogModel.ownersOrMembers
+                                                |> updateNameInList index ownerOrMember
                                     }
                                 )
                       }
@@ -346,10 +340,7 @@ update msg model =
                                     { dialogModel
                                         | ownersOrMembers =
                                             dialogModel.ownersOrMembers
-                                                |> List.updateAt index
-                                                    (\( ownerOrMember, _, nameValidity ) ->
-                                                        ( ownerOrMember, share, nameValidity )
-                                                    )
+                                                |> updateValueInList index share
                                     }
                                 )
                       }
@@ -408,20 +399,8 @@ update msg model =
                                 (AddSpendingDialog
                                     { dialogModel
                                         | groupSpendings =
-                                            ( group
-                                            , ((dialogModel.totalSpending
-                                                    |> String.toInt
-                                                    |> Maybe.withDefault 0
-                                               )
-                                                - (dialogModel.groupSpendings
-                                                    |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
-                                                    |> List.sum
-                                                  )
-                                              )
-                                                |> String.fromInt
-                                            , Incomplete
-                                            )
-                                                :: dialogModel.groupSpendings
+                                            dialogModel.groupSpendings
+                                                |> addAccountOrGroup dialogModel group
                                     }
                                 )
                       }
@@ -440,15 +419,8 @@ update msg model =
                                 (AddSpendingDialog
                                     { dialogModel
                                         | groupSpendings =
-                                            if index == 0 && group == "" then
-                                                List.drop 1 dialogModel.groupSpendings
-
-                                            else
-                                                dialogModel.groupSpendings
-                                                    |> List.updateAt index
-                                                        (\( _, amount, _ ) ->
-                                                            ( group, amount, Incomplete )
-                                                        )
+                                            dialogModel.groupSpendings
+                                                |> updateNameInList index group
                                     }
                                 )
                       }
@@ -472,10 +444,7 @@ update msg model =
                                     { dialogModel
                                         | groupSpendings =
                                             dialogModel.groupSpendings
-                                                |> List.updateAt index
-                                                    (\( group, _, nameValidity ) ->
-                                                        ( group, amount, nameValidity )
-                                                    )
+                                                |> updateValueInList index amount
                                     }
                                 )
                       }
@@ -494,20 +463,8 @@ update msg model =
                                 (AddSpendingDialog
                                     { dialogModel
                                         | transactions =
-                                            ( account
-                                            , ((dialogModel.totalSpending
-                                                    |> String.toInt
-                                                    |> Maybe.withDefault 0
-                                               )
-                                                - (dialogModel.transactions
-                                                    |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
-                                                    |> List.sum
-                                                  )
-                                              )
-                                                |> String.fromInt
-                                            , Incomplete
-                                            )
-                                                :: dialogModel.transactions
+                                            dialogModel.transactions
+                                                |> addAccountOrGroup dialogModel account
                                     }
                                 )
                       }
@@ -526,15 +483,8 @@ update msg model =
                                 (AddSpendingDialog
                                     { dialogModel
                                         | transactions =
-                                            if index == 0 && account == "" then
-                                                List.drop 1 dialogModel.transactions
-
-                                            else
-                                                dialogModel.transactions
-                                                    |> List.updateAt index
-                                                        (\( _, amount, _ ) ->
-                                                            ( account, amount, Incomplete )
-                                                        )
+                                            dialogModel.transactions
+                                                |> updateNameInList index account
                                     }
                                 )
                       }
@@ -558,10 +508,7 @@ update msg model =
                                     { dialogModel
                                         | transactions =
                                             dialogModel.transactions
-                                                |> List.updateAt index
-                                                    (\( account, _, nameValidity ) ->
-                                                        ( account, amount, nameValidity )
-                                                    )
+                                                |> updateValueInList index amount
                                     }
                                 )
                       }
@@ -570,6 +517,47 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+
+computeRemainder { totalSpending } list =
+    ((totalSpending
+        |> String.toInt
+        |> Maybe.withDefault 0
+     )
+        - (list
+            |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
+            |> List.sum
+          )
+    )
+        |> String.fromInt
+
+
+addAccountOrGroup model name list =
+    addNameInList name (computeRemainder model list) list
+
+
+addNameInList name defaultValue list =
+    ( name, defaultValue, Incomplete ) :: list
+
+
+updateNameInList index name list =
+    if index == 0 && name == "" then
+        List.drop 1 list
+
+    else
+        list
+            |> List.updateAt index
+                (\( _, value, _ ) ->
+                    ( name, value, Incomplete )
+                )
+
+
+updateValueInList index value list =
+    list
+        |> List.updateAt index
+            (\( name, _, nameValidity ) ->
+                ( name, value, nameValidity )
+            )
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
