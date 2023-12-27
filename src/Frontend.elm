@@ -921,6 +921,38 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        UniqueNotCompleteAccountPrefix response ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { dialogModel
+                                        | transactions =
+                                            dialogModel.transactions
+                                                |> completeToLongestCommonPrefix response
+                                    }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+
+completeToLongestCommonPrefix { prefix, longestCommonPrefix } list =
+    list
+        |> List.map
+            (\( name, value, nameValidity ) ->
+                if String.startsWith prefix name && String.startsWith name longestCommonPrefix then
+                    ( longestCommonPrefix, value, Incomplete )
+
+                else
+                    ( name, value, nameValidity )
+            )
+
 
 view : Model -> Browser.Document FrontendMsg
 view model =

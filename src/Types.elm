@@ -88,6 +88,7 @@ type ToFrontend
     | InvalidAccountPrefix String
     | UniqueAccountPrefix { prefix : String, name : String }
     | CompleteNotUniqueAccount String
+    | UniqueNotCompleteAccountPrefix { prefix : String, longestCommonPrefix : String }
 
 
 type Dialog

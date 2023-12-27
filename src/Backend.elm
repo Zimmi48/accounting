@@ -4,6 +4,7 @@ import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Html
 import Lamdera exposing (ClientId, SessionId)
+import Maybe.Extra as Maybe
 import Set exposing (Set)
 import Types exposing (..)
 
@@ -180,13 +181,55 @@ updateFromFrontend sessionId clientId msg model =
                     Lamdera.sendToFrontend clientId
                         (UniqueAccountPrefix { prefix = prefix, name = name })
 
-                _ ->
+                h :: _ ->
                     if List.member prefix matches then
                         Lamdera.sendToFrontend clientId (CompleteNotUniqueAccount prefix)
 
                     else
-                        Cmd.none
+                        let
+                            ( longestCommonPrefix, commonPrefixMatch ) =
+                                longestPrefix 0 matches
+                        in
+                        if commonPrefixMatch then
+                            Lamdera.sendToFrontend clientId
+                                (UniqueAccountPrefix
+                                    { prefix = prefix
+                                    , name = String.left longestCommonPrefix h
+                                    }
+                                )
+
+                        else if longestCommonPrefix > String.length prefix then
+                            Lamdera.sendToFrontend clientId
+                                (UniqueNotCompleteAccountPrefix
+                                    { prefix = prefix
+                                    , longestCommonPrefix =
+                                        String.left longestCommonPrefix h
+                                    }
+                                )
+
+                        else
+                            Cmd.none
             )
+
+
+longestPrefix acc strings =
+    let
+        ( heads, tails ) =
+            List.map String.uncons strings
+                |> Maybe.combine
+                |> Maybe.withDefault []
+                |> List.unzip
+    in
+    case heads of
+        [] ->
+            ( acc, True )
+
+        char :: chars ->
+            if List.all ((==) char) chars then
+                longestPrefix (acc + 1) tails
+
+            else
+                ( acc, False )
 
 
 checkValidName : Model -> String -> Bool
