@@ -214,23 +214,13 @@ update msg model =
                                     )
                                 |> Dict.fromListDedupe (+)
                                 |> Dict.map (\_ -> Amount)
-
-                        maybeYear =
-                            Maybe.map Date.year dialogModel.date
-
-                        maybeMonth =
-                            Maybe.map Date.monthNumber dialogModel.date
-
-                        maybeDay =
-                            Maybe.map Date.day dialogModel.date
-
-                        maybeTotalSpending =
-                            dialogModel.totalSpending
-                                |> String.toInt
-                                |> Maybe.map Amount
                     in
-                    case ( ( maybeYear, maybeMonth, maybeDay ), maybeTotalSpending ) of
-                        ( ( Just year, Just month, Just day ), Just totalSpending ) ->
+                    case
+                        ( dialogModel.date
+                        , String.toInt dialogModel.totalSpending
+                        )
+                    of
+                        ( Just date, Just totalSpending ) ->
                             ( { model
                                 | showDialog =
                                     Just
@@ -240,13 +230,14 @@ update msg model =
                               }
                             , Lamdera.sendToBackend
                                 (AddSpending
-                                    dialogModel.description
-                                    year
-                                    month
-                                    day
-                                    totalSpending
-                                    groupSpendings
-                                    transactions
+                                    { description = dialogModel.description
+                                    , year = Date.year date
+                                    , month = Date.monthNumber date
+                                    , day = Date.day date
+                                    , totalSpending = Amount totalSpending
+                                    , groupSpendings = groupSpendings
+                                    , transactions = transactions
+                                    }
                                 )
                             )
 
@@ -520,7 +511,7 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UniquePersonPrefix prefix name ->
+        UniquePersonPrefix { prefix, name } ->
             case model.showDialog of
                 Just (AddAccountOrGroupDialog dialogModel) ->
                     ( { model
@@ -621,7 +612,7 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UniqueGroupPrefix prefix name ->
+        UniqueGroupPrefix { prefix, name } ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -702,7 +693,7 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UniqueAccountPrefix prefix name ->
+        UniqueAccountPrefix { prefix, name } ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model

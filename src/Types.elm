@@ -57,8 +57,15 @@ type ToBackend
     | AddPerson String
     | AddAccount String (Dict String Share)
     | AddGroup String (Dict String Share)
-      -- description, year, month, day, total spending, group spendings, transactions
-    | AddSpending String Int Int Int Amount (Dict String Amount) (Dict String Amount)
+    | AddSpending
+        { description : String
+        , year : Int
+        , month : Int
+        , day : Int
+        , totalSpending : Amount
+        , groupSpendings : Dict String Amount
+        , transactions : Dict String Amount
+        }
 
 
 type BackendMsg
@@ -70,16 +77,13 @@ type ToFrontend
     | OperationSuccessful
     | NameAlreadyExists String
     | InvalidPersonPrefix String
-      -- prefix, name
-    | UniquePersonPrefix String String
+    | UniquePersonPrefix { prefix : String, name : String }
     | CompleteNotUniquePerson String
     | InvalidGroupPrefix String
-      -- prefix, name
-    | UniqueGroupPrefix String String
+    | UniqueGroupPrefix { prefix : String, name : String }
     | CompleteNotUniqueGroup String
     | InvalidAccountPrefix String
-      -- prefix, name
-    | UniqueAccountPrefix String String
+    | UniqueAccountPrefix { prefix : String, name : String }
     | CompleteNotUniqueAccount String
 
 

@@ -87,12 +87,12 @@ updateFromFrontend sessionId clientId msg model =
                 , Lamdera.sendToFrontend clientId (NameAlreadyExists name)
                 )
 
-        AddSpending description year month day amount groupSpendings transactions ->
+        AddSpending { description, year, month, day, totalSpending, groupSpendings, transactions } ->
             let
                 spending =
                     { description = description
                     , day = day
-                    , totalSpending = amount
+                    , totalSpending = totalSpending
                     , groupSpendings = groupSpendings
                     , transactions = transactions
                     }
@@ -117,7 +117,8 @@ updateFromFrontend sessionId clientId msg model =
                     Lamdera.sendToFrontend clientId (InvalidPersonPrefix prefix)
 
                 [ name ] ->
-                    Lamdera.sendToFrontend clientId (UniquePersonPrefix prefix name)
+                    Lamdera.sendToFrontend clientId
+                        (UniquePersonPrefix { prefix = prefix, name = name })
 
                 _ ->
                     if List.member prefix matches then
@@ -146,7 +147,8 @@ updateFromFrontend sessionId clientId msg model =
                     Lamdera.sendToFrontend clientId (InvalidGroupPrefix prefix)
 
                 [ name ] ->
-                    Lamdera.sendToFrontend clientId (UniqueGroupPrefix prefix name)
+                    Lamdera.sendToFrontend clientId
+                        (UniqueGroupPrefix { prefix = prefix, name = name })
 
                 _ ->
                     if List.member prefix matches then
@@ -175,7 +177,8 @@ updateFromFrontend sessionId clientId msg model =
                     Lamdera.sendToFrontend clientId (InvalidAccountPrefix prefix)
 
                 [ name ] ->
-                    Lamdera.sendToFrontend clientId (UniqueAccountPrefix prefix name)
+                    Lamdera.sendToFrontend clientId
+                        (UniqueAccountPrefix { prefix = prefix, name = name })
 
                 _ ->
                     if List.member prefix matches then
