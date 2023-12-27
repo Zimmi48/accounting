@@ -271,7 +271,7 @@ update msg model =
 
                     else
                         ( { model | showDialog = Just (AddPersonDialog { dialogModel | name = name, nameInvalid = False }) }
-                        , Lamdera.sendToBackend (CheckNoPerson name)
+                        , Lamdera.sendToBackend (CheckValidName name)
                         )
 
                 Just (AddAccountOrGroupDialog dialogModel) ->
@@ -282,11 +282,7 @@ update msg model =
 
                     else
                         ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | name = name, nameInvalid = False }) }
-                        , if dialogModel.account then
-                            Lamdera.sendToBackend (CheckNoAccount name)
-
-                          else
-                            Lamdera.sendToBackend (CheckNoGroup name)
+                        , Lamdera.sendToBackend (CheckValidName name)
                         )
 
                 Just (AddSpendingDialog dialogModel) ->
@@ -441,7 +437,7 @@ updateFromBackend msg model =
             , Cmd.none
             )
 
-        PersonAlreadyExists name ->
+        NameAlreadyExists name ->
             case model.showDialog of
                 Just (AddPersonDialog dialogModel) ->
                     if dialogModel.name == name then
@@ -452,27 +448,8 @@ updateFromBackend msg model =
                     else
                         ( model, Cmd.none )
 
-                _ ->
-                    ( model, Cmd.none )
-
-        AccountAlreadyExists name ->
-            case model.showDialog of
                 Just (AddAccountOrGroupDialog dialogModel) ->
-                    if dialogModel.name == name && dialogModel.account then
-                        ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | nameInvalid = True }) }
-                        , Cmd.none
-                        )
-
-                    else
-                        ( model, Cmd.none )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GroupAlreadyExists name ->
-            case model.showDialog of
-                Just (AddAccountOrGroupDialog dialogModel) ->
-                    if dialogModel.name == name && not dialogModel.account then
+                    if dialogModel.name == name then
                         ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | nameInvalid = True }) }
                         , Cmd.none
                         )

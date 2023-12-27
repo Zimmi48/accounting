@@ -50,31 +50,13 @@ updateFromFrontend sessionId clientId msg model =
         NoOpToBackend ->
             ( model, Cmd.none )
 
-        CheckNoPerson name ->
+        CheckValidName name ->
             ( model
-            , if Set.member name model.persons then
-                Lamdera.sendToFrontend clientId (PersonAlreadyExists name)
+            , if checkValidName model name then
+                Cmd.none
 
               else
-                Cmd.none
-            )
-
-        CheckNoAccount name ->
-            ( model
-            , if Dict.member name model.accounts then
-                Lamdera.sendToFrontend clientId (AccountAlreadyExists name)
-
-              else
-                Cmd.none
-            )
-
-        CheckNoGroup name ->
-            ( model
-            , if Dict.member name model.groups then
-                Lamdera.sendToFrontend clientId (GroupAlreadyExists name)
-
-              else
-                Cmd.none
+                Lamdera.sendToFrontend clientId (NameAlreadyExists name)
             )
 
         AddPerson person ->
@@ -175,6 +157,14 @@ updateFromFrontend sessionId clientId msg model =
                     else
                         Cmd.none
             )
+
+
+checkValidName : Model -> String -> Bool
+checkValidName model name =
+    String.length name > 0
+    && not (Set.member name model.persons)
+    && not (Dict.member name model.groups)
+    && not (Dict.member name model.accounts)
 
 
 addSpendingToYear : Int -> Spending -> Maybe Year -> Year

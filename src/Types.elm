@@ -50,9 +50,7 @@ type FrontendMsg
 
 type ToBackend
     = NoOpToBackend
-    | CheckNoPerson String
-    | CheckNoAccount String
-    | CheckNoGroup String
+    | CheckValidName String
     | AutocompletePerson String
     | AutocompleteGroup String
     | AutocompleteAccount String
@@ -70,9 +68,7 @@ type BackendMsg
 type ToFrontend
     = NoOpToFrontend
     | OperationSuccessful
-    | PersonAlreadyExists String
-    | AccountAlreadyExists String
-    | GroupAlreadyExists String
+    | NameAlreadyExists String
     | InvalidPersonPrefix String
       -- prefix, name
     | UniquePersonPrefix String String
