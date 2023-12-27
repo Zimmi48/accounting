@@ -107,109 +107,71 @@ updateFromFrontend sessionId clientId msg model =
             )
 
         AutocompletePerson prefix ->
-            let
-                matches =
-                    Set.filter (\name -> String.startsWith prefix name) model.persons
-                        |> Set.toList
-            in
             ( model
-            , case matches of
-                [] ->
-                    Lamdera.sendToFrontend clientId (InvalidPersonPrefix prefix)
-
-                [ name ] ->
-                    Lamdera.sendToFrontend clientId
-                        (UniquePersonPrefix { prefix = prefix, name = name })
-
-                _ ->
-                    if List.member prefix matches then
-                        Lamdera.sendToFrontend clientId (CompleteNotUniquePerson prefix)
-
-                    else
-                        Cmd.none
+            , Set.toList model.persons
+                |> autocomplete clientId prefix AutocompletePersonPrefix InvalidPersonPrefix
             )
 
         AutocompleteGroup prefix ->
-            let
-                matches =
-                    (model.groups
-                        |> Dict.filter (\name _ -> String.startsWith prefix name)
-                        |> Dict.keys
-                    )
-                        -- persons are automatically single-member groups
-                        ++ (model.persons
-                                |> Set.filter (\name -> String.startsWith prefix name)
-                                |> Set.toList
-                           )
-            in
             ( model
-            , case matches of
-                [] ->
-                    Lamdera.sendToFrontend clientId (InvalidGroupPrefix prefix)
-
-                [ name ] ->
-                    Lamdera.sendToFrontend clientId
-                        (UniqueGroupPrefix { prefix = prefix, name = name })
-
-                _ ->
-                    if List.member prefix matches then
-                        Lamdera.sendToFrontend clientId (CompleteNotUniqueGroup prefix)
-
-                    else
-                        Cmd.none
+            , Dict.keys model.groups
+                -- persons are automatically single-member groups
+                |> (++) (Set.toList model.persons)
+                |> autocomplete clientId prefix AutocompleteGroupPrefix InvalidGroupPrefix
             )
 
         AutocompleteAccount prefix ->
-            let
-                matches =
-                    (model.accounts
-                        |> Dict.filter (\name _ -> String.startsWith prefix name)
-                        |> Dict.keys
-                    )
-                        -- persons are automatically single-owner accounts
-                        ++ (model.persons
-                                |> Set.filter (\name -> String.startsWith prefix name)
-                                |> Set.toList
-                           )
-            in
             ( model
-            , case matches of
-                [] ->
-                    Lamdera.sendToFrontend clientId (InvalidAccountPrefix prefix)
-
-                [ name ] ->
-                    Lamdera.sendToFrontend clientId
-                        (UniqueAccountPrefix { prefix = prefix, name = name })
-
-                h :: _ ->
-                    if List.member prefix matches then
-                        Lamdera.sendToFrontend clientId (CompleteNotUniqueAccount prefix)
-
-                    else
-                        let
-                            ( longestCommonPrefix, commonPrefixMatch ) =
-                                longestPrefix 0 matches
-                        in
-                        if commonPrefixMatch then
-                            Lamdera.sendToFrontend clientId
-                                (UniqueAccountPrefix
-                                    { prefix = prefix
-                                    , name = String.left longestCommonPrefix h
-                                    }
-                                )
-
-                        else if longestCommonPrefix > String.length prefix then
-                            Lamdera.sendToFrontend clientId
-                                (UniqueNotCompleteAccountPrefix
-                                    { prefix = prefix
-                                    , longestCommonPrefix =
-                                        String.left longestCommonPrefix h
-                                    }
-                                )
-
-                        else
-                            Cmd.none
+            , Dict.keys model.accounts
+                -- persons are automatically single-owner accounts
+                |> (++) (Set.toList model.persons)
+                |> autocomplete clientId prefix AutocompleteAccountPrefix InvalidAccountPrefix
             )
+
+
+autocomplete clientId prefix autocompleteMsg invalidPrefixMsg list =
+    let
+        matches =
+            List.filter (String.startsWith prefix) list
+    in
+    case matches of
+        [] ->
+            Lamdera.sendToFrontend clientId (invalidPrefixMsg prefix)
+
+        [ name ] ->
+            Lamdera.sendToFrontend clientId
+                (autocompleteMsg
+                    { prefix = prefix
+                    , longestCommonPrefix = name
+                    , complete = True
+                    }
+                )
+
+        h :: _ ->
+            let
+                ( longestCommonPrefix, commonPrefixMatch ) =
+                    longestPrefix 0 matches
+            in
+            if commonPrefixMatch then
+                Lamdera.sendToFrontend clientId
+                    (AutocompleteAccountPrefix
+                        { prefix = prefix
+                        , longestCommonPrefix = String.left longestCommonPrefix h
+                        , complete = True
+                        }
+                    )
+
+            else if longestCommonPrefix > String.length prefix then
+                Lamdera.sendToFrontend clientId
+                    (AutocompleteAccountPrefix
+                        { prefix = prefix
+                        , longestCommonPrefix = String.left longestCommonPrefix h
+                        , complete = False
+                        }
+                    )
+
+            else
+                Cmd.none
 
 
 longestPrefix acc strings =

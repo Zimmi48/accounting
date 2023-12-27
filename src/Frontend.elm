@@ -659,14 +659,7 @@ updateFromBackend msg model =
                                     { dialogModel
                                         | ownersOrMembers =
                                             dialogModel.ownersOrMembers
-                                                |> List.map
-                                                    (\( ownerOrMember, share, nameValidity ) ->
-                                                        if String.startsWith prefix ownerOrMember then
-                                                            ( ownerOrMember, share, InvalidPrefix )
-
-                                                        else
-                                                            ( ownerOrMember, share, nameValidity )
-                                                    )
+                                                |> markInvalidPrefix prefix
                                     }
                                 )
                       }
@@ -685,7 +678,7 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UniquePersonPrefix { prefix, name } ->
+        AutocompletePersonPrefix response ->
             case model.showDialog of
                 Just (AddAccountOrGroupDialog dialogModel) ->
                     ( { model
@@ -695,14 +688,7 @@ updateFromBackend msg model =
                                     { dialogModel
                                         | ownersOrMembers =
                                             dialogModel.ownersOrMembers
-                                                |> List.map
-                                                    (\( ownerOrMember, share, nameValidity ) ->
-                                                        if String.startsWith prefix ownerOrMember then
-                                                            ( name, share, Complete )
-
-                                                        else
-                                                            ( ownerOrMember, share, nameValidity )
-                                                    )
+                                                |> completeToLongestCommonPrefix response
                                     }
                                 )
                       }
@@ -710,47 +696,21 @@ updateFromBackend msg model =
                     )
 
                 Nothing ->
-                    if String.startsWith prefix model.showSpendingFor then
-                        ( { model | showSpendingFor = name, nameValidity = Complete }
+                    if
+                        String.startsWith response.prefix model.showSpendingFor
+                            && String.startsWith model.showSpendingFor response.longestCommonPrefix
+                    then
+                        ( { model
+                            | showSpendingFor = response.longestCommonPrefix
+                            , nameValidity =
+                                if response.complete then
+                                    Complete
+
+                                else
+                                    Incomplete
+                          }
                         , Cmd.none
-                          -- TODO: request spendings for name
-                        )
-
-                    else
-                        ( model, Cmd.none )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        CompleteNotUniquePerson name ->
-            case model.showDialog of
-                Just (AddAccountOrGroupDialog dialogModel) ->
-                    ( { model
-                        | showDialog =
-                            Just
-                                (AddAccountOrGroupDialog
-                                    { dialogModel
-                                        | ownersOrMembers =
-                                            dialogModel.ownersOrMembers
-                                                |> List.map
-                                                    (\( ownerOrMember, share, nameValidity ) ->
-                                                        if ownerOrMember == name then
-                                                            ( ownerOrMember, share, Complete )
-
-                                                        else
-                                                            ( ownerOrMember, share, nameValidity )
-                                                    )
-                                    }
-                                )
-                      }
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    if model.showSpendingFor == name then
-                        ( { model | nameValidity = Complete }
-                        , Cmd.none
-                          -- TODO: request spendings for name
+                          -- TODO: request spendings for name in case it is complete
                         )
 
                     else
@@ -769,14 +729,7 @@ updateFromBackend msg model =
                                     { dialogModel
                                         | groupSpendings =
                                             dialogModel.groupSpendings
-                                                |> List.map
-                                                    (\( group, amount, nameValidity ) ->
-                                                        if String.startsWith prefix group then
-                                                            ( group, amount, InvalidPrefix )
-
-                                                        else
-                                                            ( group, amount, nameValidity )
-                                                    )
+                                                |> markInvalidPrefix prefix
                                     }
                                 )
                       }
@@ -786,7 +739,7 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UniqueGroupPrefix { prefix, name } ->
+        AutocompleteGroupPrefix response ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -796,41 +749,7 @@ updateFromBackend msg model =
                                     { dialogModel
                                         | groupSpendings =
                                             dialogModel.groupSpendings
-                                                |> List.map
-                                                    (\( group, amount, nameValidity ) ->
-                                                        if String.startsWith prefix group then
-                                                            ( name, amount, Complete )
-
-                                                        else
-                                                            ( group, amount, nameValidity )
-                                                    )
-                                    }
-                                )
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        CompleteNotUniqueGroup name ->
-            case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model
-                        | showDialog =
-                            Just
-                                (AddSpendingDialog
-                                    { dialogModel
-                                        | groupSpendings =
-                                            dialogModel.groupSpendings
-                                                |> List.map
-                                                    (\( group, amount, nameValidity ) ->
-                                                        if group == name then
-                                                            ( group, amount, Complete )
-
-                                                        else
-                                                            ( group, amount, nameValidity )
-                                                    )
+                                                |> completeToLongestCommonPrefix response
                                     }
                                 )
                       }
@@ -850,14 +769,7 @@ updateFromBackend msg model =
                                     { dialogModel
                                         | transactions =
                                             dialogModel.transactions
-                                                |> List.map
-                                                    (\( account, amount, nameValidity ) ->
-                                                        if String.startsWith prefix account then
-                                                            ( account, amount, InvalidPrefix )
-
-                                                        else
-                                                            ( account, amount, nameValidity )
-                                                    )
+                                                |> markInvalidPrefix prefix
                                     }
                                 )
                       }
@@ -867,61 +779,7 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UniqueAccountPrefix { prefix, name } ->
-            case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model
-                        | showDialog =
-                            Just
-                                (AddSpendingDialog
-                                    { dialogModel
-                                        | transactions =
-                                            dialogModel.transactions
-                                                |> List.map
-                                                    (\( account, amount, nameValidity ) ->
-                                                        if String.startsWith prefix account then
-                                                            ( name, amount, Complete )
-
-                                                        else
-                                                            ( account, amount, nameValidity )
-                                                    )
-                                    }
-                                )
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        CompleteNotUniqueAccount name ->
-            case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model
-                        | showDialog =
-                            Just
-                                (AddSpendingDialog
-                                    { dialogModel
-                                        | transactions =
-                                            dialogModel.transactions
-                                                |> List.map
-                                                    (\( account, amount, nameValidity ) ->
-                                                        if account == name then
-                                                            ( account, amount, Complete )
-
-                                                        else
-                                                            ( account, amount, nameValidity )
-                                                    )
-                                    }
-                                )
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        UniqueNotCompleteAccountPrefix response ->
+        AutocompleteAccountPrefix response ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -942,12 +800,34 @@ updateFromBackend msg model =
                     ( model, Cmd.none )
 
 
-completeToLongestCommonPrefix { prefix, longestCommonPrefix } list =
+markInvalidPrefix prefix list =
     list
         |> List.map
             (\( name, value, nameValidity ) ->
-                if String.startsWith prefix name && String.startsWith name longestCommonPrefix then
-                    ( longestCommonPrefix, value, Incomplete )
+                if String.startsWith prefix name then
+                    ( name, value, InvalidPrefix )
+
+                else
+                    ( name, value, nameValidity )
+            )
+
+
+completeToLongestCommonPrefix { prefix, longestCommonPrefix, complete } list =
+    list
+        |> List.map
+            (\( name, value, nameValidity ) ->
+                if
+                    String.startsWith prefix name
+                        && String.startsWith name longestCommonPrefix
+                then
+                    ( longestCommonPrefix
+                    , value
+                    , if complete then
+                        Complete
+
+                      else
+                        Incomplete
+                    )
 
                 else
                     ( name, value, nameValidity )

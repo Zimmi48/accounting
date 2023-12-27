@@ -80,15 +80,23 @@ type ToFrontend
     | OperationSuccessful
     | NameAlreadyExists String
     | InvalidPersonPrefix String
-    | UniquePersonPrefix { prefix : String, name : String }
-    | CompleteNotUniquePerson String
+    | AutocompletePersonPrefix
+        { prefix : String
+        , longestCommonPrefix : String
+        , complete : Bool
+        }
     | InvalidGroupPrefix String
-    | UniqueGroupPrefix { prefix : String, name : String }
-    | CompleteNotUniqueGroup String
+    | AutocompleteGroupPrefix
+        { prefix : String
+        , longestCommonPrefix : String
+        , complete : Bool
+        }
     | InvalidAccountPrefix String
-    | UniqueAccountPrefix { prefix : String, name : String }
-    | CompleteNotUniqueAccount String
-    | UniqueNotCompleteAccountPrefix { prefix : String, longestCommonPrefix : String }
+    | AutocompleteAccountPrefix
+        { prefix : String
+        , longestCommonPrefix : String
+        , complete : Bool
+        }
 
 
 type Dialog
