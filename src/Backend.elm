@@ -26,7 +26,9 @@ init : ( Model, Cmd BackendMsg )
 init =
     ( { years = Dict.empty
       , groups = Dict.empty
+      , totalGroupSpendings = Dict.empty
       , accounts = Dict.empty
+      , totalAccountTransactions = Dict.empty
       , persons = Set.empty
       }
     , Cmd.none
@@ -102,6 +104,20 @@ updateFromFrontend sessionId clientId msg model =
                 | years =
                     model.years
                         |> Dict.update year (addSpendingToYear month spending >> Just)
+                , totalGroupSpendings =
+                    spending.groupSpendings
+                        |> Dict.foldl
+                            (\key (Amount value) totalGroupSpendings ->
+                                Dict.update key (addAmount value) totalGroupSpendings
+                            )
+                            model.totalGroupSpendings
+                , totalAccountTransactions =
+                    spending.transactions
+                        |> Dict.foldl
+                            (\key (Amount value) totalAccountTransactions ->
+                                Dict.update key (addAmount value) totalAccountTransactions
+                            )
+                            model.totalAccountTransactions
               }
             , Lamdera.sendToFrontend clientId OperationSuccessful
             )
@@ -126,6 +142,54 @@ updateFromFrontend sessionId clientId msg model =
                 -- persons are automatically single-owner accounts
                 |> (++) (Set.toList model.persons)
                 |> autocomplete clientId prefix AutocompleteAccountPrefix InvalidAccountPrefix
+            )
+
+        RequestUserGroupsAndAccounts user ->
+            let
+                groups =
+                    model.groups
+                        |> Dict.filter (\_ members -> Dict.member user members)
+                        |> Dict.toList
+                        |> (::) ( user, Dict.singleton user (Share 1) )
+
+                accounts =
+                    model.accounts
+                        |> Dict.filter (\_ owners -> Dict.member user owners)
+                        |> Dict.toList
+                        |> (::) ( user, Dict.singleton user (Share 1) )
+
+                groupsWithAmounts =
+                    groups
+                        |> List.map
+                            (\( name, group ) ->
+                                ( name
+                                , group
+                                , model.totalGroupSpendings
+                                    |> Dict.get name
+                                    |> Maybe.withDefault (Amount 0)
+                                )
+                            )
+
+                accountsWithAmounts =
+                    accounts
+                        |> List.map
+                            (\( name, group ) ->
+                                ( name
+                                , group
+                                , model.totalAccountTransactions
+                                    |> Dict.get name
+                                    |> Maybe.withDefault (Amount 0)
+                                )
+                            )
+            in
+            ( model
+            , Lamdera.sendToFrontend clientId
+                (ListUserGroupsAndAccounts
+                    { user = user
+                    , groups = groupsWithAmounts
+                    , accounts = accountsWithAmounts
+                    }
+                )
             )
 
 

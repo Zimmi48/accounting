@@ -11,9 +11,9 @@ import Url exposing (Url)
 
 type alias FrontendModel =
     { showDialog : Maybe Dialog
-    , showSpendingFor : String
+    , user : String
     , nameValidity : NameValidity
-    , spendings : Maybe (List Spending)
+    , userGroupsAndAccounts : Maybe ( List ( String, Group, Amount ), List ( String, Account, Amount ) )
     , key : Key
     }
 
@@ -21,7 +21,9 @@ type alias FrontendModel =
 type alias BackendModel =
     { years : Dict Int Year
     , groups : Dict String Group
+    , totalGroupSpendings : Dict String Amount
     , accounts : Dict String Account
+    , totalAccountTransactions : Dict String Amount
     , persons : Set String
     }
 
@@ -69,6 +71,7 @@ type ToBackend
         , groupSpendings : Dict String Amount
         , transactions : Dict String Amount
         }
+    | RequestUserGroupsAndAccounts String
 
 
 type BackendMsg
@@ -96,6 +99,11 @@ type ToFrontend
         { prefix : String
         , longestCommonPrefix : String
         , complete : Bool
+        }
+    | ListUserGroupsAndAccounts
+        { user : String
+        , groups : List ( String, Group, Amount )
+        , accounts : List ( String, Account, Amount )
         }
 
 

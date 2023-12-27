@@ -44,9 +44,9 @@ app =
 init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
 init url key =
     ( { showDialog = Nothing
-      , showSpendingFor = ""
+      , user = ""
       , nameValidity = Incomplete
-      , spendings = Nothing
+      , userGroupsAndAccounts = Nothing
       , key = key
       }
     , Cmd.none
@@ -282,7 +282,11 @@ update msg model =
                     )
 
                 Nothing ->
-                    ( { model | showSpendingFor = name, nameValidity = Incomplete }
+                    ( { model
+                        | user = name
+                        , nameValidity = Incomplete
+                        , userGroupsAndAccounts = Nothing
+                      }
                     , Lamdera.sendToBackend (AutocompletePerson name)
                     )
 
@@ -599,7 +603,11 @@ updateFromBackend msg model =
 
         OperationSuccessful ->
             ( { model | showDialog = Nothing }
-            , Cmd.none
+            , if model.nameValidity == Complete then
+                Lamdera.sendToBackend (RequestUserGroupsAndAccounts model.user)
+
+              else
+                Cmd.none
             )
 
         NameAlreadyExists name ->
@@ -667,7 +675,7 @@ updateFromBackend msg model =
                     )
 
                 Nothing ->
-                    ( if String.startsWith prefix model.showSpendingFor then
+                    ( if String.startsWith prefix model.user then
                         { model | nameValidity = InvalidPrefix }
 
                       else
@@ -697,11 +705,11 @@ updateFromBackend msg model =
 
                 Nothing ->
                     if
-                        String.startsWith response.prefix model.showSpendingFor
-                            && String.startsWith model.showSpendingFor response.longestCommonPrefix
+                        String.startsWith response.prefix model.user
+                            && String.startsWith model.user response.longestCommonPrefix
                     then
                         ( { model
-                            | showSpendingFor = response.longestCommonPrefix
+                            | user = response.longestCommonPrefix
                             , nameValidity =
                                 if response.complete then
                                     Complete
@@ -709,8 +717,8 @@ updateFromBackend msg model =
                                 else
                                     Incomplete
                           }
-                        , Cmd.none
-                          -- TODO: request spendings for name in case it is complete
+                        , Lamdera.sendToBackend
+                            (RequestUserGroupsAndAccounts response.longestCommonPrefix)
                         )
 
                     else
@@ -798,6 +806,17 @@ updateFromBackend msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        ListUserGroupsAndAccounts { user, groups, accounts } ->
+            ( if model.user == user then
+                { model
+                    | userGroupsAndAccounts = Just ( groups, accounts )
+                }
+
+              else
+                model
+            , Cmd.none
+            )
 
 
 markInvalidPrefix prefix list =
@@ -918,7 +937,7 @@ view model =
                                     (canSubmitSpending dialogModel)
                     )
 
-        showSpendingForAttributes =
+        userAttributes =
             case model.nameValidity of
                 InvalidPrefix ->
                     [ Background.color red ]
@@ -932,8 +951,8 @@ view model =
         [ layout
             [ inFront (Dialog.view dialogConfig)
             ]
-            (column [ width fill ]
-                [ row [ centerX, spacing 70, padding 20 ]
+            (column [ width fill, spacing 20, padding 20 ]
+                ([ row [ centerX, spacing 70, padding 20 ]
                     [ Input.button greenButtonStyle
                         { label = text "Add Person"
                         , onPress = Just ShowAddPersonDialog
@@ -951,13 +970,29 @@ view model =
                         , onPress = Just ShowAddSpendingDialog
                         }
                     ]
-                , Input.text showSpendingForAttributes
-                    { label = Input.labelLeft [] (text "Show spending for")
+                 , Input.text userAttributes
+                    { label = Input.labelLeft [] (text "Your name:")
                     , placeholder = Nothing
                     , onChange = UpdateName
-                    , text = model.showSpendingFor
+                    , text = model.user
                     }
-                ]
+                 ]
+                    ++ (case model.userGroupsAndAccounts of
+                            Just ( groups, accounts ) ->
+                                [ column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                    [ text "Your Groups"
+                                    , viewGroupsOrAccounts model.user groups
+                                    ]
+                                , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                    [ text "Your Accounts"
+                                    , viewGroupsOrAccounts model.user accounts
+                                    ]
+                                ]
+
+                            _ ->
+                                []
+                       )
+                )
             )
         ]
     }
@@ -1210,3 +1245,59 @@ canSubmitSpending { description, date, totalSpending, groupSpendings, transactio
                 |> Maybe.map (List.all identity)
                 |> Maybe.withDefault False
            )
+
+
+viewGroupsOrAccounts user list =
+    let
+        preprocessedList =
+            list
+                |> List.map
+                    (\( name, shares, Amount totalAmount ) ->
+                        let
+                            userShare =
+                                Dict.get user shares
+                                    |> Maybe.map (\(Share share) -> share)
+                                    |> Maybe.withDefault 0
+
+                            totalShares =
+                                Dict.values shares
+                                    |> List.map (\(Share share) -> share)
+                                    |> List.sum
+
+                            userAmount =
+                                totalAmount * userShare // totalShares
+                        in
+                        { name = name
+                        , userShare = userShare
+                        , totalShares = totalShares
+                        , userAmount = userAmount
+                        , totalAmount = totalAmount
+                        }
+                    )
+    in
+    table [ Border.solid, Border.width 1, padding 20, spacing 30 ]
+        { data = preprocessedList
+        , columns =
+            [ { header = text "Name"
+              , width = fill
+              , view = \{ name } -> text name
+              }
+            , { header = text "Your share"
+              , width = fill
+              , view =
+                    \{ userShare, totalShares } ->
+                        String.fromInt userShare
+                            ++ " out of "
+                            ++ String.fromInt totalShares
+                            |> text
+              }
+            , { header = text "Total spending"
+              , width = fill
+              , view = \{ totalAmount } -> text (String.fromInt totalAmount)
+              }
+            , { header = text "Your spending"
+              , width = fill
+              , view = \{ userAmount } -> text (String.fromInt userAmount)
+              }
+            ]
+        }
