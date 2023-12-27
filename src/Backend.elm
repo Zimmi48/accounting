@@ -130,8 +130,15 @@ updateFromFrontend sessionId clientId msg model =
         AutocompleteGroup prefix ->
             let
                 matches =
-                    Dict.filter (\name _ -> String.startsWith prefix name) model.groups
+                    (model.groups
+                        |> Dict.filter (\name _ -> String.startsWith prefix name)
                         |> Dict.keys
+                    )
+                        -- persons are automatically single-member groups
+                        ++ (model.persons
+                                |> Set.filter (\name -> String.startsWith prefix name)
+                                |> Set.toList
+                           )
             in
             ( model
             , case matches of
@@ -152,8 +159,15 @@ updateFromFrontend sessionId clientId msg model =
         AutocompleteAccount prefix ->
             let
                 matches =
-                    Dict.filter (\name _ -> String.startsWith prefix name) model.accounts
+                    (model.accounts
+                        |> Dict.filter (\name _ -> String.startsWith prefix name)
                         |> Dict.keys
+                    )
+                        -- persons are automatically single-owner accounts
+                        ++ (model.persons
+                                |> Set.filter (\name -> String.startsWith prefix name)
+                                |> Set.toList
+                           )
             in
             ( model
             , case matches of
