@@ -18,6 +18,7 @@ import Html.Events exposing (..)
 import Lamdera
 import List.Extra as List
 import Maybe.Extra as Maybe
+import Regex
 import String
 import Task
 import Tuple exposing (..)
@@ -195,7 +196,7 @@ update msg model =
                                     (\( group, amount, _ ) ->
                                         ( group
                                         , amount
-                                            |> String.toInt
+                                            |> parseAmountValue
                                             |> Maybe.withDefault 0
                                         )
                                     )
@@ -208,7 +209,7 @@ update msg model =
                                     (\( account, amount, _ ) ->
                                         ( account
                                         , amount
-                                            |> String.toInt
+                                            |> parseAmountValue
                                             |> Maybe.withDefault 0
                                         )
                                     )
@@ -217,7 +218,7 @@ update msg model =
                     in
                     case
                         ( dialogModel.date
-                        , String.toInt dialogModel.totalSpending
+                        , parseAmountValue dialogModel.totalSpending
                         )
                     of
                         ( Just date, Just totalSpending ) ->
@@ -534,15 +535,16 @@ update msg model =
 
 computeRemainder { totalSpending } list =
     ((totalSpending
-        |> String.toInt
+        |> parseAmountValue
         |> Maybe.withDefault 0
      )
         - (list
-            |> List.filterMap (\( _, amount, _ ) -> amount |> String.toInt)
+            |> List.filterMap (\( _, amount, _ ) -> amount |> parseAmountValue)
             |> List.sum
           )
     )
-        |> String.fromInt
+        |> Amount
+        |> viewAmount
 
 
 addAccountOrGroup model name list =
@@ -1210,7 +1212,7 @@ canSubmitSpending { description, date, totalSpending, groupSpendings, transactio
         && String.length description
         > 0
         && (totalSpending
-                |> String.toInt
+                |> parseAmountValue
                 |> Maybe.andThen
                     (\totalSpendingInt ->
                         Maybe.combine
@@ -1219,7 +1221,7 @@ canSubmitSpending { description, date, totalSpending, groupSpendings, transactio
                                     (\( _, amount, nameValidity ) ->
                                         case nameValidity of
                                             Complete ->
-                                                String.toInt amount
+                                                parseAmountValue amount
 
                                             _ ->
                                                 Nothing
@@ -1232,7 +1234,7 @@ canSubmitSpending { description, date, totalSpending, groupSpendings, transactio
                                     (\( _, amount, nameValidity ) ->
                                         case nameValidity of
                                             Complete ->
-                                                String.toInt amount
+                                                parseAmountValue amount
 
                                             _ ->
                                                 Nothing
@@ -1270,8 +1272,8 @@ viewGroupsOrAccounts user list =
                         { name = name
                         , userShare = userShare
                         , totalShares = totalShares
-                        , userAmount = userAmount
-                        , totalAmount = totalAmount
+                        , userAmount = Amount userAmount
+                        , totalAmount = Amount totalAmount
                         }
                     )
     in
@@ -1293,11 +1295,126 @@ viewGroupsOrAccounts user list =
               }
             , { header = text "Total spending"
               , width = fill
-              , view = \{ totalAmount } -> text (String.fromInt totalAmount)
+              , view = \{ totalAmount } -> text (viewAmount totalAmount)
               }
             , { header = text "Your spending"
               , width = fill
-              , view = \{ userAmount } -> text (String.fromInt userAmount)
+              , view = \{ userAmount } -> text (viewAmount userAmount)
               }
             ]
         }
+
+
+viewAmount (Amount amount) =
+    let
+        sign =
+            if amount < 0 then
+                "-"
+
+            else
+                ""
+
+        absAmount =
+            abs amount
+    in
+    remainderBy 100 absAmount
+        |> String.fromInt
+        |> String.padLeft 2 '0'
+        |> (++) "."
+        |> (++) (absAmount // 100 |> String.fromInt)
+        |> (++) sign
+
+
+parseAmountValue : String -> Maybe Int
+parseAmountValue amount =
+    case
+        Regex.fromString "^(\\-?)([0-9]*)[.,]?([0-9]*)$"
+            |> Maybe.withDefault Regex.never
+            |> flip Regex.find amount
+            |> List.map .submatches
+    of
+        [ [ Nothing, Just integer, Nothing ] ] ->
+            String.toInt integer
+                |> Maybe.map ((*) 100)
+
+        [ [ Just "-", Just integer, Nothing ] ] ->
+            String.toInt integer
+                |> Maybe.map ((*) -100)
+
+        [ [ Nothing, Nothing, Just decimal ] ] ->
+            case String.length decimal of
+                1 ->
+                    String.toInt decimal
+                        |> Maybe.map ((*) 10)
+
+                2 ->
+                    String.toInt decimal
+
+                _ ->
+                    Nothing
+
+        [ [ Just "-", Nothing, Just decimal ] ] ->
+            case String.length decimal of
+                1 ->
+                    String.toInt decimal
+                        |> Maybe.map ((*) -10)
+
+                2 ->
+                    String.toInt decimal
+                        |> Maybe.map negate
+
+                _ ->
+                    Nothing
+
+        [ [ Nothing, Just integer, Just decimal ] ] ->
+            case String.length decimal of
+                1 ->
+                    String.toInt integer
+                        |> Maybe.map ((*) 100)
+                        |> Maybe.andThen
+                            (\integerValue ->
+                                String.toInt decimal
+                                    |> Maybe.map ((*) 10)
+                                    |> Maybe.map ((+) integerValue)
+                            )
+
+                2 ->
+                    String.toInt integer
+                        |> Maybe.map ((*) 100)
+                        |> Maybe.andThen
+                            (\integerValue ->
+                                String.toInt decimal
+                                    |> Maybe.map ((+) integerValue)
+                            )
+
+                _ ->
+                    Nothing
+
+        [ [ Just "-", Just integer, Just decimal ] ] ->
+            case String.length decimal of
+                1 ->
+                    String.toInt integer
+                        |> Maybe.map ((*) 100)
+                        |> Maybe.andThen
+                            (\integerValue ->
+                                String.toInt decimal
+                                    |> Maybe.map ((*) 10)
+                                    |> Maybe.map ((+) integerValue)
+                            )
+                        |> Maybe.map negate
+
+                2 ->
+                    String.toInt integer
+                        |> Maybe.map ((*) 100)
+                        |> Maybe.andThen
+                            (\integerValue ->
+                                String.toInt decimal
+                                    |> Maybe.map ((+) integerValue)
+                            )
+                        |> Maybe.map negate
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
