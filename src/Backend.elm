@@ -104,10 +104,8 @@ updateFromFrontend sessionId clientId msg model =
                 | years =
                     model.years
                         |> Dict.update year (addSpendingToYear month spending >> Just)
-                , totalGroupSpendings =
-                    addAmounts model.totalGroupSpendings groupSpendings
-                , totalAccountTransactions =
-                    addAmounts model.totalAccountTransactions transactions
+            , totalGroupSpendings = addToAllTotalGroupSpendings  spending model.totalGroupSpendings
+            , totalAccountTransactions = addToAllTotalAccountTransactions  spending model.totalAccountTransactions
               }
             , Lamdera.sendToFrontend clientId OperationSuccessful
             )
@@ -156,6 +154,7 @@ updateFromFrontend sessionId clientId msg model =
                                 , group
                                 , model.totalGroupSpendings
                                     |> Dict.get name
+                                    |> Maybe.andThen (.groupAmounts >> Dict.get name)
                                     |> Maybe.withDefault (Amount 0)
                                 )
                             )
@@ -168,6 +167,7 @@ updateFromFrontend sessionId clientId msg model =
                                 , group
                                 , model.totalAccountTransactions
                                     |> Dict.get name
+                                    |> Maybe.andThen (.accountAmounts >> Dict.get name)
                                     |> Maybe.withDefault (Amount 0)
                                 )
                             )
@@ -262,14 +262,14 @@ addSpendingToYear month spending maybeYear =
     case maybeYear of
         Nothing ->
             { months = Dict.singleton month (addSpendingToMonth spending Nothing)
-            , totalGroupSpendings = spending.groupSpendings
-            , totalAccountTransactions = spending.transactions
+            , totalGroupSpendings = addToAllTotalGroupSpendings  spending Dict.empty
+            , totalAccountTransactions = addToAllTotalAccountTransactions  spending Dict.empty
             }
 
         Just year ->
             { months = Dict.update month (addSpendingToMonth spending >> Just) year.months
-            , totalGroupSpendings = addAmounts year.totalGroupSpendings spending.groupSpendings
-            , totalAccountTransactions = addAmounts year.totalAccountTransactions spending.transactions
+            , totalGroupSpendings = addToAllTotalGroupSpendings  spending year.totalGroupSpendings 
+            , totalAccountTransactions = addToAllTotalAccountTransactions  spending year.totalAccountTransactions 
             }
 
 
@@ -278,12 +278,12 @@ addSpendingToMonth spending maybeMonth =
     case maybeMonth of
         Nothing ->
             { spendings = [ spending ]
-            , totalGroupSpendings = spending.groupSpendings
-            , totalAccountTransactions = spending.transactions
+            , totalGroupSpendings = addToAllTotalGroupSpendings  spending Dict.empty
+            , totalAccountTransactions = addToAllTotalAccountTransactions  spending Dict.empty
             }
 
         Just month ->
             { spendings = spending :: month.spendings
-            , totalGroupSpendings = addAmounts month.totalGroupSpendings spending.groupSpendings
-            , totalAccountTransactions = addAmounts month.totalAccountTransactions spending.transactions
+            , totalGroupSpendings = addToAllTotalGroupSpendings  spending month.totalGroupSpendings
+            , totalAccountTransactions = addToAllTotalAccountTransactions  spending month.totalAccountTransactions
             }

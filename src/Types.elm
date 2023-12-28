@@ -1,5 +1,6 @@
 module Types exposing (..)
 
+import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Date exposing (Date)
@@ -21,9 +22,9 @@ type alias FrontendModel =
 type alias BackendModel =
     { years : Dict Int Year
     , groups : Dict String Group
-    , totalGroupSpendings : Dict String Amount
+    , totalGroupSpendings : Dict String TotalSpendings
     , accounts : Dict String Account
-    , totalAccountTransactions : Dict String Amount
+    , totalAccountTransactions : Dict String TotalSpendings
     , persons : Set String
     }
 
@@ -155,15 +156,15 @@ type alias AddSpendingDialogModel =
 
 type alias Year =
     { months : Dict Int Month
-    , totalGroupSpendings : Dict String Amount
-    , totalAccountTransactions : Dict String Amount
+    , totalGroupSpendings : Dict String TotalSpendings
+    , totalAccountTransactions : Dict String TotalSpendings
     }
 
 
 type alias Month =
     { spendings : List Spending
-    , totalGroupSpendings : Dict String Amount
-    , totalAccountTransactions : Dict String Amount
+    , totalGroupSpendings : Dict String TotalSpendings
+    , totalAccountTransactions : Dict String TotalSpendings
     }
 
 
@@ -214,3 +215,65 @@ addAmounts =
         (\key (Amount value) ->
             Dict.update key (addAmount value)
         )
+
+
+type alias TotalSpendings =
+    { groupAmounts : Dict String Amount
+    , accountAmounts : Dict String Amount
+    }
+
+
+addToTotalSpendings :
+    { a | groupSpendings : Dict String Amount, transactions : Dict String Amount }
+    -> TotalSpendings
+    -> TotalSpendings
+addToTotalSpendings { groupSpendings, transactions } totalSpendings =
+    { groupAmounts = addAmounts groupSpendings totalSpendings.groupAmounts
+    , accountAmounts = addAmounts transactions totalSpendings.accountAmounts
+    }
+
+
+addToAllTotalGroupSpendings :
+    { a | groupSpendings : Dict String Amount, transactions : Dict String Amount }
+    -> Dict String TotalSpendings
+    -> Dict String TotalSpendings
+addToAllTotalGroupSpendings spendings totalGroupSpendings =
+    let
+        groupsToUpdate =
+            Dict.keys spendings.groupSpendings
+    in
+    List.foldl
+        (flip Dict.update
+            (Maybe.map (addToTotalSpendings spendings)
+                >> Maybe.withDefault
+                    { groupAmounts = spendings.groupSpendings
+                    , accountAmounts = spendings.transactions
+                    }
+                >> Just
+            )
+        )
+        totalGroupSpendings
+        groupsToUpdate
+
+
+addToAllTotalAccountTransactions :
+    { a | groupSpendings : Dict String Amount, transactions : Dict String Amount }
+    -> Dict String TotalSpendings
+    -> Dict String TotalSpendings
+addToAllTotalAccountTransactions spendings totalAccountTransactions =
+    let
+        accountsToUpdate =
+            Dict.keys spendings.transactions
+    in
+    List.foldl
+        (flip Dict.update
+            (Maybe.map (addToTotalSpendings spendings)
+                >> Maybe.withDefault
+                    { groupAmounts = spendings.groupSpendings
+                    , accountAmounts = spendings.transactions
+                    }
+                >> Just
+            )
+        )
+        totalAccountTransactions
+        accountsToUpdate
