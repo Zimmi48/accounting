@@ -543,7 +543,6 @@ computeRemainder { totalSpending } list =
             |> List.sum
           )
     )
-        |> Amount
         |> viewAmount
 
 
@@ -1270,42 +1269,51 @@ viewGroupsOrAccounts user list =
                                 totalAmount * userShare // totalShares
                         in
                         { name = name
-                        , userShare = userShare
-                        , totalShares = totalShares
-                        , userAmount = Amount userAmount
-                        , totalAmount = Amount totalAmount
+                        , share =
+                            String.fromInt userShare
+                            ++ " out of "
+                            ++ String.fromInt totalShares
+                        , totalAmount = (viewAmount totalAmount)
+                        , userAmount = userAmount
                         }
                     )
+
+        total =
+            preprocessedList
+                |> List.map .userAmount
+                |> List.sum
+                |> \totalUserAmount ->
+                    [ { name = "Total"
+                      , share = ""
+                      , totalAmount = ""
+                      , userAmount = totalUserAmount
+                      }
+                    ]
     in
     table [ Border.solid, Border.width 1, padding 20, spacing 30 ]
-        { data = preprocessedList
+        { data = preprocessedList ++ total
         , columns =
             [ { header = text "Name"
               , width = fill
-              , view = \{ name } -> text name
+              , view = .name >> text
               }
             , { header = text "Your share"
               , width = fill
-              , view =
-                    \{ userShare, totalShares } ->
-                        String.fromInt userShare
-                            ++ " out of "
-                            ++ String.fromInt totalShares
-                            |> text
+              , view = .share >> text
               }
             , { header = text "Total spending"
               , width = fill
-              , view = \{ totalAmount } -> text (viewAmount totalAmount)
+              , view = .totalAmount >> text
               }
             , { header = text "Your spending"
               , width = fill
-              , view = \{ userAmount } -> text (viewAmount userAmount)
+              , view = .userAmount >> viewAmount >> text
               }
             ]
         }
 
 
-viewAmount (Amount amount) =
+viewAmount amount =
     let
         sign =
             if amount < 0 then
