@@ -105,19 +105,9 @@ updateFromFrontend sessionId clientId msg model =
                     model.years
                         |> Dict.update year (addSpendingToYear month spending >> Just)
                 , totalGroupSpendings =
-                    spending.groupSpendings
-                        |> Dict.foldl
-                            (\key (Amount value) totalGroupSpendings ->
-                                Dict.update key (addAmount value) totalGroupSpendings
-                            )
-                            model.totalGroupSpendings
+                    addAmounts model.totalGroupSpendings groupSpendings
                 , totalAccountTransactions =
-                    spending.transactions
-                        |> Dict.foldl
-                            (\key (Amount value) totalAccountTransactions ->
-                                Dict.update key (addAmount value) totalAccountTransactions
-                            )
-                            model.totalAccountTransactions
+                    addAmounts model.totalAccountTransactions transactions
               }
             , Lamdera.sendToFrontend clientId OperationSuccessful
             )
@@ -147,16 +137,16 @@ updateFromFrontend sessionId clientId msg model =
         RequestUserGroupsAndAccounts user ->
             let
                 groups =
-                    model.groups
-                        |> Dict.filter (\_ members -> Dict.member user members)
-                        |> Dict.toList
-                        |> (::) ( user, Dict.singleton user (Share 1) )
+                    Dict.toList model.groups ++ List.map (\person -> (person, Dict.singleton person (Share 1))) (Set.toList model.persons)
+                        -- |> Dict.filter (\_ members -> Dict.member user members)
+                        -- |> Dict.toList
+                        -- |> (::) ( user, Dict.singleton user (Share 1) )
 
                 accounts =
-                    model.accounts
-                        |> Dict.filter (\_ owners -> Dict.member user owners)
-                        |> Dict.toList
-                        |> (::) ( user, Dict.singleton user (Share 1) )
+                    Dict.toList model.accounts ++ List.map (\person -> (person, Dict.singleton person (Share 1))) (Set.toList model.persons)
+                        -- |> Dict.filter (\_ owners -> Dict.member user owners)
+                        -- |> Dict.toList
+                        -- |> (::) ( user, Dict.singleton user (Share 1) )
 
                 groupsWithAmounts =
                     groups
@@ -271,30 +261,15 @@ addSpendingToYear : Int -> Spending -> Maybe Year -> Year
 addSpendingToYear month spending maybeYear =
     case maybeYear of
         Nothing ->
-            { months =
-                Dict.singleton month (addSpendingToMonth spending Nothing)
+            { months = Dict.singleton month (addSpendingToMonth spending Nothing)
             , totalGroupSpendings = spending.groupSpendings
             , totalAccountTransactions = spending.transactions
             }
 
         Just year ->
-            { months =
-                year.months
-                    |> Dict.update month (addSpendingToMonth spending >> Just)
-            , totalGroupSpendings =
-                spending.groupSpendings
-                    |> flip Dict.foldl
-                        year.totalGroupSpendings
-                        (\key (Amount value) totalGroupSpendings ->
-                            Dict.update key (addAmount value) totalGroupSpendings
-                        )
-            , totalAccountTransactions =
-                spending.transactions
-                    |> flip Dict.foldl
-                        year.totalAccountTransactions
-                        (\key (Amount value) totalAccountTransactions ->
-                            Dict.update key (addAmount value) totalAccountTransactions
-                        )
+            { months = Dict.update month (addSpendingToMonth spending >> Just) year.months
+            , totalGroupSpendings = addAmounts year.totalGroupSpendings spending.groupSpendings
+            , totalAccountTransactions = addAmounts year.totalAccountTransactions spending.transactions
             }
 
 
@@ -309,28 +284,6 @@ addSpendingToMonth spending maybeMonth =
 
         Just month ->
             { spendings = spending :: month.spendings
-            , totalGroupSpendings =
-                spending.groupSpendings
-                    |> flip Dict.foldl
-                        month.totalGroupSpendings
-                        (\key (Amount value) groupSpendings ->
-                            Dict.update key (addAmount value) groupSpendings
-                        )
-            , totalAccountTransactions =
-                spending.transactions
-                    |> flip Dict.foldl
-                        month.totalAccountTransactions
-                        (\key (Amount value) transactions ->
-                            Dict.update key (addAmount value) transactions
-                        )
+            , totalGroupSpendings = addAmounts month.totalGroupSpendings spending.groupSpendings
+            , totalAccountTransactions = addAmounts month.totalAccountTransactions spending.transactions
             }
-
-
-addAmount : Int -> Maybe Amount -> Maybe Amount
-addAmount value maybeAmount =
-    case maybeAmount of
-        Nothing ->
-            Just (Amount value)
-
-        Just (Amount amount) ->
-            Just (Amount (amount + value))

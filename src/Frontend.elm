@@ -6,7 +6,7 @@ import Browser.Navigation as Nav
 import Date
 import DatePicker
 import Dialog
-import Dict
+import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Element exposing (..)
 import Element.Background as Background
@@ -988,6 +988,12 @@ view model =
                                     [ text "Your Accounts"
                                     , viewGroupsOrAccounts model.user accounts
                                     ]
+                                , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                    [ text "Amounts due"
+                                    , personalAmountsDue groups accounts
+                                        |> Dict.toList
+                                        |> viewAmountsDue
+                                    ]
                                 ]
 
                             _ ->
@@ -1271,9 +1277,9 @@ viewGroupsOrAccounts user list =
                         { name = name
                         , share =
                             String.fromInt userShare
-                            ++ " out of "
-                            ++ String.fromInt totalShares
-                        , totalAmount = (viewAmount totalAmount)
+                                ++ " out of "
+                                ++ String.fromInt totalShares
+                        , totalAmount = viewAmount totalAmount
                         , userAmount = userAmount
                         }
                     )
@@ -1282,13 +1288,14 @@ viewGroupsOrAccounts user list =
             preprocessedList
                 |> List.map .userAmount
                 |> List.sum
-                |> \totalUserAmount ->
-                    [ { name = "Total"
-                      , share = ""
-                      , totalAmount = ""
-                      , userAmount = totalUserAmount
-                      }
-                    ]
+                |> (\totalUserAmount ->
+                        [ { name = "Total"
+                          , share = ""
+                          , totalAmount = ""
+                          , userAmount = totalUserAmount
+                          }
+                        ]
+                   )
     in
     table [ Border.solid, Border.width 1, padding 20, spacing 30 ]
         { data = preprocessedList ++ total
@@ -1308,6 +1315,35 @@ viewGroupsOrAccounts user list =
             , { header = text "Your spending"
               , width = fill
               , view = .userAmount >> viewAmount >> text
+              }
+            ]
+        }
+
+
+viewAmountsDue data =
+    table [ Border.solid, Border.width 1, padding 20, spacing 30 ]
+        { data = data
+        , columns =
+            [ { header = text "Name"
+              , width = fill
+              , view = first >> text
+              }
+            , { header = text "Due"
+              , width = fill
+              , view =
+                    second
+                        >> (\(Amount value) -> max 0 value)
+                        >> viewAmount
+                        >> text
+              }
+            , { header = text "Owed"
+              , width = fill
+              , view =
+                    second
+                        >> (\(Amount value) -> min 0 value)
+                        >> negate
+                        >> viewAmount
+                        >> text
               }
             ]
         }
@@ -1426,3 +1462,36 @@ parseAmountValue amount =
 
         _ ->
             Nothing
+
+
+personalAmounts : List ( String, Dict String Share, Amount ) -> Dict String Amount
+personalAmounts list =
+    list
+        |> List.map
+            (\( _, shares, Amount totalAmount ) ->
+                let
+                    totalShares =
+                        Dict.values shares
+                            |> List.map (\(Share share) -> share)
+                            |> List.sum
+                in
+                Dict.map
+                    (\_ (Share share) ->
+                        Amount (totalAmount * share // totalShares)
+                    )
+                    shares
+            )
+        |> List.foldl addAmounts Dict.empty
+
+
+personalAmountsDue : List ( String, Group, Amount ) -> List ( String, Account, Amount ) -> Dict String Amount
+personalAmountsDue groupSpendings transactions =
+    let
+        groupAmounts =
+            personalAmounts groupSpendings
+
+        transactionAmounts =
+            personalAmounts transactions
+                |> Dict.map (\_ (Amount amount) -> Amount -amount)
+    in
+    addAmounts groupAmounts transactionAmounts

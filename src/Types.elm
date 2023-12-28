@@ -196,3 +196,21 @@ type Share
 
 type Amount
     = Amount Int
+
+
+addAmount : Int -> Maybe Amount -> Maybe Amount
+addAmount value maybeAmount =
+    case maybeAmount of
+        Nothing ->
+            Just (Amount value)
+
+        Just (Amount amount) ->
+            Just (Amount (amount + value))
+
+
+addAmounts : Dict String Amount -> Dict String Amount -> Dict String Amount
+addAmounts =
+    Dict.foldl
+        (\key (Amount value) ->
+            Dict.update key (addAmount value)
+        )
