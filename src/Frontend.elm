@@ -47,7 +47,7 @@ init url key =
     ( { showDialog = Nothing
       , user = ""
       , nameValidity = Incomplete
-      , userGroupsAndAccounts = Nothing
+      , userGroups = Nothing
       , key = key
       }
     , Cmd.none
@@ -89,32 +89,15 @@ update msg model =
             , Cmd.none
             )
 
-        ShowAddAccountDialog ->
-            ( { model
-                | showDialog =
-                    Just
-                        (AddAccountOrGroupDialog
-                            { name = ""
-                            , nameInvalid = False
-                            , ownersOrMembers = []
-                            , submitted = False
-                            , account = True
-                            }
-                        )
-              }
-            , Cmd.none
-            )
-
         ShowAddGroupDialog ->
             ( { model
                 | showDialog =
                     Just
-                        (AddAccountOrGroupDialog
+                        (AddGroupDialog
                             { name = ""
                             , nameInvalid = False
-                            , ownersOrMembers = []
+                            , members = []
                             , submitted = False
-                            , account = False
                             }
                         )
               }
@@ -130,9 +113,9 @@ update msg model =
                             , date = Nothing
                             , dateText = ""
                             , datePickerModel = DatePicker.init
-                            , totalSpending = ""
-                            , groupSpendings = []
-                            , transactions = []
+                            , total = ""
+                            , credits = []
+                            , debits = []
                             , submitted = False
                             }
                         )
@@ -162,16 +145,16 @@ update msg model =
             case model.showDialog of
                 Just (AddPersonDialog dialogModel) ->
                     ( { model | showDialog = Just (AddPersonDialog { dialogModel | submitted = True }) }
-                    , Lamdera.sendToBackend (AddPerson dialogModel.name)
+                    , Lamdera.sendToBackend (CreatePerson dialogModel.name)
                     )
 
-                Just (AddAccountOrGroupDialog dialogModel) ->
+                Just (AddGroupDialog dialogModel) ->
                     let
-                        ownersOrMembers =
-                            dialogModel.ownersOrMembers
+                        members =
+                            dialogModel.members
                                 |> List.map
-                                    (\( ownerOrMember, share, _ ) ->
-                                        ( ownerOrMember
+                                    (\( member, share, _ ) ->
+                                        ( member
                                         , share
                                             |> String.toInt
                                             |> Maybe.withDefault 0
@@ -180,18 +163,14 @@ update msg model =
                                 |> Dict.fromListDedupe (+)
                                 |> Dict.map (\_ -> Share)
                     in
-                    ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | submitted = True }) }
-                    , if dialogModel.account then
-                        Lamdera.sendToBackend (AddAccount dialogModel.name ownersOrMembers)
-
-                      else
-                        Lamdera.sendToBackend (AddGroup dialogModel.name ownersOrMembers)
+                    ( { model | showDialog = Just (AddGroupDialog { dialogModel | submitted = True }) }
+                    , Lamdera.sendToBackend (CreateGroup dialogModel.name members)
                     )
 
                 Just (AddSpendingDialog dialogModel) ->
                     let
-                        groupSpendings =
-                            dialogModel.groupSpendings
+                        credits =
+                            dialogModel.credits
                                 |> List.map
                                     (\( group, amount, _ ) ->
                                         ( group
@@ -203,8 +182,8 @@ update msg model =
                                 |> Dict.fromListDedupe (+)
                                 |> Dict.map (\_ -> Amount)
 
-                        transactions =
-                            dialogModel.transactions
+                        debits =
+                            dialogModel.debits
                                 |> List.map
                                     (\( account, amount, _ ) ->
                                         ( account
@@ -218,10 +197,10 @@ update msg model =
                     in
                     case
                         ( dialogModel.date
-                        , parseAmountValue dialogModel.totalSpending
+                        , parseAmountValue dialogModel.total
                         )
                     of
-                        ( Just date, Just totalSpending ) ->
+                        ( Just date, Just total ) ->
                             ( { model
                                 | showDialog =
                                     Just
@@ -230,14 +209,14 @@ update msg model =
                                         )
                               }
                             , Lamdera.sendToBackend
-                                (AddSpending
+                                (CreateSpending
                                     { description = dialogModel.description
                                     , year = Date.year date
                                     , month = Date.monthNumber date
                                     , day = Date.day date
-                                    , totalSpending = Amount totalSpending
-                                    , groupSpendings = groupSpendings
-                                    , transactions = transactions
+                                    , total = Amount total
+                                    , credits = credits
+                                    , debits = debits
                                     }
                                 )
                             )
@@ -266,14 +245,14 @@ update msg model =
                         , Lamdera.sendToBackend (CheckValidName name)
                         )
 
-                Just (AddAccountOrGroupDialog dialogModel) ->
+                Just (AddGroupDialog dialogModel) ->
                     if name == "" then
-                        ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | name = "", nameInvalid = True }) }
+                        ( { model | showDialog = Just (AddGroupDialog { dialogModel | name = "", nameInvalid = True }) }
                         , Cmd.none
                         )
 
                     else
-                        ( { model | showDialog = Just (AddAccountOrGroupDialog { dialogModel | name = name, nameInvalid = False }) }
+                        ( { model | showDialog = Just (AddGroupDialog { dialogModel | name = name, nameInvalid = False }) }
                         , Lamdera.sendToBackend (CheckValidName name)
                         )
 
@@ -286,50 +265,50 @@ update msg model =
                     ( { model
                         | user = name
                         , nameValidity = Incomplete
-                        , userGroupsAndAccounts = Nothing
+                        , userGroups = Nothing
                       }
                     , Lamdera.sendToBackend (AutocompletePerson name)
                     )
 
-        AddOwnerOrMemberName ownerOrMember ->
+        AddMember member ->
             case model.showDialog of
-                Just (AddAccountOrGroupDialog dialogModel) ->
+                Just (AddGroupDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddAccountOrGroupDialog
+                                (AddGroupDialog
                                     { dialogModel
-                                        | ownersOrMembers =
-                                            dialogModel.ownersOrMembers
-                                                |> addNameInList ownerOrMember "1"
+                                        | members =
+                                            dialogModel.members
+                                                |> addNameInList member "1"
                                     }
                                 )
                       }
-                    , Lamdera.sendToBackend (AutocompletePerson ownerOrMember)
+                    , Lamdera.sendToBackend (AutocompletePerson member)
                     )
 
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateOwnerOrMemberName index ownerOrMember ->
+        UpdateMember index member ->
             case model.showDialog of
-                Just (AddAccountOrGroupDialog dialogModel) ->
+                Just (AddGroupDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddAccountOrGroupDialog
+                                (AddGroupDialog
                                     { dialogModel
-                                        | ownersOrMembers =
-                                            dialogModel.ownersOrMembers
+                                        | members =
+                                            dialogModel.members
                                                 |> updateNameInList
                                                     index
-                                                    ownerOrMember
+                                                    member
                                                     (\_ -> "1")
                                     }
                                 )
                       }
-                    , if String.length ownerOrMember > 0 then
-                        Lamdera.sendToBackend (AutocompletePerson ownerOrMember)
+                    , if String.length member > 0 then
+                        Lamdera.sendToBackend (AutocompletePerson member)
 
                       else
                         Cmd.none
@@ -338,16 +317,16 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateOwnerOrMemberShare index share ->
+        UpdateShare index share ->
             case model.showDialog of
-                Just (AddAccountOrGroupDialog dialogModel) ->
+                Just (AddGroupDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddAccountOrGroupDialog
+                                (AddGroupDialog
                                     { dialogModel
-                                        | ownersOrMembers =
-                                            dialogModel.ownersOrMembers
+                                        | members =
+                                            dialogModel.members
                                                 |> updateValueInList index share
                                     }
                                 )
@@ -358,10 +337,10 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateTotalSpending totalSpending ->
+        UpdateTotal total ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddSpendingDialog { dialogModel | totalSpending = totalSpending }) }
+                    ( { model | showDialog = Just (AddSpendingDialog { dialogModel | total = total }) }
                     , Cmd.none
                     )
 
@@ -398,7 +377,7 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        AddGroupName group ->
+        AddCreditor group ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -406,9 +385,9 @@ update msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | groupSpendings =
-                                            dialogModel.groupSpendings
-                                                |> addAccountOrGroup dialogModel group
+                                        | credits =
+                                            dialogModel.credits
+                                                |> addGroup dialogModel group
                                     }
                                 )
                       }
@@ -418,7 +397,7 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateGroupName index group ->
+        UpdateCreditor index group ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -426,8 +405,8 @@ update msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | groupSpendings =
-                                            dialogModel.groupSpendings
+                                        | credits =
+                                            dialogModel.credits
                                                 |> updateNameInList
                                                     index
                                                     group
@@ -445,7 +424,7 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateGroupAmount index amount ->
+        UpdateCredit index amount ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -453,8 +432,8 @@ update msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | groupSpendings =
-                                            dialogModel.groupSpendings
+                                        | credits =
+                                            dialogModel.credits
                                                 |> updateValueInList index amount
                                     }
                                 )
@@ -465,7 +444,7 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        AddAccountName account ->
+        AddDebitor group ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -473,19 +452,19 @@ update msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | transactions =
-                                            dialogModel.transactions
-                                                |> addAccountOrGroup dialogModel account
+                                        | debits =
+                                            dialogModel.debits
+                                                |> addGroup dialogModel group
                                     }
                                 )
                       }
-                    , Lamdera.sendToBackend (AutocompleteAccount account)
+                    , Lamdera.sendToBackend (AutocompleteGroup group)
                     )
 
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateAccountName index account ->
+        UpdateDebitor index group ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -493,17 +472,17 @@ update msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | transactions =
-                                            dialogModel.transactions
+                                        | debits =
+                                            dialogModel.debits
                                                 |> updateNameInList
                                                     index
-                                                    account
+                                                    group
                                                     (computeRemainder dialogModel)
                                     }
                                 )
                       }
-                    , if String.length account > 0 then
-                        Lamdera.sendToBackend (AutocompleteAccount account)
+                    , if String.length group > 0 then
+                        Lamdera.sendToBackend (AutocompleteGroup group)
 
                       else
                         Cmd.none
@@ -512,7 +491,7 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateAccountAmount index amount ->
+        UpdateDebit index amount ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
@@ -520,8 +499,8 @@ update msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | transactions =
-                                            dialogModel.transactions
+                                        | debits =
+                                            dialogModel.debits
                                                 |> updateValueInList index amount
                                     }
                                 )
@@ -533,8 +512,8 @@ update msg model =
                     ( model, Cmd.none )
 
 
-computeRemainder { totalSpending } list =
-    ((totalSpending
+computeRemainder { total } list =
+    ((total
         |> parseAmountValue
         |> Maybe.withDefault 0
      )
@@ -546,7 +525,7 @@ computeRemainder { totalSpending } list =
         |> viewAmount
 
 
-addAccountOrGroup model name list =
+addGroup model name list =
     addNameInList name (computeRemainder model list) list
 
 
@@ -634,7 +613,7 @@ updateFromBackend msg model =
                     else
                         ( model, Cmd.none )
 
-                Just (AddAccountOrGroupDialog dialogModel) ->
+                Just (AddGroupDialog dialogModel) ->
                     if dialogModel.name == name then
                         -- we reset submitted to False because this can be
                         -- an error message we get from the backend in case
@@ -642,7 +621,7 @@ updateFromBackend msg model =
                         ( { model
                             | showDialog =
                                 Just
-                                    (AddAccountOrGroupDialog
+                                    (AddGroupDialog
                                         { dialogModel
                                             | nameInvalid = True
                                             , submitted = False
@@ -660,14 +639,14 @@ updateFromBackend msg model =
 
         InvalidPersonPrefix prefix ->
             case model.showDialog of
-                Just (AddAccountOrGroupDialog dialogModel) ->
+                Just (AddGroupDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddAccountOrGroupDialog
+                                (AddGroupDialog
                                     { dialogModel
-                                        | ownersOrMembers =
-                                            dialogModel.ownersOrMembers
+                                        | members =
+                                            dialogModel.members
                                                 |> markInvalidPrefix prefix
                                     }
                                 )
@@ -689,14 +668,14 @@ updateFromBackend msg model =
 
         AutocompletePersonPrefix response ->
             case model.showDialog of
-                Just (AddAccountOrGroupDialog dialogModel) ->
+                Just (AddGroupDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddAccountOrGroupDialog
+                                (AddGroupDialog
                                     { dialogModel
-                                        | ownersOrMembers =
-                                            dialogModel.ownersOrMembers
+                                        | members =
+                                            dialogModel.members
                                                 |> completeToLongestCommonPrefix response
                                     }
                                 )
@@ -736,8 +715,11 @@ updateFromBackend msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | groupSpendings =
-                                            dialogModel.groupSpendings
+                                        | credits =
+                                            dialogModel.credits
+                                                |> markInvalidPrefix prefix
+                                        , debits =
+                                            dialogModel.debits
                                                 |> markInvalidPrefix prefix
                                     }
                                 )
@@ -756,8 +738,11 @@ updateFromBackend msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | groupSpendings =
-                                            dialogModel.groupSpendings
+                                        | credits =
+                                            dialogModel.credits
+                                                |> completeToLongestCommonPrefix response
+                                        , debits =
+                                            dialogModel.debits
                                                 |> completeToLongestCommonPrefix response
                                     }
                                 )
@@ -768,50 +753,14 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        InvalidAccountPrefix prefix ->
-            case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model
-                        | showDialog =
-                            Just
-                                (AddSpendingDialog
-                                    { dialogModel
-                                        | transactions =
-                                            dialogModel.transactions
-                                                |> markInvalidPrefix prefix
-                                    }
-                                )
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        AutocompleteAccountPrefix response ->
-            case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model
-                        | showDialog =
-                            Just
-                                (AddSpendingDialog
-                                    { dialogModel
-                                        | transactions =
-                                            dialogModel.transactions
-                                                |> completeToLongestCommonPrefix response
-                                    }
-                                )
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        ListUserGroupsAndAccounts { user, groups, accounts } ->
+        ListUserGroups { user, debitors, creditors } ->
             ( if model.user == user then
                 { model
-                    | userGroupsAndAccounts = Just ( groups, accounts )
+                    | userGroups =
+                        Just
+                            { debitors = debitors
+                            , creditors = creditors
+                            }
                 }
 
               else
@@ -919,18 +868,14 @@ view model =
                                     (nameInput dialogModel)
                                     (canSubmitPerson dialogModel)
 
-                            AddAccountOrGroupDialog dialogModel ->
+                            AddGroupDialog dialogModel ->
                                 let
                                     label =
-                                        if dialogModel.account then
-                                            "Add Account"
-
-                                        else
-                                            "Add Group"
+                                        "Add Group / Account"
                                 in
                                 config label
-                                    (addAccountOrGroupInputs dialogModel)
-                                    (canSubmitAccountOrGroup dialogModel)
+                                    (addGroupInputs dialogModel)
+                                    (canSubmitGroup dialogModel)
 
                             AddSpendingDialog dialogModel ->
                                 config "Add Spending"
@@ -959,11 +904,7 @@ view model =
                         , onPress = Just ShowAddPersonDialog
                         }
                     , Input.button greenButtonStyle
-                        { label = text "Add Account"
-                        , onPress = Just ShowAddAccountDialog
-                        }
-                    , Input.button greenButtonStyle
-                        { label = text "Add Group"
+                        { label = text "Add Group / Account"
                         , onPress = Just ShowAddGroupDialog
                         }
                     , Input.button greenButtonStyle
@@ -978,19 +919,19 @@ view model =
                     , text = model.user
                     }
                  ]
-                    ++ (case model.userGroupsAndAccounts of
-                            Just ( groups, accounts ) ->
+                    ++ (case model.userGroups of
+                            Just { debitors, creditors } ->
                                 [ column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                    [ text "Your Groups"
-                                    , viewGroupsOrAccounts model.user groups
+                                    [ text "Your Debitor Groups"
+                                    , viewGroups model.user debitors
                                     ]
                                 , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                    [ text "Your Accounts"
-                                    , viewGroupsOrAccounts model.user accounts
+                                    [ text "Your Creditor Groups"
+                                    , viewGroups model.user creditors
                                     ]
                                 , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
                                     [ text "Amounts due"
-                                    , personalAmountsDue groups accounts
+                                    , personalAmountsDue debitors creditors
                                         |> Dict.toList
                                         |> viewAmountsDue
                                     ]
@@ -1052,29 +993,22 @@ nameInput { name, nameInvalid } =
     ]
 
 
-addAccountOrGroupInputs ({ ownersOrMembers, account } as model) =
+addGroupInputs ({ members } as model) =
     let
-        label =
-            if account then
-                "Owner"
-
-            else
-                "Member"
-
-        nbOwnersOrMembers =
-            List.length ownersOrMembers
+        nbMembers =
+            List.length members
     in
     nameInput model
         ++ listInputs
-            label
+            "Member / Owner"
             "Share"
-            AddOwnerOrMemberName
-            UpdateOwnerOrMemberName
-            UpdateOwnerOrMemberShare
-            ownersOrMembers
+            AddMember
+            UpdateMember
+            UpdateShare
+            members
 
 
-addSpendingInputs { description, date, dateText, datePickerModel, totalSpending, groupSpendings, transactions } =
+addSpendingInputs { description, date, dateText, datePickerModel, total, credits, debits } =
     [ Input.text []
         { label = Input.labelLeft [] (text "Description")
         , placeholder = Nothing
@@ -1091,30 +1025,30 @@ addSpendingInputs { description, date, dateText, datePickerModel, totalSpending,
         , model = datePickerModel
         }
     , Input.text []
-        { label = Input.labelLeft [] (text "Total Spending")
+        { label = Input.labelLeft [] (text "Total")
         , placeholder = Nothing
-        , onChange = UpdateTotalSpending
-        , text = totalSpending
+        , onChange = UpdateTotal
+        , text = total
         }
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-        ([ text "Group Spendings" ]
+        ([ text "Debitors" ]
             ++ listInputs
-                "Group"
+                "Debitor"
                 "Amount"
-                AddGroupName
-                UpdateGroupName
-                UpdateGroupAmount
-                groupSpendings
+                AddDebitor
+                UpdateDebitor
+                UpdateDebit
+                debits
         )
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-        ([ text "Transactions" ]
+        ([ text "Creditors" ]
             ++ listInputs
-                "Account"
+                "Creditor"
                 "Amount"
-                AddAccountName
-                UpdateAccountName
-                UpdateAccountAmount
-                transactions
+                AddCreditor
+                UpdateCreditor
+                UpdateCredit
+                credits
         )
     ]
 
@@ -1190,12 +1124,12 @@ canSubmitPerson { name, nameInvalid, submitted } =
     not submitted && not nameInvalid && String.length name > 0
 
 
-canSubmitAccountOrGroup { name, nameInvalid, ownersOrMembers, submitted } =
+canSubmitGroup { name, nameInvalid, members, submitted } =
     not submitted
         && not nameInvalid
         && String.length name
         > 0
-        && (ownersOrMembers
+        && (members
                 |> List.map
                     (\( _, share, nameValidity ) ->
                         case nameValidity of
@@ -1211,17 +1145,17 @@ canSubmitAccountOrGroup { name, nameInvalid, ownersOrMembers, submitted } =
            )
 
 
-canSubmitSpending { description, date, totalSpending, groupSpendings, transactions, submitted } =
+canSubmitSpending { description, date, total, credits, debits, submitted } =
     not submitted
         && Maybe.isJust date
         && String.length description
         > 0
-        && (totalSpending
+        && (total
                 |> parseAmountValue
                 |> Maybe.andThen
-                    (\totalSpendingInt ->
+                    (\totalInt ->
                         Maybe.combine
-                            [ groupSpendings
+                            [ credits
                                 |> List.map
                                     (\( _, amount, nameValidity ) ->
                                         case nameValidity of
@@ -1233,8 +1167,8 @@ canSubmitSpending { description, date, totalSpending, groupSpendings, transactio
                                     )
                                 |> Maybe.combine
                                 |> Maybe.map List.sum
-                                |> Maybe.map ((==) totalSpendingInt)
-                            , transactions
+                                |> Maybe.map ((==) totalInt)
+                            , debits
                                 |> List.map
                                     (\( _, amount, nameValidity ) ->
                                         case nameValidity of
@@ -1246,7 +1180,7 @@ canSubmitSpending { description, date, totalSpending, groupSpendings, transactio
                                     )
                                 |> Maybe.combine
                                 |> Maybe.map List.sum
-                                |> Maybe.map ((==) totalSpendingInt)
+                                |> Maybe.map ((==) totalInt)
                             ]
                     )
                 |> Maybe.map (List.all identity)
@@ -1254,7 +1188,7 @@ canSubmitSpending { description, date, totalSpending, groupSpendings, transactio
            )
 
 
-viewGroupsOrAccounts user list =
+viewGroups user list =
     let
         preprocessedList =
             list
@@ -1464,7 +1398,7 @@ parseAmountValue amount =
             Nothing
 
 
-personalAmounts : List ( String, Dict String Share, Amount ) -> Dict String Amount
+personalAmounts : List ( String, Group, Amount ) -> Dict String Amount
 personalAmounts list =
     list
         |> List.map
@@ -1484,14 +1418,14 @@ personalAmounts list =
         |> List.foldl addAmounts Dict.empty
 
 
-personalAmountsDue : List ( String, Group, Amount ) -> List ( String, Account, Amount ) -> Dict String Amount
-personalAmountsDue groupSpendings transactions =
+personalAmountsDue : List ( String, Group, Amount ) -> List ( String, Group, Amount ) -> Dict String Amount
+personalAmountsDue debitorGroups creditorGroups =
     let
-        groupAmounts =
-            personalAmounts groupSpendings
+        debits =
+            personalAmounts debitorGroups
 
-        transactionAmounts =
-            personalAmounts transactions
+        credits =
+            personalAmounts creditorGroups
                 |> Dict.map (\_ (Amount amount) -> Amount -amount)
     in
-    addAmounts groupAmounts transactionAmounts
+    addAmounts debits credits

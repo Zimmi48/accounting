@@ -14,7 +14,11 @@ type alias FrontendModel =
     { showDialog : Maybe Dialog
     , user : String
     , nameValidity : NameValidity
-    , userGroupsAndAccounts : Maybe ( List ( String, Group, Amount ), List ( String, Account, Amount ) )
+    , userGroups :
+        Maybe
+            { debitors : List ( String, Group, Amount )
+            , creditors : List ( String, Group, Amount )
+            }
     , key : Key
     }
 
@@ -22,9 +26,7 @@ type alias FrontendModel =
 type alias BackendModel =
     { years : Dict Int Year
     , groups : Dict String Group
-    , totalGroupSpendings : Dict String TotalSpendings
-    , accounts : Dict String Account
-    , totalAccountTransactions : Dict String TotalSpendings
+    , totalGroupCredits : Dict String (Dict String Amount)
     , persons : Set String
     }
 
@@ -34,24 +36,23 @@ type FrontendMsg
     | UrlChanged Url
     | NoOpFrontendMsg
     | ShowAddPersonDialog
-    | ShowAddAccountDialog
     | ShowAddGroupDialog
     | ShowAddSpendingDialog
     | SetToday Date
     | Submit
     | Cancel
     | UpdateName String
-    | AddOwnerOrMemberName String
-    | UpdateOwnerOrMemberName Int String
-    | UpdateOwnerOrMemberShare Int String
+    | AddMember String
+    | UpdateMember Int String
+    | UpdateShare Int String
     | ChangeDatePicker DatePicker.ChangeEvent
-    | UpdateTotalSpending String
-    | AddGroupName String
-    | UpdateGroupName Int String
-    | UpdateGroupAmount Int String
-    | AddAccountName String
-    | UpdateAccountName Int String
-    | UpdateAccountAmount Int String
+    | UpdateTotal String
+    | AddCreditor String
+    | UpdateCreditor Int String
+    | UpdateCredit Int String
+    | AddDebitor String
+    | UpdateDebitor Int String
+    | UpdateDebit Int String
 
 
 type ToBackend
@@ -59,18 +60,16 @@ type ToBackend
     | CheckValidName String
     | AutocompletePerson String
     | AutocompleteGroup String
-    | AutocompleteAccount String
-    | AddPerson String
-    | AddAccount String (Dict String Share)
-    | AddGroup String (Dict String Share)
-    | AddSpending
+    | CreatePerson String
+    | CreateGroup String (Dict String Share)
+    | CreateSpending
         { description : String
         , year : Int
         , month : Int
         , day : Int
-        , totalSpending : Amount
-        , groupSpendings : Dict String Amount
-        , transactions : Dict String Amount
+        , total : Amount
+        , credits : Dict String Amount
+        , debits : Dict String Amount
         }
     | RequestUserGroupsAndAccounts String
 
@@ -95,22 +94,16 @@ type ToFrontend
         , longestCommonPrefix : String
         , complete : Bool
         }
-    | InvalidAccountPrefix String
-    | AutocompleteAccountPrefix
-        { prefix : String
-        , longestCommonPrefix : String
-        , complete : Bool
-        }
-    | ListUserGroupsAndAccounts
+    | ListUserGroups
         { user : String
-        , groups : List ( String, Group, Amount )
-        , accounts : List ( String, Account, Amount )
+        , debitors : List ( String, Group, Amount )
+        , creditors : List ( String, Account, Amount )
         }
 
 
 type Dialog
     = AddPersonDialog AddPersonDialogModel
-    | AddAccountOrGroupDialog AddAccountOrGroupDialogModel
+    | AddGroupDialog AddGroupDialogModel
     | AddSpendingDialog AddSpendingDialogModel
 
 
@@ -121,14 +114,13 @@ type alias AddPersonDialogModel =
     }
 
 
-type alias AddAccountOrGroupDialogModel =
+type alias AddGroupDialogModel =
     { name : String
     , nameInvalid : Bool
 
     -- person name, share, name validity
-    , ownersOrMembers : List ( String, String, NameValidity )
+    , members : List ( String, String, NameValidity )
     , submitted : Bool
-    , account : Bool
     }
 
 
@@ -143,28 +135,26 @@ type alias AddSpendingDialogModel =
     , date : Maybe Date
     , dateText : String
     , datePickerModel : DatePicker.Model
-    , totalSpending : String
+    , total : String
 
     -- group name, amount, name validity
-    , groupSpendings : List ( String, String, NameValidity )
+    , credits : List ( String, String, NameValidity )
 
-    -- account name, amount, name validity
-    , transactions : List ( String, String, NameValidity )
+    -- group name, amount, name validity
+    , debits : List ( String, String, NameValidity )
     , submitted : Bool
     }
 
 
 type alias Year =
     { months : Dict Int Month
-    , totalGroupSpendings : Dict String TotalSpendings
-    , totalAccountTransactions : Dict String TotalSpendings
+    , totalGroupCredits : Dict String (Dict String Amount)
     }
 
 
 type alias Month =
     { spendings : List Spending
-    , totalGroupSpendings : Dict String TotalSpendings
-    , totalAccountTransactions : Dict String TotalSpendings
+    , totalGroupCredits : Dict String (Dict String Amount)
     }
 
 
@@ -172,14 +162,11 @@ type alias Spending =
     { description : String
     , day : Int
 
-    -- total amount spent on this item
-    , totalSpending : Amount
+    -- total amount of the transaction
+    , total : Amount
 
-    -- associates each group with the shared spending in this item
-    , groupSpendings : Dict String Amount
-
-    -- associates each account with the amount spent on this item
-    , transactions : Dict String Amount
+    -- associates each group with an amount (credit = positive or debit = negative) in this transaction
+    , groupCredits : Dict String Amount
     }
 
 
@@ -217,63 +204,21 @@ addAmounts =
         )
 
 
-type alias TotalSpendings =
-    { groupAmounts : Dict String Amount
-    , accountAmounts : Dict String Amount
-    }
-
-
-addToTotalSpendings :
-    { a | groupSpendings : Dict String Amount, transactions : Dict String Amount }
-    -> TotalSpendings
-    -> TotalSpendings
-addToTotalSpendings { groupSpendings, transactions } totalSpendings =
-    { groupAmounts = addAmounts groupSpendings totalSpendings.groupAmounts
-    , accountAmounts = addAmounts transactions totalSpendings.accountAmounts
-    }
-
-
 addToAllTotalGroupSpendings :
-    { a | groupSpendings : Dict String Amount, transactions : Dict String Amount }
-    -> Dict String TotalSpendings
-    -> Dict String TotalSpendings
-addToAllTotalGroupSpendings spendings totalGroupSpendings =
+    Dict String Amount
+    -> Dict String (Dict String Amount)
+    -> Dict String (Dict String Amount)
+addToAllTotalGroupSpendings groupCredits totalGroupCredits =
     let
         groupsToUpdate =
-            Dict.keys spendings.groupSpendings
+            Dict.keys groupCredits
     in
     List.foldl
         (flip Dict.update
-            (Maybe.map (addToTotalSpendings spendings)
-                >> Maybe.withDefault
-                    { groupAmounts = spendings.groupSpendings
-                    , accountAmounts = spendings.transactions
-                    }
+            (Maybe.map (addAmounts groupCredits)
+                >> Maybe.withDefault groupCredits
                 >> Just
             )
         )
-        totalGroupSpendings
+        totalGroupCredits
         groupsToUpdate
-
-
-addToAllTotalAccountTransactions :
-    { a | groupSpendings : Dict String Amount, transactions : Dict String Amount }
-    -> Dict String TotalSpendings
-    -> Dict String TotalSpendings
-addToAllTotalAccountTransactions spendings totalAccountTransactions =
-    let
-        accountsToUpdate =
-            Dict.keys spendings.transactions
-    in
-    List.foldl
-        (flip Dict.update
-            (Maybe.map (addToTotalSpendings spendings)
-                >> Maybe.withDefault
-                    { groupAmounts = spendings.groupSpendings
-                    , accountAmounts = spendings.transactions
-                    }
-                >> Just
-            )
-        )
-        totalAccountTransactions
-        accountsToUpdate
