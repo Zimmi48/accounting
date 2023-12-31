@@ -267,7 +267,11 @@ update msg model =
                         , nameValidity = Incomplete
                         , userGroups = Nothing
                       }
-                    , Lamdera.sendToBackend (AutocompletePerson name)
+                    , if String.length name > 0 then
+                        Lamdera.sendToBackend (AutocompletePerson name)
+
+                      else
+                        Cmd.none
                     )
 
         AddMember member ->
