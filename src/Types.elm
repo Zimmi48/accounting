@@ -26,6 +26,9 @@ type alias FrontendModel =
 type alias BackendModel =
     { years : Dict Int Year
     , groups : Dict String Group
+
+    -- person set -> group -> amount
+    -- could be renamed to aggregatedSpendings
     , totalGroupCredits : Dict String (Dict String Amount)
     , persons : Dict String Person
     , nextPersonId : Int
@@ -98,7 +101,7 @@ type ToFrontend
     | ListUserGroups
         { user : String
         , debitors : List ( String, Group, Amount )
-        , creditors : List ( String, Account, Amount )
+        , creditors : List ( String, Group, Amount )
         }
 
 
@@ -177,10 +180,6 @@ type alias Spending =
     }
 
 
-type alias Account =
-    Dict String Share
-
-
 type alias Group =
     Dict String Share
 
@@ -209,23 +208,3 @@ addAmounts =
         (\key (Amount value) ->
             Dict.update key (addAmount value)
         )
-
-
-addToAllTotalGroupSpendings :
-    Dict String Amount
-    -> Dict String (Dict String Amount)
-    -> Dict String (Dict String Amount)
-addToAllTotalGroupSpendings groupCredits totalGroupCredits =
-    let
-        groupsToUpdate =
-            Dict.keys groupCredits
-    in
-    List.foldl
-        (flip Dict.update
-            (Maybe.map (addAmounts groupCredits)
-                >> Maybe.withDefault groupCredits
-                >> Just
-            )
-        )
-        totalGroupCredits
-        groupsToUpdate

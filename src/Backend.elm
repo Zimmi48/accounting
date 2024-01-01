@@ -88,6 +88,23 @@ updateFromFrontend sessionId clientId msg model =
 
         CreateSpending { description, year, month, day, total, credits, debits } ->
             let
+                groupMembers =
+                    (Dict.keys credits ++ Dict.keys debits)
+                        |> List.map
+                            (\group ->
+                                Dict.get group model.groups
+                                    |> Maybe.map Dict.keys
+                                    |> Maybe.withDefault [ group ]
+                            )
+                        |> List.concat
+                        |> Set.fromList
+
+                groupMembersKey =
+                    Set.toList groupMembers
+                        |> List.filterMap (flip Dict.get model.persons)
+                        |> List.map (.id >> String.fromInt)
+                        |> String.join ","
+
                 spending =
                     { description = description
                     , day = day
@@ -101,9 +118,23 @@ updateFromFrontend sessionId clientId msg model =
             ( { model
                 | years =
                     model.years
-                        |> Dict.update year (addSpendingToYear month spending >> Just)
+                        |> Dict.update year (addSpendingToYear month groupMembersKey spending >> Just)
                 , totalGroupCredits =
-                    addToAllTotalGroupSpendings spending.groupCredits model.totalGroupCredits
+                    model.totalGroupCredits
+                        |> addToTotalGroupCredits groupMembersKey spending
+                , persons =
+                    Dict.map
+                        (\name person ->
+                            if Set.member name groupMembers then
+                                { person
+                                    | belongsTo =
+                                        Set.insert groupMembersKey person.belongsTo
+                                }
+
+                            else
+                                person
+                        )
+                        model.persons
               }
             , Lamdera.sendToFrontend clientId OperationSuccessful
             )
@@ -123,43 +154,67 @@ updateFromFrontend sessionId clientId msg model =
             )
 
         RequestUserGroupsAndAccounts user ->
-            let
-                groups =
-                    model.groups
-                        |> Dict.filter (\_ members -> Dict.member user members)
-                        |> Dict.toList
-                        |> (::) ( user, Dict.singleton user (Share 1) )
+            case Dict.get user model.persons of
+                Nothing ->
+                    ( model
+                    , Cmd.none
+                    )
 
-                groupsWithAmounts =
-                    groups
-                        |> List.map
-                            (\( name, group ) ->
-                                ( name
-                                , group
-                                , model.totalGroupCredits
-                                    |> Dict.get name
-                                    |> Maybe.andThen (Dict.get name)
-                                    |> Maybe.withDefault (Amount 0)
-                                )
-                            )
+                Just person ->
+                    let
+                        groupsWithAmounts =
+                            person.belongsTo
+                                |> Set.toList
+                                |> List.foldl
+                                    (\key totalGroupCredits ->
+                                        Dict.get key model.totalGroupCredits
+                                            |> Maybe.withDefault Dict.empty
+                                            |> addAmounts totalGroupCredits
+                                    )
+                                    Dict.empty
+                                |> Dict.toList
 
-                debitorsWithAmounts =
-                    groupsWithAmounts
-                        |> List.filter (\( _, _, Amount amount ) -> amount < 0)
+                        debitorsWithAmounts =
+                            groupsWithAmounts
+                                |> List.filter (\( _, Amount credit ) -> credit < 0)
+                                |> List.map
+                                    (\( group, Amount debit ) ->
+                                        ( group
+                                        , getGroupMembers model group
+                                        , Amount -debit
+                                        )
+                                    )
 
-                creditorsWithAmounts =
-                    groupsWithAmounts
-                        |> List.filter (\( _, _, Amount amount ) -> amount > 0)
-            in
-            ( model
-            , Lamdera.sendToFrontend clientId
-                (ListUserGroups
-                    { user = user
-                    , debitors = debitorsWithAmounts
-                    , creditors = creditorsWithAmounts
-                    }
-                )
-            )
+                        creditorsWithAmounts =
+                            groupsWithAmounts
+                                |> List.filter (\( _, Amount credit ) -> credit > 0)
+                                |> List.map
+                                    (\( group, credit ) ->
+                                        ( group
+                                        , getGroupMembers model group
+                                        , credit
+                                        )
+                                    )
+                    in
+                    ( model
+                    , Lamdera.sendToFrontend clientId
+                        (ListUserGroups
+                            { user = user
+                            , debitors = debitorsWithAmounts
+                            , creditors = creditorsWithAmounts
+                            }
+                        )
+                    )
+
+
+getGroupMembers model group =
+    case Dict.get group model.groups of
+        Nothing ->
+            -- persons are automatically single-member groups
+            Dict.singleton group (Share 1)
+
+        Just members ->
+            members
 
 
 autocomplete clientId prefix autocompleteMsg invalidPrefixMsg list =
@@ -235,29 +290,44 @@ checkValidName model name =
         && not (Dict.member name model.groups)
 
 
-addSpendingToYear : Int -> Spending -> Maybe Year -> Year
-addSpendingToYear month spending maybeYear =
+addToTotalGroupCredits groupMembersKey { groupCredits } =
+    Dict.update groupMembersKey
+        (Maybe.map (addAmounts groupCredits >> Just)
+            >> Maybe.withDefault (Just groupCredits)
+        )
+
+
+addSpendingToYear month groupMembersKey spending maybeYear =
     case maybeYear of
         Nothing ->
-            { months = Dict.singleton month (addSpendingToMonth spending Nothing)
-            , totalGroupCredits = addToAllTotalGroupSpendings spending.groupCredits Dict.empty
+            { months =
+                Dict.singleton month
+                    (addSpendingToMonth groupMembersKey spending Nothing)
+            , totalGroupCredits =
+                Dict.singleton groupMembersKey spending.groupCredits
             }
 
         Just year ->
-            { months = Dict.update month (addSpendingToMonth spending >> Just) year.months
-            , totalGroupCredits = addToAllTotalGroupSpendings spending.groupCredits year.totalGroupCredits
+            { months =
+                year.months
+                    |> Dict.update month (addSpendingToMonth groupMembersKey spending >> Just)
+            , totalGroupCredits =
+                year.totalGroupCredits
+                    |> addToTotalGroupCredits groupMembersKey spending
             }
 
 
-addSpendingToMonth : Spending -> Maybe Month -> Month
-addSpendingToMonth spending maybeMonth =
+addSpendingToMonth groupMembersKey spending maybeMonth =
     case maybeMonth of
         Nothing ->
             { spendings = [ spending ]
-            , totalGroupCredits = addToAllTotalGroupSpendings spending.groupCredits Dict.empty
+            , totalGroupCredits =
+                Dict.singleton groupMembersKey spending.groupCredits
             }
 
         Just month ->
             { spendings = spending :: month.spendings
-            , totalGroupCredits = addToAllTotalGroupSpendings spending.groupCredits month.totalGroupCredits
+            , totalGroupCredits =
+                month.totalGroupCredits
+                    |> addToTotalGroupCredits groupMembersKey spending
             }
