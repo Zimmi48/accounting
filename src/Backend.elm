@@ -27,7 +27,8 @@ init =
     ( { years = Dict.empty
       , groups = Dict.empty
       , totalGroupCredits = Dict.empty
-      , persons = Set.empty
+      , persons = Dict.empty
+      , nextPersonId = 0
       }
     , Cmd.none
     )
@@ -57,7 +58,15 @@ updateFromFrontend sessionId clientId msg model =
 
         CreatePerson person ->
             if checkValidName model person then
-                ( { model | persons = Set.insert person model.persons }
+                ( { model
+                    | persons =
+                        Dict.insert person
+                            { id = model.nextPersonId
+                            , belongsTo = Set.empty
+                            }
+                            model.persons
+                    , nextPersonId = model.nextPersonId + 1
+                  }
                 , Lamdera.sendToFrontend clientId OperationSuccessful
                 )
 
@@ -101,7 +110,7 @@ updateFromFrontend sessionId clientId msg model =
 
         AutocompletePerson prefix ->
             ( model
-            , Set.toList model.persons
+            , Dict.keys model.persons
                 |> autocomplete clientId prefix AutocompletePersonPrefix InvalidPersonPrefix
             )
 
@@ -109,7 +118,7 @@ updateFromFrontend sessionId clientId msg model =
             ( model
             , Dict.keys model.groups
                 -- persons are automatically single-member groups
-                |> (++) (Set.toList model.persons)
+                |> (++) (Dict.keys model.persons)
                 |> autocomplete clientId prefix AutocompleteGroupPrefix InvalidGroupPrefix
             )
 
@@ -222,7 +231,7 @@ checkValidName : Model -> String -> Bool
 checkValidName model name =
     String.length name
         > 0
-        && not (Set.member name model.persons)
+        && not (Dict.member name model.persons)
         && not (Dict.member name model.groups)
 
 

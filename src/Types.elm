@@ -27,7 +27,8 @@ type alias BackendModel =
     { years : Dict Int Year
     , groups : Dict String Group
     , totalGroupCredits : Dict String (Dict String Amount)
-    , persons : Set String
+    , persons : Dict String Person
+    , nextPersonId : Int
     }
 
 
@@ -143,6 +144,12 @@ type alias AddSpendingDialogModel =
     -- group name, amount, name validity
     , debits : List ( String, String, NameValidity )
     , submitted : Bool
+    }
+
+
+type alias Person =
+    { id : Int
+    , belongsTo : Set String
     }
 
 
