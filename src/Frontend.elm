@@ -12,7 +12,7 @@ import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Input as Input
-import Html
+import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events exposing (..)
 import Lamdera
@@ -1192,6 +1192,7 @@ canSubmitSpending { description, date, total, credits, debits, submitted } =
            )
 
 
+viewGroups : String -> List ( String, Group, Amount a ) -> Element FrontendMsg
 viewGroups user list =
     let
         preprocessedList =
@@ -1258,6 +1259,7 @@ viewGroups user list =
         }
 
 
+viewAmountsDue : List ( String, Amount Debit ) -> Element FrontendMsg
 viewAmountsDue data =
     table [ Border.solid, Border.width 1, padding 20, spacing 30 ]
         { data = data
@@ -1402,7 +1404,7 @@ parseAmountValue amount =
             Nothing
 
 
-personalAmounts : List ( String, Group, Amount ) -> Dict String Amount
+personalAmounts : List ( String, Group, Amount a ) -> Dict String (Amount a)
 personalAmounts list =
     list
         |> List.map
@@ -1422,7 +1424,7 @@ personalAmounts list =
         |> List.foldl addAmounts Dict.empty
 
 
-personalAmountsDue : List ( String, Group, Amount ) -> List ( String, Group, Amount ) -> Dict String Amount
+personalAmountsDue : List ( String, Group, Amount Debit ) -> List ( String, Group, Amount Credit ) -> Dict String (Amount Debit)
 personalAmountsDue debitorGroups creditorGroups =
     let
         debits =

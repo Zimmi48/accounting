@@ -16,8 +16,8 @@ type alias FrontendModel =
     , nameValidity : NameValidity
     , userGroups :
         Maybe
-            { debitors : List ( String, Group, Amount )
-            , creditors : List ( String, Group, Amount )
+            { debitors : List ( String, Group, Amount Debit )
+            , creditors : List ( String, Group, Amount Credit )
             }
     , key : Key
     }
@@ -29,7 +29,7 @@ type alias BackendModel =
 
     -- person set -> group -> amount
     -- could be renamed to aggregatedSpendings
-    , totalGroupCredits : Dict String (Dict String Amount)
+    , totalGroupCredits : Dict String (Dict String (Amount Credit))
     , persons : Dict String Person
     , nextPersonId : Int
     }
@@ -71,9 +71,9 @@ type ToBackend
         , year : Int
         , month : Int
         , day : Int
-        , total : Amount
-        , credits : Dict String Amount
-        , debits : Dict String Amount
+        , total : Amount Credit
+        , credits : Dict String (Amount Credit)
+        , debits : Dict String (Amount Debit)
         }
     | RequestUserGroupsAndAccounts String
 
@@ -100,8 +100,8 @@ type ToFrontend
         }
     | ListUserGroups
         { user : String
-        , debitors : List ( String, Group, Amount )
-        , creditors : List ( String, Group, Amount )
+        , debitors : List ( String, Group, Amount Debit )
+        , creditors : List ( String, Group, Amount Credit )
         }
 
 
@@ -158,13 +158,13 @@ type alias Person =
 
 type alias Year =
     { months : Dict Int Month
-    , totalGroupCredits : Dict String (Dict String Amount)
+    , totalGroupCredits : Dict String (Dict String (Amount Credit))
     }
 
 
 type alias Month =
     { spendings : List Spending
-    , totalGroupCredits : Dict String (Dict String Amount)
+    , totalGroupCredits : Dict String (Dict String (Amount Credit))
     }
 
 
@@ -173,10 +173,10 @@ type alias Spending =
     , day : Int
 
     -- total amount of the transaction
-    , total : Amount
+    , total : Amount Credit
 
     -- associates each group with an amount (credit = positive or debit = negative) in this transaction
-    , groupCredits : Dict String Amount
+    , groupCredits : Dict String (Amount Credit)
     }
 
 
@@ -188,11 +188,19 @@ type Share
     = Share Int
 
 
-type Amount
+type Amount a
     = Amount Int
 
 
-addAmount : Int -> Maybe Amount -> Maybe Amount
+type Credit
+    = Credit
+
+
+type Debit
+    = Debit
+
+
+addAmount : Int -> Maybe (Amount a) -> Maybe (Amount a)
 addAmount value maybeAmount =
     case maybeAmount of
         Nothing ->
@@ -202,7 +210,7 @@ addAmount value maybeAmount =
             Just (Amount (amount + value))
 
 
-addAmounts : Dict String Amount -> Dict String Amount -> Dict String Amount
+addAmounts : Dict String (Amount a) -> Dict String (Amount a) -> Dict String (Amount a)
 addAmounts =
     Dict.foldl
         (\key (Amount value) ->

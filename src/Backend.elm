@@ -290,6 +290,11 @@ checkValidName model name =
         && not (Dict.member name model.groups)
 
 
+addToTotalGroupCredits :
+    String
+    -> Spending
+    -> Dict String (Dict String (Amount Credit))
+    -> Dict String (Dict String (Amount Credit))
 addToTotalGroupCredits groupMembersKey { groupCredits } =
     Dict.update groupMembersKey
         (Maybe.map (addAmounts groupCredits >> Just)
@@ -297,6 +302,7 @@ addToTotalGroupCredits groupMembersKey { groupCredits } =
         )
 
 
+addSpendingToYear : Int -> String -> Spending -> Maybe Year -> Year
 addSpendingToYear month groupMembersKey spending maybeYear =
     case maybeYear of
         Nothing ->
@@ -317,6 +323,7 @@ addSpendingToYear month groupMembersKey spending maybeYear =
             }
 
 
+addSpendingToMonth : String -> Spending -> Maybe Month -> Month
 addSpendingToMonth groupMembersKey spending maybeMonth =
     case maybeMonth of
         Nothing ->
