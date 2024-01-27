@@ -701,8 +701,12 @@ updateFromBackend msg model =
                                 else
                                     Incomplete
                           }
-                        , Lamdera.sendToBackend
-                            (RequestUserGroups response.longestCommonPrefix)
+                        , if response.complete then
+                            Lamdera.sendToBackend
+                                (RequestUserGroups response.longestCommonPrefix)
+
+                          else
+                            Cmd.none
                         )
 
                     else
