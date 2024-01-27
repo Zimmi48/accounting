@@ -75,7 +75,7 @@ type ToBackend
         , credits : Dict String (Amount Credit)
         , debits : Dict String (Amount Debit)
         }
-    | RequestUserGroupsAndAccounts String
+    | RequestUserGroups String
 
 
 type BackendMsg

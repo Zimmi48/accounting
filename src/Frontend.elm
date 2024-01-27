@@ -185,8 +185,8 @@ update msg model =
                         debits =
                             dialogModel.debits
                                 |> List.map
-                                    (\( account, amount, _ ) ->
-                                        ( account
+                                    (\( group, amount, _ ) ->
+                                        ( group
                                         , amount
                                             |> parseAmountValue
                                             |> Maybe.withDefault 0
@@ -588,7 +588,7 @@ updateFromBackend msg model =
         OperationSuccessful ->
             ( { model | showDialog = Nothing }
             , if model.nameValidity == Complete then
-                Lamdera.sendToBackend (RequestUserGroupsAndAccounts model.user)
+                Lamdera.sendToBackend (RequestUserGroups model.user)
 
               else
                 Cmd.none
@@ -621,7 +621,7 @@ updateFromBackend msg model =
                     if dialogModel.name == name then
                         -- we reset submitted to False because this can be
                         -- an error message we get from the backend in case
-                        -- of a race creating this group or account
+                        -- of a race creating this group
                         ( { model
                             | showDialog =
                                 Just
@@ -702,7 +702,7 @@ updateFromBackend msg model =
                                     Incomplete
                           }
                         , Lamdera.sendToBackend
-                            (RequestUserGroupsAndAccounts response.longestCommonPrefix)
+                            (RequestUserGroups response.longestCommonPrefix)
                         )
 
                     else
@@ -927,11 +927,11 @@ view model =
                             Just { debitors, creditors } ->
                                 [ row [ width fill, spaceEvenly, padding 20 ]
                                     [ column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                        [ text "Your Debitor Groups"
+                                        [ text "Your Debitor Groups / Accounts"
                                         , viewGroups model.user debitors
                                         ]
                                     , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                        [ text "Your Creditor Groups"
+                                        [ text "Your Creditor Groups / Accounts"
                                         , viewGroups model.user creditors
                                         ]
                                     , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]

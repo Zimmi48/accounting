@@ -153,7 +153,7 @@ updateFromFrontend sessionId clientId msg model =
                 |> autocomplete clientId prefix AutocompleteGroupPrefix InvalidGroupPrefix
             )
 
-        RequestUserGroupsAndAccounts user ->
+        RequestUserGroups user ->
             case Dict.get user model.persons of
                 Nothing ->
                     ( model
