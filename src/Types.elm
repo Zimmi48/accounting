@@ -19,6 +19,8 @@ type alias FrontendModel =
             { debitors : List ( String, Group, Amount Debit )
             , creditors : List ( String, Group, Amount Credit )
             }
+    , group : String
+    , groupValidity : NameValidity
     , key : Key
     }
 
@@ -57,6 +59,7 @@ type FrontendMsg
     | AddDebitor String
     | UpdateDebitor Int String
     | UpdateDebit Int String
+    | UpdateGroupName String
 
 
 type ToBackend

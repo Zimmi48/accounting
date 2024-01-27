@@ -48,6 +48,8 @@ init url key =
       , user = ""
       , nameValidity = Incomplete
       , userGroups = Nothing
+      , group = ""
+      , groupValidity = Incomplete
       , key = key
       }
     , Cmd.none
@@ -273,6 +275,18 @@ update msg model =
                       else
                         Cmd.none
                     )
+
+        UpdateGroupName name ->
+            ( { model
+                | group = name
+                , groupValidity = Incomplete
+              }
+            , if String.length name > 0 then
+                Lamdera.sendToBackend (AutocompleteGroup name)
+
+              else
+                Cmd.none
+            )
 
         AddMember member ->
             case model.showDialog of
@@ -735,8 +749,17 @@ updateFromBackend msg model =
                     , Cmd.none
                     )
 
-                _ ->
+                Just _ ->
                     ( model, Cmd.none )
+
+                Nothing ->
+                    ( if String.startsWith prefix model.group then
+                        { model | groupValidity = InvalidPrefix }
+
+                      else
+                        model
+                    , Cmd.none
+                    )
 
         AutocompleteGroupPrefix response ->
             case model.showDialog of
@@ -758,8 +781,28 @@ updateFromBackend msg model =
                     , Cmd.none
                     )
 
-                _ ->
+                Just _ ->
                     ( model, Cmd.none )
+
+                Nothing ->
+                    if
+                        String.startsWith response.prefix model.group
+                            && String.startsWith model.group response.longestCommonPrefix
+                    then
+                        ( { model
+                            | group = response.longestCommonPrefix
+                            , groupValidity =
+                                if response.complete then
+                                    Complete
+
+                                else
+                                    Incomplete
+                          }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model, Cmd.none )
 
         ListUserGroups { user, debitors, creditors } ->
             ( if model.user == user then
@@ -891,8 +934,8 @@ view model =
                                     (canSubmitSpending dialogModel)
                     )
 
-        userAttributes =
-            case model.nameValidity of
+        textFieldAttributes field =
+            case field model of
                 InvalidPrefix ->
                     [ Background.color red ]
 
@@ -920,7 +963,7 @@ view model =
                         , onPress = Just ShowAddSpendingDialog
                         }
                     ]
-                 , Input.text userAttributes
+                 , Input.text (textFieldAttributes .nameValidity)
                     { label = Input.labelLeft [] (text "Your name:")
                     , placeholder = Nothing
                     , onChange = UpdateName
@@ -950,6 +993,13 @@ view model =
                             _ ->
                                 []
                        )
+                    ++ [ Input.text (textFieldAttributes .groupValidity)
+                            { label = Input.labelLeft [] (text "Display transactions for group / account:")
+                            , placeholder = Nothing
+                            , onChange = UpdateGroupName
+                            , text = model.group
+                            }
+                       ]
                 )
             )
         ]
