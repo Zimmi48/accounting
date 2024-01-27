@@ -925,19 +925,21 @@ view model =
                  ]
                     ++ (case model.userGroups of
                             Just { debitors, creditors } ->
-                                [ column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                    [ text "Your Debitor Groups"
-                                    , viewGroups model.user debitors
-                                    ]
-                                , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                    [ text "Your Creditor Groups"
-                                    , viewGroups model.user creditors
-                                    ]
-                                , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                    [ text "Amounts due"
-                                    , personalAmountsDue debitors creditors
-                                        |> Dict.toList
-                                        |> viewAmountsDue
+                                [ row [ width fill, spaceEvenly, padding 20 ]
+                                    [ column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                        [ text "Your Debitor Groups"
+                                        , viewGroups model.user debitors
+                                        ]
+                                    , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                        [ text "Your Creditor Groups"
+                                        , viewGroups model.user creditors
+                                        ]
+                                    , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                        [ text "Amounts due"
+                                        , personalAmountsDue debitors creditors
+                                            |> Dict.toList
+                                            |> viewAmountsDue
+                                        ]
                                     ]
                                 ]
 
