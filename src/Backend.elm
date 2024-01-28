@@ -206,6 +206,45 @@ updateFromFrontend sessionId clientId msg model =
                         )
                     )
 
+        RequestGroupTransactions group ->
+            let
+                transactions =
+                    Dict.foldr
+                        (\year { months } accYears ->
+                            Dict.foldr
+                                (\month { spendings } accMonths ->
+                                    List.filterMap
+                                        (\spending ->
+                                            Dict.get group spending.groupCredits
+                                                |> Maybe.map
+                                                    (\share ->
+                                                        { description = spending.description
+                                                        , year = year
+                                                        , month = month
+                                                        , day = spending.day
+                                                        , total = (\(Amount a) -> Amount a) spending.total
+                                                        , share = toDebit share
+                                                        }
+                                                    )
+                                        )
+                                        spendings
+                                        |> (++) accMonths
+                                )
+                                accYears
+                                months
+                        )
+                        []
+                        model.years
+            in
+            ( model
+            , Lamdera.sendToFrontend clientId
+                (ListGroupTransactions
+                    { group = group
+                    , transactions = transactions
+                    }
+                )
+            )
+
 
 getGroupMembers model group =
     case Dict.get group model.groups of

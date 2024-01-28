@@ -50,6 +50,7 @@ init url key =
       , userGroups = Nothing
       , group = ""
       , groupValidity = Incomplete
+      , groupTransactions = []
       , key = key
       }
     , Cmd.none
@@ -280,6 +281,7 @@ update msg model =
             ( { model
                 | group = name
                 , groupValidity = Incomplete
+                , groupTransactions = []
               }
             , if String.length name > 0 then
                 Lamdera.sendToBackend (AutocompleteGroup name)
@@ -798,7 +800,12 @@ updateFromBackend msg model =
                                 else
                                     Incomplete
                           }
-                        , Cmd.none
+                        , if response.complete then
+                            Lamdera.sendToBackend
+                                (RequestGroupTransactions response.longestCommonPrefix)
+
+                          else
+                            Cmd.none
                         )
 
                     else
@@ -812,6 +819,18 @@ updateFromBackend msg model =
                             { debitors = debitors
                             , creditors = creditors
                             }
+                }
+
+              else
+                model
+            , Cmd.none
+            )
+
+        ListGroupTransactions { group, transactions } ->
+            ( if model.group == group then
+                { model
+                    | groupTransactions =
+                        transactions
                 }
 
               else
@@ -1000,6 +1019,7 @@ view model =
                             , text = model.group
                             }
                        ]
+                    ++ List.map viewTransaction model.groupTransactions
                 )
             )
         ]
@@ -1246,6 +1266,15 @@ canSubmitSpending { description, date, total, credits, debits, submitted } =
                 |> Maybe.map (List.all identity)
                 |> Maybe.withDefault False
            )
+
+
+viewTransaction transaction =
+    row [ spacing 20, padding 20, Background.color (rgb 0.9 0.9 0.9) ]
+        [ String.fromInt transaction.year ++ "-" ++ String.fromInt transaction.month ++ "-" ++ String.fromInt transaction.day |> text
+        , transaction.description |> text
+        , transaction.share |> (\(Amount amount) -> amount) |> viewAmount |> text
+        , "(Total: " ++ (transaction.total |> (\(Amount amount) -> amount) |> viewAmount) ++ ")" |> text
+        ]
 
 
 viewGroups : String -> List ( String, Group, Amount a ) -> Element FrontendMsg

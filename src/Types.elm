@@ -21,6 +21,15 @@ type alias FrontendModel =
             }
     , group : String
     , groupValidity : NameValidity
+    , groupTransactions :
+        List
+            { description : String
+            , year : Int
+            , month : Int
+            , day : Int
+            , total : Amount Debit
+            , share : Amount Debit
+            }
     , key : Key
     }
 
@@ -79,6 +88,7 @@ type ToBackend
         , debits : Dict String (Amount Debit)
         }
     | RequestUserGroups String
+    | RequestGroupTransactions String
 
 
 type BackendMsg
@@ -105,6 +115,18 @@ type ToFrontend
         { user : String
         , debitors : List ( String, Group, Amount Debit )
         , creditors : List ( String, Group, Amount Credit )
+        }
+    | ListGroupTransactions
+        { group : String
+        , transactions :
+            List
+                { description : String
+                , year : Int
+                , month : Int
+                , day : Int
+                , total : Amount Debit
+                , share : Amount Debit
+                }
         }
 
 
@@ -219,3 +241,12 @@ addAmounts =
         (\key (Amount value) ->
             Dict.update key (addAmount value)
         )
+
+toDebit : Amount Credit -> Amount Debit
+toDebit (Amount value) =
+    Amount (-value)
+
+
+toCredit : Amount Debit -> Amount Credit
+toCredit (Amount value) =
+    Amount (-value)
