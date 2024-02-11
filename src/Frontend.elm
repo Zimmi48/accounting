@@ -1121,7 +1121,7 @@ addSpendingInputs { description, date, dateText, datePickerModel, total, credits
                 debits
         )
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-        ([ text "Creditors" ]
+        ([ text "Creditors (payers)" ]
             ++ listInputs
                 "Creditor"
                 "Amount"
