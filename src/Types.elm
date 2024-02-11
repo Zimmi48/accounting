@@ -242,11 +242,12 @@ addAmounts =
             Dict.update key (addAmount value)
         )
 
+
 toDebit : Amount Credit -> Amount Debit
 toDebit (Amount value) =
-    Amount (-value)
+    Amount -value
 
 
 toCredit : Amount Debit -> Amount Credit
 toCredit (Amount value) =
-    Amount (-value)
+    Amount -value
