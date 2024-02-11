@@ -603,11 +603,20 @@ updateFromBackend msg model =
 
         OperationSuccessful ->
             ( { model | showDialog = Nothing }
-            , if model.nameValidity == Complete then
-                Lamdera.sendToBackend (RequestUserGroups model.user)
+            , (++)
+                (if model.nameValidity == Complete then
+                    [ Lamdera.sendToBackend (RequestUserGroups model.user) ]
 
-              else
-                Cmd.none
+                 else
+                    []
+                )
+                (if model.groupValidity == Complete then
+                    [ Lamdera.sendToBackend (RequestGroupTransactions model.group) ]
+
+                 else
+                    []
+                )
+                |> Cmd.batch
             )
 
         NameAlreadyExists name ->
