@@ -188,6 +188,12 @@ type alias Year =
 
 
 type alias Month =
+    { days : Dict Int Day
+    , totalGroupCredits : Dict String (Dict String (Amount Credit))
+    }
+
+
+type alias Day =
     { spendings : List Spending
     , totalGroupCredits : Dict String (Dict String (Amount Credit))
     }
@@ -195,7 +201,6 @@ type alias Month =
 
 type alias Spending =
     { description : String
-    , day : Int
 
     -- total amount of the transaction
     , total : Amount Credit

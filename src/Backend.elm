@@ -107,7 +107,6 @@ updateFromFrontend sessionId clientId msg model =
 
                 spending =
                     { description = description
-                    , day = day
                     , total = total
                     , groupCredits =
                         debits
@@ -118,7 +117,7 @@ updateFromFrontend sessionId clientId msg model =
             ( { model
                 | years =
                     model.years
-                        |> Dict.update year (addSpendingToYear month groupMembersKey spending >> Just)
+                        |> Dict.update year (addSpendingToYear month day groupMembersKey spending >> Just)
                 , totalGroupCredits =
                     model.totalGroupCredits
                         |> addToTotalGroupCredits groupMembersKey spending
@@ -212,23 +211,28 @@ updateFromFrontend sessionId clientId msg model =
                     Dict.foldr
                         (\year { months } accYears ->
                             Dict.foldr
-                                (\month { spendings } accMonths ->
-                                    List.filterMap
-                                        (\spending ->
-                                            Dict.get group spending.groupCredits
-                                                |> Maybe.map
-                                                    (\share ->
-                                                        { description = spending.description
-                                                        , year = year
-                                                        , month = month
-                                                        , day = spending.day
-                                                        , total = (\(Amount a) -> Amount a) spending.total
-                                                        , share = toDebit share
-                                                        }
-                                                    )
+                                (\month { days } accMonths ->
+                                    Dict.foldr
+                                        (\day { spendings } accDays ->
+                                            List.filterMap
+                                                (\spending ->
+                                                    Dict.get group spending.groupCredits
+                                                        |> Maybe.map
+                                                            (\share ->
+                                                                { description = spending.description
+                                                                , year = year
+                                                                , month = month
+                                                                , day = day
+                                                                , total = (\(Amount a) -> Amount a) spending.total
+                                                                , share = toDebit share
+                                                                }
+                                                            )
+                                                )
+                                                spendings
+                                                |> (++) accDays
                                         )
-                                        spendings
-                                        |> (++) accMonths
+                                        accMonths
+                                        days
                                 )
                                 accYears
                                 months
@@ -341,13 +345,13 @@ addToTotalGroupCredits groupMembersKey { groupCredits } =
         )
 
 
-addSpendingToYear : Int -> String -> Spending -> Maybe Year -> Year
-addSpendingToYear month groupMembersKey spending maybeYear =
+addSpendingToYear : Int -> Int -> String -> Spending -> Maybe Year -> Year
+addSpendingToYear month day groupMembersKey spending maybeYear =
     case maybeYear of
         Nothing ->
             { months =
                 Dict.singleton month
-                    (addSpendingToMonth groupMembersKey spending Nothing)
+                    (addSpendingToMonth day groupMembersKey spending Nothing)
             , totalGroupCredits =
                 Dict.singleton groupMembersKey spending.groupCredits
             }
@@ -355,25 +359,46 @@ addSpendingToYear month groupMembersKey spending maybeYear =
         Just year ->
             { months =
                 year.months
-                    |> Dict.update month (addSpendingToMonth groupMembersKey spending >> Just)
+                    |> Dict.update month (addSpendingToMonth day groupMembersKey spending >> Just)
             , totalGroupCredits =
                 year.totalGroupCredits
                     |> addToTotalGroupCredits groupMembersKey spending
             }
 
 
-addSpendingToMonth : String -> Spending -> Maybe Month -> Month
-addSpendingToMonth groupMembersKey spending maybeMonth =
+addSpendingToMonth : Int -> String -> Spending -> Maybe Month -> Month
+addSpendingToMonth day groupMembersKey spending maybeMonth =
     case maybeMonth of
+        Nothing ->
+            { days =
+                Dict.singleton day
+                    (addSpendingToDay groupMembersKey spending Nothing)
+            , totalGroupCredits =
+                Dict.singleton groupMembersKey spending.groupCredits
+            }
+
+        Just month ->
+            { days =
+                month.days
+                    |> Dict.update day (addSpendingToDay groupMembersKey spending >> Just)
+            , totalGroupCredits =
+                month.totalGroupCredits
+                    |> addToTotalGroupCredits groupMembersKey spending
+            }
+
+
+addSpendingToDay : String -> Spending -> Maybe Day -> Day
+addSpendingToDay groupMembersKey spending maybeDay =
+    case maybeDay of
         Nothing ->
             { spendings = [ spending ]
             , totalGroupCredits =
                 Dict.singleton groupMembersKey spending.groupCredits
             }
 
-        Just month ->
-            { spendings = spending :: month.spendings
+        Just day ->
+            { spendings = spending :: day.spendings
             , totalGroupCredits =
-                month.totalGroupCredits
+                day.totalGroupCredits
                     |> addToTotalGroupCredits groupMembersKey spending
             }
