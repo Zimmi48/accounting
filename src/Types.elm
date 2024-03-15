@@ -6,6 +6,7 @@ import Browser.Navigation exposing (Key)
 import Date exposing (Date)
 import DatePicker
 import Dict exposing (Dict)
+import Lamdera exposing (SessionId)
 import Set exposing (Set)
 import Url exposing (Url)
 
@@ -43,6 +44,7 @@ type alias BackendModel =
     , totalGroupCredits : Dict String (Dict String (Amount Credit))
     , persons : Dict String Person
     , nextPersonId : Int
+    , loggedInSessions : Set SessionId
     }
 
 
@@ -69,6 +71,7 @@ type FrontendMsg
     | UpdateDebitor Int String
     | UpdateDebit Int String
     | UpdateGroupName String
+    | UpdatePassword String
 
 
 type ToBackend
@@ -89,6 +92,7 @@ type ToBackend
         }
     | RequestUserGroups String
     | RequestGroupTransactions String
+    | CheckPassword String
 
 
 type BackendMsg
@@ -134,6 +138,7 @@ type Dialog
     = AddPersonDialog AddPersonDialogModel
     | AddGroupDialog AddGroupDialogModel
     | AddSpendingDialog AddSpendingDialogModel
+    | PasswordDialog PasswordDialogModel
 
 
 type alias AddPersonDialogModel =
@@ -149,6 +154,12 @@ type alias AddGroupDialogModel =
 
     -- person name, share, name validity
     , members : List ( String, String, NameValidity )
+    , submitted : Bool
+    }
+
+
+type alias PasswordDialogModel =
+    { password : String
     , submitted : Bool
     }
 

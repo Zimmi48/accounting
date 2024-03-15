@@ -22,7 +22,6 @@ See <https://dashboard.lamdera.app/docs/evergreen> for more info.
 import Basics.Extra exposing (flip)
 import Dict
 import Evergreen.V1.Types
-import Evergreen.V4.Backend
 import Evergreen.V4.Types
 import Lamdera.Migrations exposing (..)
 import Set
@@ -120,7 +119,7 @@ addSpendingToDay oldModel spending maybeDay =
             , groupCredits = spending.groupCredits |> Dict.map (\_ -> migrate_Types_Amount migrate_Types_Credit)
             }
     in
-    Just (Evergreen.V4.Backend.addSpendingToDay groupMembersKey spendingV4 maybeDay)
+    Just (addSpendingToDay_backend groupMembersKey spendingV4 maybeDay)
 
 
 migrate_Types_Share : Evergreen.V1.Types.Share -> Evergreen.V4.Types.Share
@@ -135,3 +134,42 @@ migrate_Types_Year oldModel old =
     { months = old.months |> Dict.map (\k -> migrate_Types_Month oldModel)
     , totalGroupCredits = old.totalGroupCredits |> Dict.map (\k -> Dict.map (\_ -> migrate_Types_Amount migrate_Types_Credit))
     }
+
+
+addSpendingToDay_backend groupMembersKey spending maybeDay =
+    case maybeDay of
+        Nothing ->
+            { spendings = [ spending ]
+            , totalGroupCredits =
+                Dict.singleton groupMembersKey spending.groupCredits
+            }
+
+        Just day ->
+            { spendings = spending :: day.spendings
+            , totalGroupCredits =
+                day.totalGroupCredits
+                    |> addToTotalGroupCredits groupMembersKey spending
+            }
+
+
+addToTotalGroupCredits groupMembersKey { groupCredits } =
+    Dict.update groupMembersKey
+        (Maybe.map (addAmounts groupCredits >> Just)
+            >> Maybe.withDefault (Just groupCredits)
+        )
+
+
+addAmount value maybeAmount =
+    case maybeAmount of
+        Nothing ->
+            Just (Evergreen.V4.Types.Amount value)
+
+        Just (Evergreen.V4.Types.Amount amount) ->
+            Just (Evergreen.V4.Types.Amount (amount + value))
+
+
+addAmounts =
+    Dict.foldl
+        (\key (Evergreen.V4.Types.Amount value) ->
+            Dict.update key (addAmount value)
+        )

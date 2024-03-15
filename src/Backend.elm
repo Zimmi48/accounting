@@ -2,6 +2,7 @@ module Backend exposing (..)
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
+import Env
 import Html
 import Lamdera exposing (ClientId, SessionId)
 import Maybe.Extra as Maybe
@@ -29,6 +30,7 @@ init =
       , totalGroupCredits = Dict.empty
       , persons = Dict.empty
       , nextPersonId = 0
+      , loggedInSessions = Set.empty
       }
     , Cmd.none
     )
@@ -43,11 +45,23 @@ update msg model =
 
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
 updateFromFrontend sessionId clientId msg model =
-    case msg of
-        NoOpToBackend ->
+    case ( Set.member sessionId model.loggedInSessions, msg ) of
+        ( _, CheckPassword password ) ->
+            if password == Env.password then
+                ( { model | loggedInSessions = Set.insert sessionId model.loggedInSessions }
+                , Lamdera.sendToFrontend clientId OperationSuccessful
+                )
+
+            else
+                ( model, Cmd.none )
+
+        ( False, _ ) ->
             ( model, Cmd.none )
 
-        CheckValidName name ->
+        ( True, NoOpToBackend ) ->
+            ( model, Cmd.none )
+
+        ( True, CheckValidName name ) ->
             ( model
             , if checkValidName model name then
                 Cmd.none
@@ -56,7 +70,7 @@ updateFromFrontend sessionId clientId msg model =
                 Lamdera.sendToFrontend clientId (NameAlreadyExists name)
             )
 
-        CreatePerson person ->
+        ( True, CreatePerson person ) ->
             if checkValidName model person then
                 ( { model
                     | persons =
@@ -75,7 +89,7 @@ updateFromFrontend sessionId clientId msg model =
                 , Lamdera.sendToFrontend clientId (NameAlreadyExists person)
                 )
 
-        CreateGroup name members ->
+        ( True, CreateGroup name members ) ->
             if checkValidName model name then
                 ( { model | groups = Dict.insert name members model.groups }
                 , Lamdera.sendToFrontend clientId OperationSuccessful
@@ -86,7 +100,7 @@ updateFromFrontend sessionId clientId msg model =
                 , Lamdera.sendToFrontend clientId (NameAlreadyExists name)
                 )
 
-        CreateSpending { description, year, month, day, total, credits, debits } ->
+        ( True, CreateSpending { description, year, month, day, total, credits, debits } ) ->
             let
                 groupMembers =
                     (Dict.keys credits ++ Dict.keys debits)
@@ -138,13 +152,13 @@ updateFromFrontend sessionId clientId msg model =
             , Lamdera.sendToFrontend clientId OperationSuccessful
             )
 
-        AutocompletePerson prefix ->
+        ( True, AutocompletePerson prefix ) ->
             ( model
             , Dict.keys model.persons
                 |> autocomplete clientId prefix AutocompletePersonPrefix InvalidPersonPrefix
             )
 
-        AutocompleteGroup prefix ->
+        ( True, AutocompleteGroup prefix ) ->
             ( model
             , Dict.keys model.groups
                 -- persons are automatically single-member groups
@@ -152,7 +166,7 @@ updateFromFrontend sessionId clientId msg model =
                 |> autocomplete clientId prefix AutocompleteGroupPrefix InvalidGroupPrefix
             )
 
-        RequestUserGroups user ->
+        ( True, RequestUserGroups user ) ->
             case Dict.get user model.persons of
                 Nothing ->
                     ( model
@@ -205,7 +219,7 @@ updateFromFrontend sessionId clientId msg model =
                         )
                     )
 
-        RequestGroupTransactions group ->
+        ( True, RequestGroupTransactions group ) ->
             let
                 transactions =
                     Dict.foldr

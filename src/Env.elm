@@ -4,5 +4,5 @@ module Env exposing (..)
 -- See https://dashboard.lamdera.app/docs/environment for more info.
 
 
-dummyConfigItem =
-    ""
+password =
+    "password"

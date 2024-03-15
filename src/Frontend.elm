@@ -44,7 +44,7 @@ app =
 
 init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
 init url key =
-    ( { showDialog = Nothing
+    ( { showDialog = Just (PasswordDialog { password = "", submitted = False })
       , user = ""
       , nameValidity = Incomplete
       , userGroups = Nothing
@@ -227,6 +227,17 @@ update msg model =
                         _ ->
                             ( model, Cmd.none )
 
+                Just (PasswordDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (PasswordDialog
+                                    { dialogModel | submitted = True }
+                                )
+                      }
+                    , Lamdera.sendToBackend (CheckPassword dialogModel.password)
+                    )
+
                 Nothing ->
                     ( model, Cmd.none )
 
@@ -263,6 +274,9 @@ update msg model =
                     ( { model | showDialog = Just (AddSpendingDialog { dialogModel | description = name }) }
                     , Cmd.none
                     )
+
+                Just (PasswordDialog dialogModel) ->
+                    ( model, Cmd.none )
 
                 Nothing ->
                     ( { model
@@ -523,6 +537,22 @@ update msg model =
                                             dialogModel.debits
                                                 |> updateValueInList index amount
                                     }
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdatePassword password ->
+            case model.showDialog of
+                Just (PasswordDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (PasswordDialog
+                                    { dialogModel | password = password }
                                 )
                       }
                     , Cmd.none
@@ -960,6 +990,18 @@ view model =
                                 config "Add Spending"
                                     (addSpendingInputs dialogModel)
                                     (canSubmitSpending dialogModel)
+
+                            PasswordDialog dialogModel ->
+                                config "Password"
+                                    [ Input.currentPassword []
+                                        { label = Input.labelLeft [] (text "Password")
+                                        , placeholder = Nothing
+                                        , onChange = UpdatePassword
+                                        , text = dialogModel.password
+                                        , show = False
+                                        }
+                                    ]
+                                    (String.length dialogModel.password > 0)
                     )
 
         textFieldAttributes field =
