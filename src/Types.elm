@@ -32,6 +32,8 @@ type alias FrontendModel =
             , share : Amount Debit
             }
     , key : Key
+    , windowWidth : Int
+    , windowHeight : Int
     }
 
 
@@ -72,6 +74,7 @@ type FrontendMsg
     | UpdateDebit Int String
     | UpdateGroupName String
     | UpdatePassword String
+    | ViewportChanged Int Int
 
 
 type ToBackend

@@ -2,6 +2,8 @@ module Frontend exposing (..)
 
 import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest(..))
+import Browser.Dom exposing (getViewport)
+import Browser.Events exposing (onResize)
 import Browser.Navigation as Nav
 import Date
 import DatePicker
@@ -37,7 +39,7 @@ app =
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions = \m -> Sub.none
+        , subscriptions = \_ -> onResize ViewportChanged
         , view = view
         }
 
@@ -52,8 +54,16 @@ init url key =
       , groupValidity = Incomplete
       , groupTransactions = []
       , key = key
+      , windowWidth = 1000
+      , windowHeight = 1000
       }
-    , Cmd.none
+    , Task.perform
+        (\viewport ->
+            ViewportChanged
+                (round viewport.viewport.width)
+                (round viewport.viewport.height)
+        )
+        getViewport
     )
 
 
@@ -561,6 +571,14 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        ViewportChanged width height ->
+            ( { model
+                | windowWidth = width
+                , windowHeight = height
+              }
+            , Cmd.none
+            )
+
 
 computeRemainder { total } list =
     ((total
@@ -915,7 +933,7 @@ completeToLongestCommonPrefix { prefix, longestCommonPrefix, complete } list =
 view : Model -> Browser.Document FrontendMsg
 view model =
     let
-        config title inputs canSubmit =
+        config title dialogHeight inputs canSubmit =
             { closeMessage = Just Cancel
             , maskAttributes = []
             , containerAttributes =
@@ -925,12 +943,18 @@ view model =
                 , Border.width 1
                 , centerX
                 , centerY
+                , (px dialogHeight |> maximum (model.windowHeight * 9 // 10))
+                    |> height
                 ]
             , headerAttributes =
                 [ padding 20
                 , Background.color green
                 ]
-            , bodyAttributes = [ padding 20 ]
+            , bodyAttributes =
+                [ padding 20
+                , height fill
+                , scrollbarY
+                ]
             , footerAttributes =
                 [ Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
                 , Border.solid
@@ -974,7 +998,8 @@ view model =
                         case dialog of
                             AddPersonDialog dialogModel ->
                                 config "Add Person"
-                                    (nameInput dialogModel)
+                                    270
+                                    (nameInput model.windowWidth dialogModel)
                                     (canSubmitPerson dialogModel)
 
                             AddGroupDialog dialogModel ->
@@ -983,18 +1008,21 @@ view model =
                                         "Add Group / Account"
                                 in
                                 config label
-                                    (addGroupInputs dialogModel)
+                                    500
+                                    (addGroupInputs model.windowWidth dialogModel)
                                     (canSubmitGroup dialogModel)
 
                             AddSpendingDialog dialogModel ->
                                 config "Add Spending"
-                                    (addSpendingInputs dialogModel)
+                                    900
+                                    (addSpendingInputs model.windowWidth dialogModel)
                                     (canSubmitSpending dialogModel)
 
                             PasswordDialog dialogModel ->
                                 config "Password"
+                                    270
                                     [ Input.currentPassword []
-                                        { label = Input.labelLeft [] (text "Password")
+                                        { label = labelStyle model.windowWidth "Password"
                                         , placeholder = Nothing
                                         , onChange = UpdatePassword
                                         , text = dialogModel.password
@@ -1019,7 +1047,12 @@ view model =
             [ inFront (Dialog.view dialogConfig)
             ]
             (column [ width fill, spacing 20, padding 20 ]
-                ([ row [ centerX, spacing 70, padding 20 ]
+                ([ (if model.windowWidth > 400 then
+                        row [ centerX, spacing 70, padding 20 ]
+
+                    else
+                        column [ centerX, spacing 20, padding 20 ]
+                   )
                     [ Input.button greenButtonStyle
                         { label = text "Add Person"
                         , onPress = Just ShowAddPersonDialog
@@ -1034,7 +1067,7 @@ view model =
                         }
                     ]
                  , Input.text (textFieldAttributes .nameValidity)
-                    { label = Input.labelLeft [] (text "Your name:")
+                    { label = labelStyle model.windowWidth "Your name:"
                     , placeholder = Nothing
                     , onChange = UpdateName
                     , text = model.user
@@ -1064,7 +1097,7 @@ view model =
                                 []
                        )
                     ++ [ Input.text (textFieldAttributes .groupValidity)
-                            { label = Input.labelLeft [] (text "Display transactions for group / account:")
+                            { label = labelStyle model.windowWidth "Display transactions for group / account:"
                             , placeholder = Nothing
                             , onChange = UpdateGroupName
                             , text = model.group
@@ -1075,6 +1108,14 @@ view model =
             )
         ]
     }
+
+
+labelStyle windowWidth textValue =
+    if windowWidth > 400 then
+        Input.labelLeft [] (text textValue)
+
+    else
+        Input.labelAbove [] (Element.paragraph [] [ text textValue ])
 
 
 buttonStyle =
@@ -1106,7 +1147,7 @@ grayButtonStyle =
     buttonStyle ++ [ Background.color (rgb 0.8 0.8 0.8) ]
 
 
-nameInput { name, nameInvalid } =
+nameInput windowWidth { name, nameInvalid } =
     let
         attributes =
             if nameInvalid then
@@ -1116,7 +1157,7 @@ nameInput { name, nameInvalid } =
                 []
     in
     [ Input.text attributes
-        { label = Input.labelLeft [] (text "Name")
+        { label = labelStyle windowWidth "Name"
         , placeholder = Nothing
         , onChange = UpdateName
         , text = name
@@ -1124,14 +1165,15 @@ nameInput { name, nameInvalid } =
     ]
 
 
-addGroupInputs ({ members } as model) =
+addGroupInputs windowWidth ({ members } as model) =
     let
         nbMembers =
             List.length members
     in
-    nameInput model
+    nameInput windowWidth model
         ++ listInputs
-            "Member / Owner"
+            windowWidth
+            "Owner"
             "Share"
             AddMember
             UpdateMember
@@ -1139,15 +1181,15 @@ addGroupInputs ({ members } as model) =
             members
 
 
-addSpendingInputs { description, date, dateText, datePickerModel, total, credits, debits } =
+addSpendingInputs windowWidth { description, date, dateText, datePickerModel, total, credits, debits } =
     [ Input.text []
-        { label = Input.labelLeft [] (text "Description")
+        { label = labelStyle windowWidth "Description"
         , placeholder = Nothing
         , onChange = UpdateName
         , text = description
         }
     , DatePicker.input []
-        { label = Input.labelLeft [] (text "Date")
+        { label = labelStyle windowWidth "Date"
         , placeholder = Nothing
         , onChange = ChangeDatePicker
         , selected = date
@@ -1156,7 +1198,7 @@ addSpendingInputs { description, date, dateText, datePickerModel, total, credits
         , model = datePickerModel
         }
     , Input.text []
-        { label = Input.labelLeft [] (text "Total")
+        { label = labelStyle windowWidth "Total"
         , placeholder = Nothing
         , onChange = UpdateTotal
         , text = total
@@ -1164,6 +1206,7 @@ addSpendingInputs { description, date, dateText, datePickerModel, total, credits
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
         ([ text "Debitors" ]
             ++ listInputs
+                windowWidth
                 "Debitor"
                 "Amount"
                 AddDebitor
@@ -1174,6 +1217,7 @@ addSpendingInputs { description, date, dateText, datePickerModel, total, credits
     , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
         ([ text "Creditors (payers)" ]
             ++ listInputs
+                windowWidth
                 "Creditor"
                 "Amount"
                 AddCreditor
@@ -1184,7 +1228,7 @@ addSpendingInputs { description, date, dateText, datePickerModel, total, credits
     ]
 
 
-listInputs nameLabel valueLabel addMsg updateNameMsg updateValueMsg items =
+listInputs windowWidth nameLabel valueLabel addMsg updateNameMsg updateValueMsg items =
     let
         listSize =
             List.length items
@@ -1193,18 +1237,17 @@ listInputs nameLabel valueLabel addMsg updateNameMsg updateValueMsg items =
         [ row [ spacing 20 ]
             [ Input.text []
                 { label =
-                    Input.labelLeft []
+                    labelStyle windowWidth
                         (nameLabel
                             ++ " "
                             ++ (listSize + 1 |> String.fromInt)
-                            |> text
                         )
                 , placeholder = Nothing
                 , onChange = addMsg
                 , text = ""
                 }
             , Input.text []
-                { label = Input.labelLeft [] (text valueLabel)
+                { label = labelStyle windowWidth valueLabel
                 , placeholder = Nothing
                 , onChange = \_ -> NoOpFrontendMsg
                 , text = ""
@@ -1229,18 +1272,17 @@ listInputs nameLabel valueLabel addMsg updateNameMsg updateValueMsg items =
                 row [ spacing 20 ]
                     [ Input.text attributes
                         { label =
-                            Input.labelLeft []
+                            labelStyle windowWidth
                                 (nameLabel
                                     ++ " "
                                     ++ (listSize - index |> String.fromInt)
-                                    |> text
                                 )
                         , placeholder = Nothing
                         , onChange = updateNameMsg index
                         , text = name
                         }
                     , Input.text []
-                        { label = Input.labelLeft [] (text valueLabel)
+                        { label = labelStyle windowWidth valueLabel
                         , placeholder = Nothing
                         , onChange = updateValueMsg index
                         , text = value
