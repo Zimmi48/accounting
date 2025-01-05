@@ -1047,7 +1047,7 @@ view model =
             [ inFront (Dialog.view dialogConfig)
             ]
             (column [ width fill, spacing 20, padding 20 ]
-                ([ (if model.windowWidth > 400 then
+                ([ (if model.windowWidth > 650 then
                         row [ centerX, spacing 70, padding 20 ]
 
                     else
@@ -1111,7 +1111,7 @@ view model =
 
 
 labelStyle windowWidth textValue =
-    if windowWidth > 400 then
+    if windowWidth > 650 then
         Input.labelLeft [] (text textValue)
 
     else
