@@ -945,6 +945,7 @@ view model =
                 , centerY
                 , (px dialogHeight |> maximum (model.windowHeight * 9 // 10))
                     |> height
+                , scrollbarY
                 ]
             , headerAttributes =
                 [ padding 20
@@ -953,7 +954,6 @@ view model =
             , bodyAttributes =
                 [ padding 20
                 , height fill
-                , scrollbarY
                 ]
             , footerAttributes =
                 [ Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
