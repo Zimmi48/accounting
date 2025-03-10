@@ -12,7 +12,8 @@ import Url exposing (Url)
 
 
 type alias FrontendModel =
-    { showDialog : Maybe Dialog
+    { page : Page
+    , showDialog : Maybe Dialog
     , user : String
     , nameValidity : NameValidity
     , userGroups :
@@ -35,6 +36,11 @@ type alias FrontendModel =
     , windowWidth : Int
     , windowHeight : Int
     }
+
+
+type Page
+    = Home
+    | NotFound
 
 
 type alias BackendModel =

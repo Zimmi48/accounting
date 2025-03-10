@@ -13,6 +13,7 @@ import Dict.Extra as Dict
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
+import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes as Attr
@@ -46,7 +47,8 @@ app =
 
 init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
 init url key =
-    ( { showDialog = Just (PasswordDialog { password = "", submitted = False })
+    ( { page = routing url
+      , showDialog = Just (PasswordDialog { password = "", submitted = False })
       , user = ""
       , nameValidity = Incomplete
       , userGroups = Nothing
@@ -67,13 +69,23 @@ init url key =
     )
 
 
+routing : Url.Url -> Page
+routing url =
+    case url.path of
+        "/" ->
+            Home
+
+        _ ->
+            NotFound
+
+
 update : FrontendMsg -> Model -> ( Model, Cmd FrontendMsg )
 update msg model =
     case msg of
         UrlClicked urlRequest ->
             case urlRequest of
                 Internal url ->
-                    ( model
+                    ( { model | page = routing url }
                     , Nav.pushUrl model.key (Url.toString url)
                     )
 
@@ -83,7 +95,9 @@ update msg model =
                     )
 
         UrlChanged url ->
-            ( model, Cmd.none )
+            ( { model | page = routing url }
+            , Cmd.none
+            )
 
         NoOpFrontendMsg ->
             ( model, Cmd.none )
@@ -932,182 +946,202 @@ completeToLongestCommonPrefix { prefix, longestCommonPrefix, complete } list =
 
 view : Model -> Browser.Document FrontendMsg
 view model =
-    let
-        config title dialogHeight inputs canSubmit =
-            { closeMessage = Just Cancel
-            , maskAttributes = []
-            , containerAttributes =
-                [ Background.color (rgb 1 1 1)
-                , Border.solid
-                , Border.rounded 5
-                , Border.width 1
-                , centerX
-                , centerY
-                , (px dialogHeight |> maximum (model.windowHeight * 9 // 10))
-                    |> height
-                , scrollbarY
-                ]
-            , headerAttributes =
-                [ padding 20
-                , Background.color green
-                ]
-            , bodyAttributes =
-                [ padding 20
-                , height fill
-                ]
-            , footerAttributes =
-                [ Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
-                , Border.solid
-                ]
-            , header = Just (text title)
+    case model.page of
+        NotFound ->
+            { title = "Accounting - Not Found"
             , body =
-                Just
-                    (column [ spacing 20 ]
-                        inputs
-                    )
-            , footer =
-                Just
-                    (row [ centerX, spacing 20, padding 20, alignRight ]
-                        [ Input.button redButtonStyle
-                            { label = text "Cancel"
-                            , onPress = Just Cancel
-                            }
-                        , Input.button
-                            (if canSubmit then
-                                greenButtonStyle
-
-                             else
-                                grayButtonStyle
-                            )
-                            { label = text "Submit"
-                            , onPress =
-                                if canSubmit then
-                                    Just Submit
-
-                                else
-                                    Nothing
-                            }
+                [ layout []
+                    (column [ centerX, padding 20, spacing 20 ]
+                        [ row [] [ text "Page not found" ]
+                        , row []
+                            [ link
+                                [ mouseOver [ Font.color (rgb255 255 0 0) ]
+                                , Font.underline
+                                ]
+                                { label = text "Return home", url = "/" }
+                            ]
                         ]
                     )
+                ]
             }
 
-        dialogConfig =
-            model.showDialog
-                |> Maybe.map
-                    (\dialog ->
-                        case dialog of
-                            AddPersonDialog dialogModel ->
-                                config "Add Person"
-                                    270
-                                    (nameInput model.windowWidth dialogModel)
-                                    (canSubmitPerson dialogModel)
+        Home ->
+            let
+                config title dialogHeight inputs canSubmit =
+                    { closeMessage = Just Cancel
+                    , maskAttributes = []
+                    , containerAttributes =
+                        [ Background.color (rgb 1 1 1)
+                        , Border.solid
+                        , Border.rounded 5
+                        , Border.width 1
+                        , centerX
+                        , centerY
+                        , (px dialogHeight |> maximum (model.windowHeight * 9 // 10))
+                            |> height
+                        , scrollbarY
+                        ]
+                    , headerAttributes =
+                        [ padding 20
+                        , Background.color green
+                        ]
+                    , bodyAttributes =
+                        [ padding 20
+                        , height fill
+                        ]
+                    , footerAttributes =
+                        [ Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
+                        , Border.solid
+                        ]
+                    , header = Just (text title)
+                    , body =
+                        Just
+                            (column [ spacing 20 ]
+                                inputs
+                            )
+                    , footer =
+                        Just
+                            (row [ centerX, spacing 20, padding 20, alignRight ]
+                                [ Input.button redButtonStyle
+                                    { label = text "Cancel"
+                                    , onPress = Just Cancel
+                                    }
+                                , Input.button
+                                    (if canSubmit then
+                                        greenButtonStyle
 
-                            AddGroupDialog dialogModel ->
-                                let
-                                    label =
-                                        "Add Group / Account"
-                                in
-                                config label
-                                    500
-                                    (addGroupInputs model.windowWidth dialogModel)
-                                    (canSubmitGroup dialogModel)
+                                     else
+                                        grayButtonStyle
+                                    )
+                                    { label = text "Submit"
+                                    , onPress =
+                                        if canSubmit then
+                                            Just Submit
 
-                            AddSpendingDialog dialogModel ->
-                                config "Add Spending"
-                                    900
-                                    (addSpendingInputs model.windowWidth dialogModel)
-                                    (canSubmitSpending dialogModel)
-
-                            PasswordDialog dialogModel ->
-                                config "Password"
-                                    270
-                                    [ Input.currentPassword []
-                                        { label = labelStyle model.windowWidth "Password"
-                                        , placeholder = Nothing
-                                        , onChange = UpdatePassword
-                                        , text = dialogModel.password
-                                        , show = False
-                                        }
-                                    ]
-                                    (String.length dialogModel.password > 0)
-                    )
-
-        textFieldAttributes field =
-            case field model of
-                InvalidPrefix ->
-                    [ Background.color red ]
-
-                _ ->
-                    []
-    in
-    { title = "Accounting"
-    , body =
-        -- Elm UI body
-        [ layout
-            [ inFront (Dialog.view dialogConfig)
-            ]
-            (column [ width fill, spacing 20, padding 20 ]
-                ([ (if model.windowWidth > 650 then
-                        row [ centerX, spacing 70, padding 20 ]
-
-                    else
-                        column [ centerX, spacing 20, padding 20 ]
-                   )
-                    [ Input.button greenButtonStyle
-                        { label = text "Add Person"
-                        , onPress = Just ShowAddPersonDialog
-                        }
-                    , Input.button greenButtonStyle
-                        { label = text "Add Group / Account"
-                        , onPress = Just ShowAddGroupDialog
-                        }
-                    , Input.button greenButtonStyle
-                        { label = text "Add Spending"
-                        , onPress = Just ShowAddSpendingDialog
-                        }
-                    ]
-                 , Input.text (textFieldAttributes .nameValidity)
-                    { label = labelStyle model.windowWidth "Your name:"
-                    , placeholder = Nothing
-                    , onChange = UpdateName
-                    , text = model.user
-                    }
-                 ]
-                    ++ (case model.userGroups of
-                            Just { debitors, creditors } ->
-                                [ row [ width fill, spaceEvenly, padding 20 ]
-                                    [ column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                        [ text "Your Debitor Groups / Accounts"
-                                        , viewGroups model.user debitors
-                                        ]
-                                    , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                        [ text "Your Creditor Groups / Accounts"
-                                        , viewGroups model.user creditors
-                                        ]
-                                    , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
-                                        [ text "Amounts due"
-                                        , personalAmountsDue debitors creditors
-                                            |> Dict.toList
-                                            |> viewAmountsDue
-                                        ]
-                                    ]
+                                        else
+                                            Nothing
+                                    }
                                 ]
+                            )
+                    }
 
-                            _ ->
-                                []
-                       )
-                    ++ [ Input.text (textFieldAttributes .groupValidity)
-                            { label = labelStyle model.windowWidth "Display transactions for group / account:"
+                dialogConfig =
+                    model.showDialog
+                        |> Maybe.map
+                            (\dialog ->
+                                case dialog of
+                                    AddPersonDialog dialogModel ->
+                                        config "Add Person"
+                                            270
+                                            (nameInput model.windowWidth dialogModel)
+                                            (canSubmitPerson dialogModel)
+
+                                    AddGroupDialog dialogModel ->
+                                        let
+                                            label =
+                                                "Add Group / Account"
+                                        in
+                                        config label
+                                            500
+                                            (addGroupInputs model.windowWidth dialogModel)
+                                            (canSubmitGroup dialogModel)
+
+                                    AddSpendingDialog dialogModel ->
+                                        config "Add Spending"
+                                            900
+                                            (addSpendingInputs model.windowWidth dialogModel)
+                                            (canSubmitSpending dialogModel)
+
+                                    PasswordDialog dialogModel ->
+                                        config "Password"
+                                            270
+                                            [ Input.currentPassword []
+                                                { label = labelStyle model.windowWidth "Password"
+                                                , placeholder = Nothing
+                                                , onChange = UpdatePassword
+                                                , text = dialogModel.password
+                                                , show = False
+                                                }
+                                            ]
+                                            (String.length dialogModel.password > 0)
+                            )
+
+                textFieldAttributes field =
+                    case field model of
+                        InvalidPrefix ->
+                            [ Background.color red ]
+
+                        _ ->
+                            []
+            in
+            { title = "Accounting"
+            , body =
+                -- Elm UI body
+                [ layout
+                    [ inFront (Dialog.view dialogConfig)
+                    ]
+                    (column [ width fill, spacing 20, padding 20 ]
+                        ([ (if model.windowWidth > 650 then
+                                row [ centerX, spacing 70, padding 20 ]
+
+                            else
+                                column [ centerX, spacing 20, padding 20 ]
+                           )
+                            [ Input.button greenButtonStyle
+                                { label = text "Add Person"
+                                , onPress = Just ShowAddPersonDialog
+                                }
+                            , Input.button greenButtonStyle
+                                { label = text "Add Group / Account"
+                                , onPress = Just ShowAddGroupDialog
+                                }
+                            , Input.button greenButtonStyle
+                                { label = text "Add Spending"
+                                , onPress = Just ShowAddSpendingDialog
+                                }
+                            ]
+                         , Input.text (textFieldAttributes .nameValidity)
+                            { label = labelStyle model.windowWidth "Your name:"
                             , placeholder = Nothing
-                            , onChange = UpdateGroupName
-                            , text = model.group
+                            , onChange = UpdateName
+                            , text = model.user
                             }
-                       ]
-                    ++ List.map viewTransaction model.groupTransactions
-                )
-            )
-        ]
-    }
+                         ]
+                            ++ (case model.userGroups of
+                                    Just { debitors, creditors } ->
+                                        [ row [ width fill, spaceEvenly, padding 20 ]
+                                            [ column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                                [ text "Your Debitor Groups / Accounts"
+                                                , viewGroups model.user debitors
+                                                ]
+                                            , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                                [ text "Your Creditor Groups / Accounts"
+                                                , viewGroups model.user creditors
+                                                ]
+                                            , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                                [ text "Amounts due"
+                                                , personalAmountsDue debitors creditors
+                                                    |> Dict.toList
+                                                    |> viewAmountsDue
+                                                ]
+                                            ]
+                                        ]
+
+                                    _ ->
+                                        []
+                               )
+                            ++ [ Input.text (textFieldAttributes .groupValidity)
+                                    { label = labelStyle model.windowWidth "Display transactions for group / account:"
+                                    , placeholder = Nothing
+                                    , onChange = UpdateGroupName
+                                    , text = model.group
+                                    }
+                               ]
+                            ++ List.map viewTransaction model.groupTransactions
+                        )
+                    )
+                ]
+            }
 
 
 labelStyle windowWidth textValue =
