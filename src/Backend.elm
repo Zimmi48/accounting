@@ -276,8 +276,13 @@ getGroupMembers model group =
 
 autocomplete clientId prefix autocompleteMsg invalidPrefixMsg list =
     let
+        prefixLower =
+            String.toLower prefix
+
         matches =
-            List.filter (String.startsWith prefix) list
+            List.filter
+                (String.toLower >> String.startsWith prefixLower)
+                list
     in
     case matches of
         [] ->
@@ -286,7 +291,7 @@ autocomplete clientId prefix autocompleteMsg invalidPrefixMsg list =
         [ name ] ->
             Lamdera.sendToFrontend clientId
                 (autocompleteMsg
-                    { prefix = prefix
+                    { prefixLower = prefixLower
                     , longestCommonPrefix = name
                     , complete = True
                     }
@@ -300,16 +305,16 @@ autocomplete clientId prefix autocompleteMsg invalidPrefixMsg list =
             if commonPrefixMatch then
                 Lamdera.sendToFrontend clientId
                     (autocompleteMsg
-                        { prefix = prefix
+                        { prefixLower = prefixLower
                         , longestCommonPrefix = String.left longestCommonPrefix h
                         , complete = True
                         }
                     )
 
-            else if longestCommonPrefix > String.length prefix then
+            else if longestCommonPrefix > String.length prefixLower then
                 Lamdera.sendToFrontend clientId
                     (autocompleteMsg
-                        { prefix = prefix
+                        { prefixLower = prefixLower
                         , longestCommonPrefix = String.left longestCommonPrefix h
                         , complete = False
                         }
@@ -327,7 +332,7 @@ longestPrefix acc strings =
                 |> Maybe.withDefault []
                 |> List.unzip
     in
-    case heads of
+    case List.map Char.toLower heads of
         [] ->
             ( acc, True )
 

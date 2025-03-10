@@ -775,9 +775,13 @@ updateFromBackend msg model =
                     )
 
                 Nothing ->
+                    let
+                        userLower =
+                            String.toLower model.user
+                    in
                     if
-                        String.startsWith response.prefix model.user
-                            && String.startsWith model.user response.longestCommonPrefix
+                        String.startsWith response.prefixLower userLower
+                            && String.startsWith userLower (String.toLower response.longestCommonPrefix)
                     then
                         ( { model
                             | user = response.longestCommonPrefix
@@ -858,9 +862,13 @@ updateFromBackend msg model =
                     ( model, Cmd.none )
 
                 Nothing ->
+                    let
+                        groupLower =
+                            String.toLower model.group
+                    in
                     if
-                        String.startsWith response.prefix model.group
-                            && String.startsWith model.group response.longestCommonPrefix
+                        String.startsWith response.prefixLower groupLower
+                            && String.startsWith groupLower (String.toLower response.longestCommonPrefix)
                     then
                         ( { model
                             | group = response.longestCommonPrefix
@@ -922,13 +930,17 @@ markInvalidPrefix prefix list =
             )
 
 
-completeToLongestCommonPrefix { prefix, longestCommonPrefix, complete } list =
+completeToLongestCommonPrefix { prefixLower, longestCommonPrefix, complete } list =
     list
         |> List.map
             (\( name, value, nameValidity ) ->
+                let
+                    n =
+                        String.toLower name
+                in
                 if
-                    String.startsWith prefix name
-                        && String.startsWith name longestCommonPrefix
+                    String.startsWith prefixLower n
+                        && String.startsWith n (String.toLower longestCommonPrefix)
                 then
                     ( longestCommonPrefix
                     , value

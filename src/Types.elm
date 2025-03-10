@@ -114,13 +114,13 @@ type ToFrontend
     | NameAlreadyExists String
     | InvalidPersonPrefix String
     | AutocompletePersonPrefix
-        { prefix : String
+        { prefixLower : String
         , longestCommonPrefix : String
         , complete : Bool
         }
     | InvalidGroupPrefix String
     | AutocompleteGroupPrefix
-        { prefix : String
+        { prefixLower : String
         , longestCommonPrefix : String
         , complete : Bool
         }
