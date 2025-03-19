@@ -47,7 +47,11 @@ app =
 
 init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
 init url key =
-    ( { page = routing url
+    let
+        ( page, routingCmds ) =
+            routing url
+    in
+    ( { page = page
       , showDialog = Just (PasswordDialog { password = "", submitted = False })
       , user = ""
       , nameValidity = Incomplete
@@ -59,24 +63,30 @@ init url key =
       , windowWidth = 1000
       , windowHeight = 1000
       }
-    , Task.perform
-        (\viewport ->
-            ViewportChanged
-                (round viewport.viewport.width)
-                (round viewport.viewport.height)
-        )
-        getViewport
+    , Cmd.batch
+        [ routingCmds
+        , Task.perform
+            (\viewport ->
+                ViewportChanged
+                    (round viewport.viewport.width)
+                    (round viewport.viewport.height)
+            )
+            getViewport
+        ]
     )
 
 
-routing : Url.Url -> Page
+routing : Url.Url -> ( Page, Cmd FrontendMsg )
 routing url =
     case url.path of
         "/" ->
-            Home
+            ( Home, Cmd.none )
+
+        "/json" ->
+            ( Json Nothing, Lamdera.sendToBackend RequestAllTransactions )
 
         _ ->
-            NotFound
+            ( NotFound, Cmd.none )
 
 
 update : FrontendMsg -> Model -> ( Model, Cmd FrontendMsg )
@@ -85,8 +95,15 @@ update msg model =
         UrlClicked urlRequest ->
             case urlRequest of
                 Internal url ->
-                    ( { model | page = routing url }
-                    , Nav.pushUrl model.key (Url.toString url)
+                    let
+                        ( page, routingCmds ) =
+                            routing url
+                    in
+                    ( { model | page = page }
+                    , Cmd.batch
+                        [ Nav.pushUrl model.key (Url.toString url)
+                        , routingCmds
+                        ]
                     )
 
                 External url ->
@@ -95,8 +112,12 @@ update msg model =
                     )
 
         UrlChanged url ->
-            ( { model | page = routing url }
-            , Cmd.none
+            let
+                ( page, routingCmds ) =
+                    routing url
+            in
+            ( { model | page = page }
+            , routingCmds
             )
 
         NoOpFrontendMsg ->
@@ -917,6 +938,14 @@ updateFromBackend msg model =
             , Cmd.none
             )
 
+        JsonExport json ->
+            case model.page of
+                Json _ ->
+                    ( { model | page = Json (Just json) }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
 
 markInvalidPrefix prefix list =
     list
@@ -977,6 +1006,40 @@ view model =
                 ]
             }
 
+        Json json ->
+            { title = "Accounting - JSON"
+            , body =
+                [ layout
+                    [ centerX
+                    , padding 50
+                    ]
+                    (column
+                        [ shrink |> maximum (model.windowHeight * 9 // 10) |> height
+                        , scrollbarY
+                        , Border.solid
+                        , Border.rounded 5
+                        , Border.width 1
+                        , padding 5
+                        ]
+                        [ paragraph
+                            []
+                            [ case json of
+                                Just jsonString ->
+                                    el
+                                        [ Font.family [ Font.monospace ]
+                                        , Font.size 14
+                                        , height fill
+                                        ]
+                                        (text jsonString)
+
+                                Nothing ->
+                                    text "Waiting to receive JSON export"
+                            ]
+                        ]
+                    )
+                ]
+            }
+
         Home ->
             let
                 config title inputs canSubmit =
@@ -989,9 +1052,7 @@ view model =
                         , Border.width 1
                         , centerX
                         , centerY
-                        , shrink
-                            |> maximum (model.windowHeight * 9 // 10)
-                            |> height
+                        , shrink |> maximum (model.windowHeight * 9 // 10) |> height
                         , scrollbarY
                         ]
                     , headerAttributes =

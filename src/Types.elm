@@ -6,6 +6,7 @@ import Browser.Navigation exposing (Key)
 import Date exposing (Date)
 import DatePicker
 import Dict exposing (Dict)
+import Json.Encode
 import Lamdera exposing (SessionId)
 import Set exposing (Set)
 import Url exposing (Url)
@@ -40,6 +41,7 @@ type alias FrontendModel =
 
 type Page
     = Home
+    | Json (Maybe String)
     | NotFound
 
 
@@ -101,6 +103,7 @@ type ToBackend
         }
     | RequestUserGroups String
     | RequestGroupTransactions String
+    | RequestAllTransactions
     | CheckPassword String
 
 
@@ -141,6 +144,7 @@ type ToFrontend
                 , share : Amount Debit
                 }
         }
+    | JsonExport String
 
 
 type Dialog
@@ -276,3 +280,76 @@ toDebit (Amount value) =
 toCredit : Amount Debit -> Amount Credit
 toCredit (Amount value) =
     Amount -value
+
+
+toJsonExport : BackendModel -> Json.Encode.Value
+toJsonExport model =
+    Json.Encode.object
+        [ ( "years", Json.Encode.dict (Json.Encode.int >> Json.Encode.encode 0) encodeYear model.years )
+        , ( "groups", Json.Encode.dict identity (Json.Encode.dict identity encodeShare) model.groups )
+        , ( "totalGroupCredits"
+          , Json.Encode.dict identity (Json.Encode.dict identity encodeAmount) model.totalGroupCredits
+          )
+        , ( "persons", Json.Encode.dict identity encodePerson model.persons )
+        , ( "nextPersonId", Json.Encode.int model.nextPersonId )
+        , ( "loggedInSessions", Json.Encode.set Json.Encode.string model.loggedInSessions )
+        ]
+
+
+encodeYear : Year -> Json.Encode.Value
+encodeYear rec =
+    Json.Encode.object
+        [ ( "months", Json.Encode.dict (Json.Encode.int >> Json.Encode.encode 0) encodeMonth rec.months )
+        , ( "totalGroupCredits"
+          , Json.Encode.dict identity (Json.Encode.dict identity encodeAmount) rec.totalGroupCredits
+          )
+        ]
+
+
+encodeMonth : Month -> Json.Encode.Value
+encodeMonth rec =
+    Json.Encode.object
+        [ ( "days", Json.Encode.dict (Json.Encode.int >> Json.Encode.encode 0) encodeDay rec.days )
+        , ( "totalGroupCredits"
+          , Json.Encode.dict identity (Json.Encode.dict identity encodeAmount) rec.totalGroupCredits
+          )
+        ]
+
+
+encodeDay : Day -> Json.Encode.Value
+encodeDay rec =
+    Json.Encode.object
+        [ ( "spendings", Json.Encode.list encodeSpending rec.spendings )
+        , ( "totalGroupCredits"
+          , Json.Encode.dict identity (Json.Encode.dict identity encodeAmount) rec.totalGroupCredits
+          )
+        ]
+
+
+encodeSpending : Spending -> Json.Encode.Value
+encodeSpending rec =
+    Json.Encode.object
+        [ ( "description", Json.Encode.string rec.description )
+        , ( "total", encodeAmount rec.total )
+        , ( "groupCredits", Json.Encode.dict identity encodeAmount rec.groupCredits )
+        ]
+
+
+encodeAmount : Amount a -> Json.Encode.Value
+encodeAmount arg =
+    case arg of
+        Amount arg0 ->
+            Json.Encode.object [ ( "tag", Json.Encode.string "Amount" ), ( "0", Json.Encode.int arg0 ) ]
+
+
+encodeShare : Share -> Json.Encode.Value
+encodeShare arg =
+    case arg of
+        Share arg0 ->
+            Json.Encode.object [ ( "tag", Json.Encode.string "Share" ), ( "0", Json.Encode.int arg0 ) ]
+
+
+encodePerson : Person -> Json.Encode.Value
+encodePerson rec =
+    Json.Encode.object
+        [ ( "id", Json.Encode.int rec.id ), ( "belongsTo", Json.Encode.set Json.Encode.string rec.belongsTo ) ]
