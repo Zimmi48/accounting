@@ -979,7 +979,7 @@ view model =
 
         Home ->
             let
-                config title dialogHeight inputs canSubmit =
+                config title inputs canSubmit =
                     { closeMessage = Just Cancel
                     , maskAttributes = []
                     , containerAttributes =
@@ -1045,7 +1045,6 @@ view model =
                                 case dialog of
                                     AddPersonDialog dialogModel ->
                                         config "Add Person"
-                                            270
                                             (nameInput model.windowWidth dialogModel)
                                             (canSubmitPerson dialogModel)
 
@@ -1055,19 +1054,16 @@ view model =
                                                 "Add Group / Account"
                                         in
                                         config label
-                                            500
                                             (addGroupInputs model.windowWidth dialogModel)
                                             (canSubmitGroup dialogModel)
 
                                     AddSpendingDialog dialogModel ->
                                         config "Add Spending"
-                                            900
                                             (addSpendingInputs model.windowWidth dialogModel)
                                             (canSubmitSpending dialogModel)
 
                                     PasswordDialog dialogModel ->
                                         config "Password"
-                                            270
                                             [ Input.currentPassword []
                                                 { label = labelStyle model.windowWidth "Password"
                                                 , placeholder = Nothing
