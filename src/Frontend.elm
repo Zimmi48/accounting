@@ -989,7 +989,8 @@ view model =
                         , Border.width 1
                         , centerX
                         , centerY
-                        , (px dialogHeight |> maximum (model.windowHeight * 9 // 10))
+                        , shrink
+                            |> maximum (model.windowHeight * 9 // 10)
                             |> height
                         , scrollbarY
                         ]
