@@ -3,10 +3,10 @@ module Types exposing (..)
 import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
+import Codec exposing (Codec, Value)
 import Date exposing (Date)
 import DatePicker
 import Dict exposing (Dict)
-import Json.Encode
 import Lamdera exposing (SessionId)
 import Set exposing (Set)
 import Url exposing (Url)
@@ -282,74 +282,94 @@ toCredit (Amount value) =
     Amount -value
 
 
-toJsonExport : BackendModel -> Json.Encode.Value
-toJsonExport model =
-    Json.Encode.object
-        [ ( "years", Json.Encode.dict (Json.Encode.int >> Json.Encode.encode 0) encodeYear model.years )
-        , ( "groups", Json.Encode.dict identity (Json.Encode.dict identity encodeShare) model.groups )
-        , ( "totalGroupCredits"
-          , Json.Encode.dict identity (Json.Encode.dict identity encodeAmount) model.totalGroupCredits
-          )
-        , ( "persons", Json.Encode.dict identity encodePerson model.persons )
-        , ( "nextPersonId", Json.Encode.int model.nextPersonId )
-        , ( "loggedInSessions", Json.Encode.set Json.Encode.string model.loggedInSessions )
-        ]
+encodeToString : BackendModel -> String
+encodeToString model =
+    Codec.encodeToString 0 backendCodec model
 
 
-encodeYear : Year -> Json.Encode.Value
-encodeYear rec =
-    Json.Encode.object
-        [ ( "months", Json.Encode.dict (Json.Encode.int >> Json.Encode.encode 0) encodeMonth rec.months )
-        , ( "totalGroupCredits"
-          , Json.Encode.dict identity (Json.Encode.dict identity encodeAmount) rec.totalGroupCredits
-          )
-        ]
+decodeString : String -> Result Codec.Error BackendModel
+decodeString s =
+    Codec.decodeString backendCodec s
 
 
-encodeMonth : Month -> Json.Encode.Value
-encodeMonth rec =
-    Json.Encode.object
-        [ ( "days", Json.Encode.dict (Json.Encode.int >> Json.Encode.encode 0) encodeDay rec.days )
-        , ( "totalGroupCredits"
-          , Json.Encode.dict identity (Json.Encode.dict identity encodeAmount) rec.totalGroupCredits
-          )
-        ]
+backendCodec : Codec BackendModel
+backendCodec =
+    Codec.object BackendModel
+        |> Codec.field
+            "years"
+            .years
+            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int yearCodec)))
+        |> Codec.field "groups" .groups (Codec.dict (Codec.dict shareCodec))
+        |> Codec.field "totalGroupCredits" .totalGroupCredits (Codec.dict (Codec.dict amountCodec))
+        |> Codec.field "persons" .persons (Codec.dict personCodec)
+        |> Codec.field "nextPersonId" .nextPersonId Codec.int
+        |> Codec.field "loggedInSessions" .loggedInSessions (Codec.set Codec.string)
+        |> Codec.buildObject
 
 
-encodeDay : Day -> Json.Encode.Value
-encodeDay rec =
-    Json.Encode.object
-        [ ( "spendings", Json.Encode.list encodeSpending rec.spendings )
-        , ( "totalGroupCredits"
-          , Json.Encode.dict identity (Json.Encode.dict identity encodeAmount) rec.totalGroupCredits
-          )
-        ]
+yearCodec : Codec Year
+yearCodec =
+    Codec.object Year
+        |> Codec.field
+            "months"
+            .months
+            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int monthCodec)))
+        |> Codec.field "totalGroupCredits" .totalGroupCredits (Codec.dict (Codec.dict amountCodec))
+        |> Codec.buildObject
 
 
-encodeSpending : Spending -> Json.Encode.Value
-encodeSpending rec =
-    Json.Encode.object
-        [ ( "description", Json.Encode.string rec.description )
-        , ( "total", encodeAmount rec.total )
-        , ( "groupCredits", Json.Encode.dict identity encodeAmount rec.groupCredits )
-        ]
+monthCodec : Codec Month
+monthCodec =
+    Codec.object Month
+        |> Codec.field "days" .days (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int dayCodec)))
+        |> Codec.field "totalGroupCredits" .totalGroupCredits (Codec.dict (Codec.dict amountCodec))
+        |> Codec.buildObject
 
 
-encodeAmount : Amount a -> Json.Encode.Value
-encodeAmount arg =
-    case arg of
-        Amount arg0 ->
-            Json.Encode.object [ ( "tag", Json.Encode.string "Amount" ), ( "0", Json.Encode.int arg0 ) ]
+dayCodec : Codec Day
+dayCodec =
+    Codec.object Day
+        |> Codec.field "spendings" .spendings (Codec.list spendingCodec)
+        |> Codec.field "totalGroupCredits" .totalGroupCredits (Codec.dict (Codec.dict amountCodec))
+        |> Codec.buildObject
 
 
-encodeShare : Share -> Json.Encode.Value
-encodeShare arg =
-    case arg of
-        Share arg0 ->
-            Json.Encode.object [ ( "tag", Json.Encode.string "Share" ), ( "0", Json.Encode.int arg0 ) ]
+spendingCodec : Codec Spending
+spendingCodec =
+    Codec.object Spending
+        |> Codec.field "description" .description Codec.string
+        |> Codec.field "total" .total amountCodec
+        |> Codec.field "groupCredits" .groupCredits (Codec.dict amountCodec)
+        |> Codec.buildObject
 
 
-encodePerson : Person -> Json.Encode.Value
-encodePerson rec =
-    Json.Encode.object
-        [ ( "id", Json.Encode.int rec.id ), ( "belongsTo", Json.Encode.set Json.Encode.string rec.belongsTo ) ]
+amountCodec : Codec (Amount a)
+amountCodec =
+    Codec.custom
+        (\amountEncoder value ->
+            case value of
+                Amount arg0 ->
+                    amountEncoder arg0
+        )
+        |> Codec.variant1 "Amount" Amount Codec.int
+        |> Codec.buildCustom
+
+
+shareCodec : Codec Share
+shareCodec =
+    Codec.custom
+        (\shareEncoder value ->
+            case value of
+                Share arg0 ->
+                    shareEncoder arg0
+        )
+        |> Codec.variant1 "Share" Share Codec.int
+        |> Codec.buildCustom
+
+
+personCodec : Codec Person
+personCodec =
+    Codec.object Person
+        |> Codec.field "id" .id Codec.int
+        |> Codec.field "belongsTo" .belongsTo (Codec.set Codec.string)
+        |> Codec.buildObject

@@ -4,7 +4,6 @@ import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Env
 import Html
-import Json.Encode as Json
 import Lamdera exposing (ClientId, SessionId)
 import Maybe.Extra as Maybe
 import Set exposing (Set)
@@ -267,8 +266,7 @@ updateFromFrontend sessionId clientId msg model =
         ( True, RequestAllTransactions ) ->
             ( model
             , model
-                |> toJsonExport
-                |> Json.encode 0
+                |> encodeToString
                 |> JsonExport
                 |> Lamdera.sendToFrontend clientId
             )
