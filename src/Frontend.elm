@@ -85,6 +85,9 @@ routing url =
         "/json" ->
             ( Json Nothing, Lamdera.sendToBackend RequestAllTransactions )
 
+        "/import" ->
+            ( Import "", Cmd.none )
+
         _ ->
             ( NotFound, Cmd.none )
 
@@ -190,100 +193,113 @@ update msg model =
                     ( model, Cmd.none )
 
         Submit ->
-            case model.showDialog of
-                Just (AddPersonDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddPersonDialog { dialogModel | submitted = True }) }
-                    , Lamdera.sendToBackend (CreatePerson dialogModel.name)
+            case model.page of
+                Import "" ->
+                    ( model, Cmd.none )
+
+                Import json ->
+                    ( model
+                    , Lamdera.sendToBackend (ImportJson json)
                     )
 
-                Just (AddGroupDialog dialogModel) ->
-                    let
-                        members =
-                            dialogModel.members
-                                |> List.map
-                                    (\( member, share, _ ) ->
-                                        ( member
-                                        , share
-                                            |> String.toInt
-                                            |> Maybe.withDefault 0
-                                        )
-                                    )
-                                |> Dict.fromListDedupe (+)
-                                |> Dict.map (\_ -> Share)
-                    in
-                    ( { model | showDialog = Just (AddGroupDialog { dialogModel | submitted = True }) }
-                    , Lamdera.sendToBackend (CreateGroup dialogModel.name members)
-                    )
+                Home ->
+                    case model.showDialog of
+                        Just (AddPersonDialog dialogModel) ->
+                            ( { model | showDialog = Just (AddPersonDialog { dialogModel | submitted = True }) }
+                            , Lamdera.sendToBackend (CreatePerson dialogModel.name)
+                            )
 
-                Just (AddSpendingDialog dialogModel) ->
-                    let
-                        credits =
-                            dialogModel.credits
-                                |> List.map
-                                    (\( group, amount, _ ) ->
-                                        ( group
-                                        , amount
-                                            |> parseAmountValue
-                                            |> Maybe.withDefault 0
-                                        )
-                                    )
-                                |> Dict.fromListDedupe (+)
-                                |> Dict.map (\_ -> Amount)
+                        Just (AddGroupDialog dialogModel) ->
+                            let
+                                members =
+                                    dialogModel.members
+                                        |> List.map
+                                            (\( member, share, _ ) ->
+                                                ( member
+                                                , share
+                                                    |> String.toInt
+                                                    |> Maybe.withDefault 0
+                                                )
+                                            )
+                                        |> Dict.fromListDedupe (+)
+                                        |> Dict.map (\_ -> Share)
+                            in
+                            ( { model | showDialog = Just (AddGroupDialog { dialogModel | submitted = True }) }
+                            , Lamdera.sendToBackend (CreateGroup dialogModel.name members)
+                            )
 
-                        debits =
-                            dialogModel.debits
-                                |> List.map
-                                    (\( group, amount, _ ) ->
-                                        ( group
-                                        , amount
-                                            |> parseAmountValue
-                                            |> Maybe.withDefault 0
+                        Just (AddSpendingDialog dialogModel) ->
+                            let
+                                credits =
+                                    dialogModel.credits
+                                        |> List.map
+                                            (\( group, amount, _ ) ->
+                                                ( group
+                                                , amount
+                                                    |> parseAmountValue
+                                                    |> Maybe.withDefault 0
+                                                )
+                                            )
+                                        |> Dict.fromListDedupe (+)
+                                        |> Dict.map (\_ -> Amount)
+
+                                debits =
+                                    dialogModel.debits
+                                        |> List.map
+                                            (\( group, amount, _ ) ->
+                                                ( group
+                                                , amount
+                                                    |> parseAmountValue
+                                                    |> Maybe.withDefault 0
+                                                )
+                                            )
+                                        |> Dict.fromListDedupe (+)
+                                        |> Dict.map (\_ -> Amount)
+                            in
+                            case
+                                ( dialogModel.date
+                                , parseAmountValue dialogModel.total
+                                )
+                            of
+                                ( Just date, Just total ) ->
+                                    ( { model
+                                        | showDialog =
+                                            Just
+                                                (AddSpendingDialog
+                                                    { dialogModel | submitted = True }
+                                                )
+                                      }
+                                    , Lamdera.sendToBackend
+                                        (CreateSpending
+                                            { description = dialogModel.description
+                                            , year = Date.year date
+                                            , month = Date.monthNumber date
+                                            , day = Date.day date
+                                            , total = Amount total
+                                            , credits = credits
+                                            , debits = debits
+                                            }
                                         )
                                     )
-                                |> Dict.fromListDedupe (+)
-                                |> Dict.map (\_ -> Amount)
-                    in
-                    case
-                        ( dialogModel.date
-                        , parseAmountValue dialogModel.total
-                        )
-                    of
-                        ( Just date, Just total ) ->
+
+                                _ ->
+                                    ( model, Cmd.none )
+
+                        Just (PasswordDialog dialogModel) ->
                             ( { model
                                 | showDialog =
                                     Just
-                                        (AddSpendingDialog
+                                        (PasswordDialog
                                             { dialogModel | submitted = True }
                                         )
                               }
-                            , Lamdera.sendToBackend
-                                (CreateSpending
-                                    { description = dialogModel.description
-                                    , year = Date.year date
-                                    , month = Date.monthNumber date
-                                    , day = Date.day date
-                                    , total = Amount total
-                                    , credits = credits
-                                    , debits = debits
-                                    }
-                                )
+                            , Lamdera.sendToBackend (CheckPassword dialogModel.password)
                             )
 
-                        _ ->
+                        Nothing ->
                             ( model, Cmd.none )
 
-                Just (PasswordDialog dialogModel) ->
-                    ( { model
-                        | showDialog =
-                            Just
-                                (PasswordDialog
-                                    { dialogModel | submitted = True }
-                                )
-                      }
-                    , Lamdera.sendToBackend (CheckPassword dialogModel.password)
-                    )
-
-                Nothing ->
+                _ ->
                     ( model, Cmd.none )
 
         Cancel ->
@@ -606,6 +622,16 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        UpdateJson json ->
+            case model.page of
+                Import _ ->
+                    ( { model | page = Import json }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
         ViewportChanged width height ->
             ( { model
                 | windowWidth = width
@@ -685,22 +711,32 @@ updateFromBackend msg model =
             ( model, Cmd.none )
 
         OperationSuccessful ->
-            ( { model | showDialog = Nothing }
-            , (++)
-                (if model.nameValidity == Complete then
-                    [ Lamdera.sendToBackend (RequestUserGroups model.user) ]
+            case model.page of
+                Import _ ->
+                    ( { model | page = Import "" }
+                    , Cmd.none
+                    )
 
-                 else
-                    []
-                )
-                (if model.groupValidity == Complete then
-                    [ Lamdera.sendToBackend (RequestGroupTransactions model.group) ]
+                Home ->
+                    ( { model | showDialog = Nothing }
+                    , (++)
+                        (if model.nameValidity == Complete then
+                            [ Lamdera.sendToBackend (RequestUserGroups model.user) ]
 
-                 else
-                    []
-                )
-                |> Cmd.batch
-            )
+                         else
+                            []
+                        )
+                        (if model.groupValidity == Complete then
+                            [ Lamdera.sendToBackend (RequestGroupTransactions model.group) ]
+
+                         else
+                            []
+                        )
+                        |> Cmd.batch
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         NameAlreadyExists name ->
             case model.showDialog of
@@ -1035,6 +1071,40 @@ view model =
                                 Nothing ->
                                     text "Waiting to receive JSON export"
                             ]
+                        ]
+                    )
+                ]
+            }
+
+        Import json ->
+            { title = "Accounting - Import"
+            , body =
+                [ layout []
+                    (column [ padding 20, spacing 20, width fill ]
+                        [ el [ centerX ] (text "Import JSON")
+                        , Input.multiline
+                            [ width fill
+                            , px (model.windowHeight * 8 // 10) |> height
+                            , Font.family [ Font.monospace ]
+                            , Font.size 14
+                            ]
+                            { text = json
+                            , placeholder = Just (Input.placeholder [] (text "Paste JSON here"))
+                            , onChange = UpdateJson
+                            , label = Input.labelHidden "JSON"
+                            , spellcheck = False
+                            }
+                        , el [ centerX ]
+                            (Input.button greenButtonStyle
+                                { label = text "Import"
+                                , onPress =
+                                    if String.length json > 0 then
+                                        Just Submit
+
+                                    else
+                                        Nothing
+                                }
+                            )
                         ]
                     )
                 ]

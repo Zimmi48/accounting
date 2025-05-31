@@ -42,6 +42,7 @@ type alias FrontendModel =
 type Page
     = Home
     | Json (Maybe String)
+    | Import String
     | NotFound
 
 
@@ -82,6 +83,7 @@ type FrontendMsg
     | UpdateDebit Int String
     | UpdateGroupName String
     | UpdatePassword String
+    | UpdateJson String
     | ViewportChanged Int Int
 
 
@@ -105,6 +107,7 @@ type ToBackend
     | RequestGroupTransactions String
     | RequestAllTransactions
     | CheckPassword String
+    | ImportJson String
 
 
 type BackendMsg

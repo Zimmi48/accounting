@@ -271,6 +271,17 @@ updateFromFrontend sessionId clientId msg model =
                 |> Lamdera.sendToFrontend clientId
             )
 
+        ( True, ImportJson json ) ->
+            case decodeString json of
+                Ok newModel ->
+                    ( newModel
+                    , Lamdera.sendToFrontend clientId OperationSuccessful
+                    )
+
+                Err error ->
+                    -- Debug.log (Debug.toString error)
+                    ( model, Cmd.none )
+
 
 getGroupMembers model group =
     case Dict.get group model.groups of
