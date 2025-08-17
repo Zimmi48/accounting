@@ -11,7 +11,7 @@ A web application for managing group expenses and accounting, built with Elm and
 
 ## Development
 
-This project is built with [Elm](https://elm-lang.org/) and [Lamdera](https://lamdera.com/), a platform for building full-stack Elm applications.
+This project is built [Lamdera](https://lamdera.com/), a platform for building full-stack [Elm](https://elm-lang.org/) applications.
 
 ### Prerequisites
 
@@ -24,16 +24,6 @@ To build and test the project locally:
 
 ```bash
 lamdera live
-```
-
-### Code Quality
-
-This project uses [elm-review](https://package.elm-lang.org/packages/jfmengels/elm-review/latest/) for linting and code quality checks. The configuration is in the `review/` directory.
-
-To run elm-review locally:
-
-```bash
-npx elm-review
 ```
 
 ## Continuous Integration

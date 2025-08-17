@@ -34,3 +34,4 @@ jobs:
     
     - name: Compile project
       run: lamdera make src/Frontend.elm --output=/dev/null
+      run: lamdera make src/Backend.elm --output=/dev/null
