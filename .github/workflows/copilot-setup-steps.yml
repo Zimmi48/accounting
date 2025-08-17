@@ -1,0 +1,63 @@
+name: Copilot Environment Setup
+
+# This workflow defines the setup steps for GitHub Copilot agents
+# It ensures agents have the necessary tools and dependencies preinstalled
+on:
+  workflow_dispatch:
+  push:
+    paths:
+    - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+    - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  setup-copilot-environment:
+    runs-on: ubuntu-latest
+    name: Setup Copilot Agent Environment
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Install global dependencies
+      run: |
+        # Install Lamdera CLI for Elm development
+        npm install -g lamdera
+        
+        # Install Elm tooling
+        npm install -g elm-format elm-review
+        
+    - name: Cache Elm dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.lamdera
+          **/elm-stuff
+        key: copilot-env-${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json') }}
+        restore-keys: |
+          copilot-env-${{ runner.os }}-lamdera-
+        
+    - name: Validate environment setup
+      run: |
+        echo "=== Environment Validation ==="
+        echo "Node.js version: $(node --version)"
+        echo "NPM version: $(npm --version)"
+        echo "Lamdera version: $(lamdera --version)"
+        echo "Elm format version: $(elm-format --help | head -1)"
+        
+        echo "=== Project Structure ==="
+        echo "Elm project file:"
+        cat elm.json
+        
+        echo "=== Compilation Test ==="
+        # Test compilation to ensure environment is working
+        lamdera make src/Frontend.elm --output=/dev/null
+        lamdera make src/Backend.elm --output=/dev/null
+        
+        echo "Environment setup completed successfully!"
