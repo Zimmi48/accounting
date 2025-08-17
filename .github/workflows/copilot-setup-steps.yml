@@ -1,0 +1,39 @@
+name: Copilot Setup Steps
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  setup-steps:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Step 1 - Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Step 2 - Setup Node.js environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Step 3 - Install Lamdera CLI
+      run: npm install -g lamdera
+        
+    - name: Step 4 - Cache Lamdera dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.lamdera
+          **/elm-stuff
+        key: ${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json') }}
+        restore-keys: |
+          ${{ runner.os }}-lamdera-
+    
+    - name: Step 5 - Verify Frontend compilation
+      run: lamdera make src/Frontend.elm --output=/dev/null
+
+    - name: Step 6 - Verify Backend compilation
+      run: lamdera make src/Backend.elm --output=/dev/null
