@@ -57,7 +57,7 @@ updateFromFrontend sessionId clientId msg model =
 
         ( _, CheckAuthentication ) ->
             ( model
-            , Lamdera.sendToFrontend clientId 
+            , Lamdera.sendToFrontend clientId
                 (AuthenticationStatus (Set.member sessionId model.loggedInSessions))
             )
 

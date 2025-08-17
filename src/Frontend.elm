@@ -453,7 +453,11 @@ update msg model =
                                 (AddSpendingDialog
                                     (case changeEvent of
                                         DatePicker.DateChanged date ->
-                                            { dialogModel | date = Just date, dateText = Date.toIsoString date }
+                                            { dialogModel
+                                                | date = Just date
+                                                , dateText = Date.toIsoString date
+                                                , datePickerModel = DatePicker.close dialogModel.datePickerModel
+                                            }
 
                                         DatePicker.TextChanged dateText ->
                                             { dialogModel
@@ -980,6 +984,7 @@ updateFromBackend msg model =
             if isAuthenticated then
                 -- Already authenticated, don't show password dialog
                 ( { model | showDialog = Nothing, checkingAuthentication = False }, Cmd.none )
+
             else
                 -- Not authenticated, show password dialog
                 ( { model | showDialog = Just (PasswordDialog { password = "", submitted = False }), checkingAuthentication = False }
@@ -1134,6 +1139,7 @@ view model =
                         )
                     ]
                 }
+
             else
                 let
                     config title inputs canSubmit =
