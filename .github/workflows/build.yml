@@ -32,6 +32,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-lamdera-
     
-    - name: Compile project
+    - name: Compile Frontend
       run: lamdera make src/Frontend.elm --output=/dev/null
+
+    - name: Compile Backend
       run: lamdera make src/Backend.elm --output=/dev/null
