@@ -132,6 +132,7 @@ updateFromFrontend sessionId clientId msg model =
                         debits
                             |> Dict.map (\_ (Amount amount) -> Amount -amount)
                             |> addAmounts credits
+                    , status = Active
                     }
             in
             ( { model
@@ -157,6 +158,12 @@ updateFromFrontend sessionId clientId msg model =
               }
             , Lamdera.sendToFrontend clientId OperationSuccessful
             )
+
+        ( True, EditTransaction { transactionId, description, year, month, day, total, credits, debits } ) ->
+            Debug.todo "Implement EditTransaction"
+
+        ( True, DeleteTransaction transactionId ) ->
+            Debug.todo "Implement DeleteTransaction"
 
         ( True, AutocompletePerson prefix ) ->
             ( model
@@ -234,21 +241,31 @@ updateFromFrontend sessionId clientId msg model =
                                 (\month { days } accMonths ->
                                     Dict.foldr
                                         (\day { spendings } accDays ->
-                                            List.filterMap
-                                                (\spending ->
-                                                    Dict.get group spending.groupCredits
-                                                        |> Maybe.map
-                                                            (\share ->
-                                                                { description = spending.description
-                                                                , year = year
-                                                                , month = month
-                                                                , day = day
-                                                                , total = (\(Amount a) -> Amount a) spending.total
-                                                                , share = toDebit share
-                                                                }
-                                                            )
+                                            List.indexedMap
+                                                (\index spending ->
+                                                    if spending.status == Active then
+                                                        Dict.get group spending.groupCredits
+                                                            |> Maybe.map
+                                                                (\share ->
+                                                                    { transactionId = 
+                                                                        { year = year
+                                                                        , month = month
+                                                                        , day = day
+                                                                        , index = index
+                                                                        }
+                                                                    , description = spending.description
+                                                                    , year = year
+                                                                    , month = month
+                                                                    , day = day
+                                                                    , total = (\(Amount a) -> Amount a) spending.total
+                                                                    , share = toDebit share
+                                                                    }
+                                                                )
+                                                    else
+                                                        Nothing
                                                 )
                                                 spendings
+                                                |> List.filterMap identity
                                                 |> (++) accDays
                                         )
                                         accMonths

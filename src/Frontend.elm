@@ -176,6 +176,26 @@ update msg model =
             , Task.perform SetToday Date.today
             )
 
+        ShowEditTransactionDialog transactionId ->
+            ( { model
+                | showDialog =
+                    Just
+                        (EditTransactionDialog
+                            { transactionId = transactionId
+                            , description = ""
+                            , date = Nothing
+                            , dateText = ""
+                            , datePickerModel = DatePicker.init
+                            , total = ""
+                            , credits = []
+                            , debits = []
+                            , submitted = False
+                            }
+                        )
+              }
+            , Task.perform SetToday Date.today
+            )
+
         SetToday today ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
@@ -287,6 +307,9 @@ update msg model =
                                 _ ->
                                     ( model, Cmd.none )
 
+                        Just (EditTransactionDialog dialogModel) ->
+                            Debug.todo "Handle EditTransactionDialog submit"
+
                         Just (PasswordDialog dialogModel) ->
                             ( { model
                                 | showDialog =
@@ -335,6 +358,11 @@ update msg model =
 
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model | showDialog = Just (AddSpendingDialog { dialogModel | description = name }) }
+                    , Cmd.none
+                    )
+
+                Just (EditTransactionDialog dialogModel) ->
+                    ( { model | showDialog = Just (EditTransactionDialog { dialogModel | description = name }) }
                     , Cmd.none
                     )
 
@@ -637,6 +665,9 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        RequestDeleteTransaction transactionId ->
+            ( model, Lamdera.sendToBackend (DeleteTransaction transactionId) )
 
         ViewportChanged width height ->
             ( { model
@@ -1220,6 +1251,11 @@ view model =
 
                                         AddSpendingDialog dialogModel ->
                                             config "Add Spending"
+                                                (addSpendingInputs model.windowWidth dialogModel)
+                                                (canSubmitSpending dialogModel)
+
+                                        EditTransactionDialog dialogModel ->
+                                            config "Edit Transaction"
                                                 (addSpendingInputs model.windowWidth dialogModel)
                                                 (canSubmitSpending dialogModel)
 

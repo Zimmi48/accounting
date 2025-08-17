@@ -26,7 +26,8 @@ type alias FrontendModel =
     , groupValidity : NameValidity
     , groupTransactions :
         List
-            { description : String
+            { transactionId : TransactionId
+            , description : String
             , year : Int
             , month : Int
             , day : Int
@@ -67,6 +68,7 @@ type FrontendMsg
     | ShowAddPersonDialog
     | ShowAddGroupDialog
     | ShowAddSpendingDialog
+    | ShowEditTransactionDialog TransactionId
     | SetToday Date
     | Submit
     | Cancel
@@ -85,6 +87,7 @@ type FrontendMsg
     | UpdateGroupName String
     | UpdatePassword String
     | UpdateJson String
+    | RequestDeleteTransaction TransactionId
     | ViewportChanged Int Int
 
 
@@ -104,12 +107,31 @@ type ToBackend
         , credits : Dict String (Amount Credit)
         , debits : Dict String (Amount Debit)
         }
+    | EditTransaction
+        { transactionId : TransactionId
+        , description : String
+        , year : Int
+        , month : Int
+        , day : Int
+        , total : Amount Credit
+        , credits : Dict String (Amount Credit)
+        , debits : Dict String (Amount Debit)
+        }
+    | DeleteTransaction TransactionId
     | RequestUserGroups String
     | RequestGroupTransactions String
     | RequestAllTransactions
     | CheckPassword String
     | CheckAuthentication
     | ImportJson String
+
+
+type alias TransactionId =
+    { year : Int
+    , month : Int
+    , day : Int
+    , index : Int
+    }
 
 
 type BackendMsg
@@ -141,7 +163,8 @@ type ToFrontend
         { group : String
         , transactions :
             List
-                { description : String
+                { transactionId : TransactionId
+                , description : String
                 , year : Int
                 , month : Int
                 , day : Int
@@ -157,6 +180,7 @@ type Dialog
     = AddPersonDialog AddPersonDialogModel
     | AddGroupDialog AddGroupDialogModel
     | AddSpendingDialog AddSpendingDialogModel
+    | EditTransactionDialog EditTransactionDialogModel
     | PasswordDialog PasswordDialogModel
 
 
@@ -205,6 +229,23 @@ type alias AddSpendingDialogModel =
     }
 
 
+type alias EditTransactionDialogModel =
+    { transactionId : TransactionId
+    , description : String
+    , date : Maybe Date
+    , dateText : String
+    , datePickerModel : DatePicker.Model
+    , total : String
+
+    -- group name, amount, name validity
+    , credits : List ( String, String, NameValidity )
+
+    -- group name, amount, name validity
+    , debits : List ( String, String, NameValidity )
+    , submitted : Bool
+    }
+
+
 type alias Person =
     { id : Int
     , belongsTo : Set String
@@ -237,7 +278,16 @@ type alias Spending =
 
     -- associates each group with an amount (credit = positive or debit = negative) in this transaction
     , groupCredits : Dict String (Amount Credit)
+    
+    -- status of the transaction
+    , status : TransactionStatus
     }
+
+
+type TransactionStatus
+    = Active
+    | Deleted
+    | Replaced
 
 
 type alias Group =
@@ -346,7 +396,28 @@ spendingCodec =
         |> Codec.field "description" .description Codec.string
         |> Codec.field "total" .total amountCodec
         |> Codec.field "groupCredits" .groupCredits (Codec.dict amountCodec)
+        |> Codec.field "status" .status transactionStatusCodec
         |> Codec.buildObject
+
+
+transactionStatusCodec : Codec TransactionStatus
+transactionStatusCodec =
+    Codec.custom
+        (\activeEncoder deletedEncoder replacedEncoder value ->
+            case value of
+                Active ->
+                    activeEncoder
+
+                Deleted ->
+                    deletedEncoder
+
+                Replaced ->
+                    replacedEncoder
+        )
+        |> Codec.variant0 "Active" Active
+        |> Codec.variant0 "Deleted" Deleted
+        |> Codec.variant0 "Replaced" Replaced
+        |> Codec.buildCustom
 
 
 amountCodec : Codec (Amount a)
