@@ -1,0 +1,74 @@
+name: Build and Review
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Elm
+      uses: jorelali/setup-elm@v5
+      with:
+        elm-version: 0.19.1
+        
+    - name: Cache elm dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.elm
+          **/elm-stuff
+        key: ${{ runner.os }}-elm-${{ hashFiles('**/elm.json') }}
+        restore-keys: |
+          ${{ runner.os }}-elm-
+    
+    - name: Compile Frontend
+      run: elm make src/Frontend.elm --output=/dev/null
+      
+    - name: Compile Backend  
+      run: elm make src/Backend.elm --output=/dev/null
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Setup Elm
+      uses: jorelali/setup-elm@v5
+      with:
+        elm-version: 0.19.1
+        
+    - name: Cache elm dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.elm
+          **/elm-stuff
+        key: ${{ runner.os }}-elm-${{ hashFiles('**/elm.json') }}
+        restore-keys: |
+          ${{ runner.os }}-elm-
+    
+    - name: Install elm-review
+      run: npm install -g elm-review
+      
+    - name: Build review configuration  
+      run: |
+        cd review
+        elm make src/ReviewConfig.elm --output=/dev/null
+        
+    - name: Run elm-review
+      run: elm-review
