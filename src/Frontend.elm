@@ -391,6 +391,10 @@ update msg model =
                                 _ ->
                                     ( model, Cmd.none )
 
+                        Just (ConfirmDeleteDialog _) ->
+                            -- This should not happen as ConfirmDeleteDialog has its own buttons
+                            ( model, Cmd.none )
+
                         Just (PasswordDialog dialogModel) ->
                             ( { model
                                 | showDialog =
@@ -446,6 +450,10 @@ update msg model =
                     ( { model | showDialog = Just (EditTransactionDialog { dialogModel | description = name }) }
                     , Cmd.none
                     )
+
+                Just (ConfirmDeleteDialog _) ->
+                    -- No name updates for delete confirmation dialog
+                    ( model, Cmd.none )
 
                 Just (PasswordDialog dialogModel) ->
                     ( model, Cmd.none )
@@ -1367,6 +1375,33 @@ view model =
                                             config "Edit Transaction"
                                                 (addSpendingInputs model.windowWidth dialogModel)
                                                 (canSubmitSpending dialogModel)
+
+                                        ConfirmDeleteDialog transactionId ->
+                                            { body = 
+                                                Just (Element.column [ spacing 20, width fill ]
+                                                    [ Element.text "Are you sure you want to delete this transaction?"
+                                                    , Element.row [ spacing 10, width fill ]
+                                                        [ Input.button 
+                                                            [ Background.color (rgb 0.8 1.0 0.8), padding 10, Border.rounded 5, width (fillPortion 1) ]
+                                                            { onPress = Just (ConfirmDeleteTransaction transactionId)
+                                                            , label = Element.text "Yes, Delete"
+                                                            }
+                                                        , Input.button 
+                                                            [ Background.color (rgb 1.0 0.8 0.8), padding 10, Border.rounded 5, width (fillPortion 1) ]
+                                                            { onPress = Just Cancel
+                                                            , label = Element.text "Cancel"
+                                                            }
+                                                        ]
+                                                    ])
+                                            , bodyAttributes = []
+                                            , closeMessage = Just Cancel
+                                            , containerAttributes = []
+                                            , footer = Nothing
+                                            , footerAttributes = []
+                                            , header = Just (Element.text "Confirm Delete")
+                                            , headerAttributes = []
+                                            , maskAttributes = []
+                                            }
 
                                         PasswordDialog dialogModel ->
                                             config "Password"
