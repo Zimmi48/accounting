@@ -52,7 +52,7 @@ init url key =
             routing url
     in
     ( { page = page
-      , showDialog = Just (PasswordDialog { password = "", submitted = False })
+      , showDialog = Nothing
       , user = ""
       , nameValidity = Incomplete
       , userGroups = Nothing
@@ -72,6 +72,7 @@ init url key =
                     (round viewport.viewport.height)
             )
             getViewport
+        , Lamdera.sendToBackend CheckAuthentication
         ]
     )
 
@@ -973,6 +974,16 @@ updateFromBackend msg model =
                 model
             , Cmd.none
             )
+
+        AuthenticationStatus isAuthenticated ->
+            if isAuthenticated then
+                -- Already authenticated, don't show password dialog
+                ( { model | showDialog = Nothing }, Cmd.none )
+            else
+                -- Not authenticated, show password dialog
+                ( { model | showDialog = Just (PasswordDialog { password = "", submitted = False }) }
+                , Cmd.none
+                )
 
         JsonExport json ->
             case model.page of

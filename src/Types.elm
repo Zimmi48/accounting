@@ -107,6 +107,7 @@ type ToBackend
     | RequestGroupTransactions String
     | RequestAllTransactions
     | CheckPassword String
+    | CheckAuthentication
     | ImportJson String
 
 
@@ -147,6 +148,7 @@ type ToFrontend
                 , share : Amount Debit
                 }
         }
+    | AuthenticationStatus Bool
     | JsonExport String
 
 
