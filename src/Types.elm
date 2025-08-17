@@ -36,6 +36,7 @@ type alias FrontendModel =
     , key : Key
     , windowWidth : Int
     , windowHeight : Int
+    , checkingAuthentication : Bool
     }
 
 
