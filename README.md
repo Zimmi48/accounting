@@ -15,16 +15,15 @@ This project is built with [Elm](https://elm-lang.org/) and [Lamdera](https://la
 
 ### Prerequisites
 
-- [Elm](https://guide.elm-lang.org/install/) 0.19.1
-- [Lamdera](https://lamdera.com/) for local development
+- [Lamdera](https://lamdera.com/)
+- elm-format to keep the code properly formatted at each commit
 
 ### Building
 
-To build the project:
+To build and test the project locally:
 
 ```bash
-elm make src/Frontend.elm --output=dist/frontend.js
-elm make src/Backend.elm --output=dist/backend.js
+lamdera live
 ```
 
 ### Code Quality
@@ -41,9 +40,9 @@ npx elm-review
 
 The project uses GitHub Actions for continuous integration. The workflow automatically:
 
-- ✅ Compiles both Frontend and Backend Elm code
-- ✅ Runs elm-review for code quality checks
-- ✅ Caches dependencies for faster builds
+- Compiles both Frontend and Backend Elm code
+- Runs elm-review for code quality checks
+- Caches dependencies for faster builds
 
 The CI runs on every push to `main` and on all pull requests to ensure code quality and prevent regressions.
 
