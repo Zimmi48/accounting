@@ -1,0 +1,39 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install Lamdera
+      run: npm install -g lamdera
+        
+    - name: Cache lamdera dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.lamdera
+          **/elm-stuff
+        key: ${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json') }}
+        restore-keys: |
+          ${{ runner.os }}-lamdera-
+    
+    - name: Compile Frontend
+      run: lamdera make src/Frontend.elm --output=/dev/null
+
+    - name: Compile Backend
+      run: lamdera make src/Backend.elm --output=/dev/null
