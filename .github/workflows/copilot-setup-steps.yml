@@ -57,7 +57,7 @@ jobs:
         
         echo "=== Compilation Test ==="
         # Test compilation to ensure environment is working
-        lamdera make src/Frontend.elm --output=/tmp/frontend-test.js
-        lamdera make src/Backend.elm --output=/tmp/backend-test.js
+        lamdera make src/Frontend.elm --output=/dev/null
+        lamdera make src/Backend.elm --output=/dev/null
         
         echo "Environment setup completed successfully!"
