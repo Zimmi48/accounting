@@ -4,9 +4,12 @@ name: Copilot Environment Setup
 # It ensures agents have the necessary tools and dependencies preinstalled
 on:
   workflow_dispatch:
-  schedule:
-    # Run weekly to keep the environment updated
-    - cron: '0 0 * * 0'
+  push:
+    paths:
+    - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+    - .github/workflows/copilot-setup-steps.yml
 
 jobs:
   setup-copilot-environment:
