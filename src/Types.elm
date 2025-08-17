@@ -67,8 +67,9 @@ type FrontendMsg
     | NoOpFrontendMsg
     | ShowAddPersonDialog
     | ShowAddGroupDialog
-    | ShowAddSpendingDialog
-    | ShowEditTransactionDialog TransactionId
+    | ShowSpendingDialog (Maybe TransactionId)  -- Nothing for create, Just for edit
+    | ShowConfirmDeleteDialog TransactionId
+    | ConfirmDeleteTransaction TransactionId
     | SetToday Date
     | Submit
     | Cancel
@@ -87,7 +88,6 @@ type FrontendMsg
     | UpdateGroupName String
     | UpdatePassword String
     | UpdateJson String
-    | RequestDeleteTransaction TransactionId
     | ViewportChanged Int Int
 
 
@@ -118,6 +118,7 @@ type ToBackend
         , debits : Dict String (Amount Debit)
         }
     | DeleteTransaction TransactionId
+    | RequestTransactionDetails TransactionId
     | RequestUserGroups String
     | RequestGroupTransactions String
     | RequestAllTransactions
@@ -174,13 +175,24 @@ type ToFrontend
         }
     | AuthenticationStatus Bool
     | JsonExport String
+    | TransactionError String
+    | TransactionDetails
+        { transactionId : TransactionId
+        , description : String
+        , year : Int
+        , month : Int
+        , day : Int
+        , total : Amount Credit
+        , credits : Dict String (Amount Credit)
+        , debits : Dict String (Amount Debit)
+        }
 
 
 type Dialog
     = AddPersonDialog AddPersonDialogModel
     | AddGroupDialog AddGroupDialogModel
-    | AddSpendingDialog AddSpendingDialogModel
-    | EditTransactionDialog EditTransactionDialogModel
+    | SpendingDialog SpendingDialogModel
+    | ConfirmDeleteDialog TransactionId
     | PasswordDialog PasswordDialogModel
 
 
@@ -213,24 +225,8 @@ type NameValidity
     | InvalidPrefix
 
 
-type alias AddSpendingDialogModel =
-    { description : String
-    , date : Maybe Date
-    , dateText : String
-    , datePickerModel : DatePicker.Model
-    , total : String
-
-    -- group name, amount, name validity
-    , credits : List ( String, String, NameValidity )
-
-    -- group name, amount, name validity
-    , debits : List ( String, String, NameValidity )
-    , submitted : Bool
-    }
-
-
-type alias EditTransactionDialogModel =
-    { transactionId : TransactionId
+type alias SpendingDialogModel =
+    { transactionId : Maybe TransactionId  -- Nothing for create, Just for edit
     , description : String
     , date : Maybe Date
     , dateText : String

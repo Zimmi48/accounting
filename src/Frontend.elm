@@ -157,43 +157,20 @@ update msg model =
             , Cmd.none
             )
 
-        ShowAddSpendingDialog ->
-            ( { model
-                | showDialog =
-                    Just
-                        (AddSpendingDialog
-                            { description = ""
-                            , date = Nothing
-                            , dateText = ""
-                            , datePickerModel = DatePicker.init
-                            , total = ""
-                            , credits = []
-                            , debits = []
-                            , submitted = False
-                            }
-                        )
-              }
-            , Task.perform SetToday Date.today
-            )
-
-        ShowEditTransactionDialog transactionId ->
-            case List.find (\t -> t.transactionId == transactionId) model.groupTransactions of
-                Just transaction ->
-                    let
-                        date = Date.fromCalendarDate transactionId.year (Date.numberToMonth transactionId.month) transactionId.day
-                        dateText = Date.format "yyyy-MM-dd" date
-                        total = transaction.total |> (\(Amount amount) -> amount) |> viewAmount
-                    in
+        ShowSpendingDialog maybeTransactionId ->
+            case maybeTransactionId of
+                Nothing ->
+                    -- Create new spending
                     ( { model
                         | showDialog =
                             Just
-                                (EditTransactionDialog
-                                    { transactionId = transactionId
-                                    , description = transaction.description
-                                    , date = Just date
-                                    , dateText = dateText
+                                (SpendingDialog
+                                    { transactionId = Nothing
+                                    , description = ""
+                                    , date = Nothing
+                                    , dateText = ""
                                     , datePickerModel = DatePicker.init
-                                    , total = total
+                                    , total = ""
                                     , credits = []
                                     , debits = []
                                     , submitted = False
@@ -203,8 +180,47 @@ update msg model =
                     , Task.perform SetToday Date.today
                     )
 
-                Nothing ->
-                    ( model, Cmd.none )
+                Just transactionId ->
+                    -- Edit existing transaction
+                    case List.find (\t -> t.transactionId == transactionId) model.groupTransactions of
+                        Just transaction ->
+                            let
+                                date = Date.fromCalendarDate transactionId.year (Date.numberToMonth transactionId.month) transactionId.day
+                                dateText = Date.format "yyyy-MM-dd" date
+                                total = transaction.total |> (\(Amount amount) -> amount) |> viewAmount
+                            in
+                            ( { model
+                                | showDialog =
+                                    Just
+                                        (SpendingDialog
+                                            { transactionId = Just transactionId
+                                            , description = transaction.description
+                                            , date = Just date
+                                            , dateText = dateText
+                                            , datePickerModel = DatePicker.init
+                                            , total = total
+                                            , credits = []  -- Will be populated when TransactionDetails arrives
+                                            , debits = []   -- Will be populated when TransactionDetails arrives
+                                            , submitted = False
+                                            }
+                                        )
+                              }
+                            , Cmd.batch
+                                [ Task.perform SetToday Date.today
+                                , Lamdera.sendToBackend (RequestTransactionDetails transactionId)
+                                ]
+                            )
+
+                        Nothing ->
+                            ( model, Cmd.none )
+
+        ShowConfirmDeleteDialog transactionId ->
+            ( { model | showDialog = Just (ConfirmDeleteDialog transactionId) }, Cmd.none )
+
+        ConfirmDeleteTransaction transactionId ->
+            ( { model | showDialog = Nothing }
+            , Lamdera.sendToBackend (DeleteTransaction transactionId)
+            )
 
         SetToday today ->
             case model.showDialog of
@@ -731,9 +747,6 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        RequestDeleteTransaction transactionId ->
-            ( model, Lamdera.sendToBackend (DeleteTransaction transactionId) )
-
         ViewportChanged width height ->
             ( { model
                 | windowWidth = width
@@ -1095,6 +1108,37 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        TransactionError errorMessage ->
+            -- For now, just close any open dialog and show the error in console
+            -- TODO: Show error message to user in UI
+            ( { model | showDialog = Nothing }, Cmd.none )
+
+        TransactionDetails { transactionId, description, year, month, day, total, credits, debits } ->
+            -- Update the edit dialog with the fetched transaction details
+            case model.showDialog of
+                Just (EditTransactionDialog dialogModel) ->
+                    if dialogModel.transactionId == transactionId then
+                        let
+                            creditsList = Dict.toList credits |> List.map (\(group, Amount amount) -> (group, String.fromInt amount, Complete))
+                            debitsList = Dict.toList debits |> List.map (\(group, Amount amount) -> (group, String.fromInt amount, Complete))
+                        in
+                        ( { model 
+                            | showDialog = 
+                                Just (EditTransactionDialog 
+                                    { dialogModel 
+                                        | credits = creditsList
+                                        , debits = debitsList
+                                    }
+                                )
+                          }
+                        , Cmd.none
+                        )
+                    else
+                        ( model, Cmd.none )
+                        
+                _ ->
+                    ( model, Cmd.none )
+
 
 markInvalidPrefix prefix list =
     list
@@ -1368,7 +1412,7 @@ view model =
                                     }
                                 , Input.button greenButtonStyle
                                     { label = text "Add Spending"
-                                    , onPress = Just ShowAddSpendingDialog
+                                    , onPress = Just (ShowSpendingDialog Nothing)
                                     }
                                 ]
                              , Input.text (textFieldAttributes .nameValidity)
@@ -1674,11 +1718,11 @@ viewTransaction transaction =
         , "(Total: " ++ (transaction.total |> (\(Amount amount) -> amount) |> viewAmount) ++ ")" |> text
         , row [ spacing 10 ]
             [ Input.button [ Background.color (rgb 0.8 0.8 1.0), padding 5, Border.rounded 3 ]
-                { onPress = Just (ShowEditTransactionDialog transaction.transactionId)
+                { onPress = Just (ShowSpendingDialog (Just transaction.transactionId))
                 , label = text "Edit"
                 }
             , Input.button [ Background.color (rgb 1.0 0.8 0.8), padding 5, Border.rounded 3 ]
-                { onPress = Just (RequestDeleteTransaction transaction.transactionId)
+                { onPress = Just (ShowConfirmDeleteDialog transaction.transactionId)
                 , label = text "Delete"
                 }
             ]
