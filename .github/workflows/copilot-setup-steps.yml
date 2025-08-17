@@ -1,39 +1,66 @@
-name: Copilot Setup Steps
+name: Copilot Environment Setup
 
+# This workflow defines the setup steps for GitHub Copilot agents
+# It ensures agents have the necessary tools and dependencies preinstalled
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+  schedule:
+    # Run weekly to keep the environment updated
+    - cron: '0 0 * * 0'
 
 jobs:
-  setup-steps:
+  setup-copilot-environment:
     runs-on: ubuntu-latest
+    name: Setup Copilot Agent Environment
     
     steps:
-    - name: Step 1 - Checkout repository
+    - name: Checkout repository
       uses: actions/checkout@v4
-    
-    - name: Step 2 - Setup Node.js environment
+      
+    - name: Setup Node.js 20
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-    
-    - name: Step 3 - Install Lamdera CLI
-      run: npm install -g lamdera
+        cache: 'npm'
         
-    - name: Step 4 - Cache Lamdera dependencies
+    - name: Install global dependencies
+      run: |
+        # Install Lamdera CLI for Elm development
+        npm install -g lamdera
+        
+        # Install Elm tooling
+        npm install -g elm-format elm-review
+        
+    - name: Cache Elm dependencies
       uses: actions/cache@v4
       with:
         path: |
           ~/.lamdera
           **/elm-stuff
-        key: ${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json') }}
+        key: copilot-env-${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json') }}
         restore-keys: |
-          ${{ runner.os }}-lamdera-
-    
-    - name: Step 5 - Verify Frontend compilation
-      run: lamdera make src/Frontend.elm --output=/dev/null
-
-    - name: Step 6 - Verify Backend compilation
-      run: lamdera make src/Backend.elm --output=/dev/null
+          copilot-env-${{ runner.os }}-lamdera-
+          
+    - name: Install project dependencies
+      run: |
+        # Ensure Lamdera dependencies are installed
+        lamdera install
+        
+    - name: Validate environment setup
+      run: |
+        echo "=== Environment Validation ==="
+        echo "Node.js version: $(node --version)"
+        echo "NPM version: $(npm --version)"
+        echo "Lamdera version: $(lamdera --version)"
+        echo "Elm format version: $(elm-format --help | head -1)"
+        
+        echo "=== Project Structure ==="
+        echo "Elm project file:"
+        cat elm.json
+        
+        echo "=== Compilation Test ==="
+        # Test compilation to ensure environment is working
+        lamdera make src/Frontend.elm --output=/tmp/frontend-test.js
+        lamdera make src/Backend.elm --output=/tmp/backend-test.js
+        
+        echo "Environment setup completed successfully!"
