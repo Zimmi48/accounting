@@ -42,11 +42,6 @@ jobs:
         key: copilot-env-${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json') }}
         restore-keys: |
           copilot-env-${{ runner.os }}-lamdera-
-          
-    - name: Install project dependencies
-      run: |
-        # Ensure Lamdera dependencies are installed
-        lamdera install
         
     - name: Validate environment setup
       run: |
