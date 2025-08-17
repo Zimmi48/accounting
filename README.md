@@ -41,7 +41,6 @@ npx elm-review
 The project uses GitHub Actions for continuous integration. The workflow automatically:
 
 - Compiles both Frontend and Backend Elm code
-- Runs elm-review for code quality checks
 - Caches dependencies for faster builds
 
 The CI runs on every push to `main` and on all pull requests to ensure code quality and prevent regressions.
