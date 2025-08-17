@@ -55,6 +55,12 @@ updateFromFrontend sessionId clientId msg model =
             else
                 ( model, Cmd.none )
 
+        ( _, CheckLoginStatus ) ->
+            if Set.member sessionId model.loggedInSessions then
+                ( model, Lamdera.sendToFrontend clientId OperationSuccessful )
+            else
+                ( model, Lamdera.sendToFrontend clientId LoginRequired )
+
         ( False, _ ) ->
             ( model, Cmd.none )
 

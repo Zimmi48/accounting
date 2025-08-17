@@ -52,7 +52,7 @@ init url key =
             routing url
     in
     ( { page = page
-      , showDialog = Just (PasswordDialog { password = "", submitted = False })
+      , showDialog = Nothing
       , user = ""
       , nameValidity = Incomplete
       , userGroups = Nothing
@@ -62,6 +62,8 @@ init url key =
       , key = key
       , windowWidth = 1000
       , windowHeight = 1000
+      , isLoggedIn = False
+      , loginCheckCompleted = False
       }
     , Cmd.batch
         [ routingCmds
@@ -72,6 +74,7 @@ init url key =
                     (round viewport.viewport.height)
             )
             getViewport
+        , Lamdera.sendToBackend CheckLoginStatus
         ]
     )
 
@@ -711,23 +714,34 @@ updateFromBackend msg model =
             ( model, Cmd.none )
 
         OperationSuccessful ->
-            case model.page of
+            let
+                updatedModel = 
+                    if not model.loginCheckCompleted then
+                        { model | isLoggedIn = True, loginCheckCompleted = True }
+                    else
+                        case model.showDialog of
+                            Just (PasswordDialog _) ->
+                                { model | isLoggedIn = True }
+                            _ ->
+                                model
+            in
+            case updatedModel.page of
                 Import _ ->
-                    ( { model | page = Import "" }
+                    ( { updatedModel | page = Import "" }
                     , Cmd.none
                     )
 
                 Home ->
-                    ( { model | showDialog = Nothing }
+                    ( { updatedModel | showDialog = Nothing }
                     , (++)
-                        (if model.nameValidity == Complete then
-                            [ Lamdera.sendToBackend (RequestUserGroups model.user) ]
+                        (if updatedModel.nameValidity == Complete then
+                            [ Lamdera.sendToBackend (RequestUserGroups updatedModel.user) ]
 
                          else
                             []
                         )
-                        (if model.groupValidity == Complete then
-                            [ Lamdera.sendToBackend (RequestGroupTransactions model.group) ]
+                        (if updatedModel.groupValidity == Complete then
+                            [ Lamdera.sendToBackend (RequestGroupTransactions updatedModel.group) ]
 
                          else
                             []
@@ -736,7 +750,7 @@ updateFromBackend msg model =
                     )
 
                 _ ->
-                    ( model, Cmd.none )
+                    ( updatedModel, Cmd.none )
 
         NameAlreadyExists name ->
             case model.showDialog of
@@ -981,6 +995,15 @@ updateFromBackend msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        LoginRequired ->
+            ( { model 
+                | showDialog = Just (PasswordDialog { password = "", submitted = False })
+                , isLoggedIn = False
+                , loginCheckCompleted = True
+              }
+            , Cmd.none
+            )
 
 
 markInvalidPrefix prefix list =

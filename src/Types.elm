@@ -36,6 +36,8 @@ type alias FrontendModel =
     , key : Key
     , windowWidth : Int
     , windowHeight : Int
+    , isLoggedIn : Bool
+    , loginCheckCompleted : Bool
     }
 
 
@@ -108,6 +110,7 @@ type ToBackend
     | RequestAllTransactions
     | CheckPassword String
     | ImportJson String
+    | CheckLoginStatus
 
 
 type BackendMsg
@@ -148,6 +151,7 @@ type ToFrontend
                 }
         }
     | JsonExport String
+    | LoginRequired
 
 
 type Dialog
