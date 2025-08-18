@@ -157,23 +157,74 @@ update msg model =
             , Cmd.none
             )
 
-        ShowAddSpendingDialog ->
-            ( { model
-                | showDialog =
-                    Just
-                        (AddSpendingDialog
-                            { description = ""
-                            , date = Nothing
-                            , dateText = ""
-                            , datePickerModel = DatePicker.init
-                            , total = ""
-                            , credits = []
-                            , debits = []
-                            , submitted = False
-                            }
-                        )
-              }
-            , Task.perform SetToday Date.today
+        ShowAddSpendingDialog maybeTransactionId ->
+            case maybeTransactionId of
+                Nothing ->
+                    -- Create new spending
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    { transactionId = Nothing
+                                    , description = ""
+                                    , date = Nothing
+                                    , dateText = ""
+                                    , datePickerModel = DatePicker.init
+                                    , total = ""
+                                    , credits = []
+                                    , debits = []
+                                    , submitted = False
+                                    }
+                                )
+                      }
+                    , Task.perform SetToday Date.today
+                    )
+
+                Just transactionId ->
+                    -- Edit existing transaction
+                    case List.find (\t -> t.transactionId == transactionId) model.groupTransactions of
+                        Just transaction ->
+                            let
+                                date =
+                                    Date.fromCalendarDate transactionId.year (Date.numberToMonth transactionId.month) transactionId.day
+
+                                dateText =
+                                    Date.format "yyyy-MM-dd" date
+
+                                total =
+                                    transaction.total |> (\(Amount amount) -> amount) |> viewAmount
+                            in
+                            ( { model
+                                | showDialog =
+                                    Just
+                                        (AddSpendingDialog
+                                            { transactionId = Just transactionId
+                                            , description = transaction.description
+                                            , date = Just date
+                                            , dateText = dateText
+                                            , datePickerModel = DatePicker.init
+                                            , total = total
+                                            , credits = [] -- Will be populated when TransactionDetails arrives
+                                            , debits = [] -- Will be populated when TransactionDetails arrives
+                                            , submitted = False
+                                            }
+                                        )
+                              }
+                            , Cmd.batch
+                                [ Task.perform SetToday Date.today
+                                , Lamdera.sendToBackend (RequestTransactionDetails transactionId)
+                                ]
+                            )
+
+                        Nothing ->
+                            ( model, Cmd.none )
+
+        ShowConfirmDeleteDialog transactionId ->
+            ( { model | showDialog = Just (ConfirmDeleteDialog transactionId) }, Cmd.none )
+
+        ConfirmDeleteTransaction transactionId ->
+            ( { model | showDialog = Nothing }
+            , Lamdera.sendToBackend (DeleteTransaction transactionId)
             )
 
         SetToday today ->
@@ -271,21 +322,41 @@ update msg model =
                                                     { dialogModel | submitted = True }
                                                 )
                                       }
-                                    , Lamdera.sendToBackend
-                                        (CreateSpending
-                                            { description = dialogModel.description
-                                            , year = Date.year date
-                                            , month = Date.monthNumber date
-                                            , day = Date.day date
-                                            , total = Amount total
-                                            , credits = credits
-                                            , debits = debits
-                                            }
-                                        )
+                                    , case dialogModel.transactionId of
+                                        Nothing ->
+                                            Lamdera.sendToBackend
+                                                (CreateSpending
+                                                    { description = dialogModel.description
+                                                    , year = Date.year date
+                                                    , month = Date.monthNumber date
+                                                    , day = Date.day date
+                                                    , total = Amount total
+                                                    , credits = credits
+                                                    , debits = debits
+                                                    }
+                                                )
+
+                                        Just transactionId ->
+                                            Lamdera.sendToBackend
+                                                (EditTransaction
+                                                    { transactionId = transactionId
+                                                    , description = dialogModel.description
+                                                    , year = Date.year date
+                                                    , month = Date.monthNumber date
+                                                    , day = Date.day date
+                                                    , total = Amount total
+                                                    , credits = credits
+                                                    , debits = debits
+                                                    }
+                                                )
                                     )
 
                                 _ ->
                                     ( model, Cmd.none )
+
+                        Just (ConfirmDeleteDialog _) ->
+                            -- This should not happen as ConfirmDeleteDialog has its own buttons
+                            ( model, Cmd.none )
 
                         Just (PasswordDialog dialogModel) ->
                             ( { model
@@ -337,6 +408,10 @@ update msg model =
                     ( { model | showDialog = Just (AddSpendingDialog { dialogModel | description = name }) }
                     , Cmd.none
                     )
+
+                Just (ConfirmDeleteDialog _) ->
+                    -- No name updates for delete confirmation dialog
+                    ( model, Cmd.none )
 
                 Just (PasswordDialog dialogModel) ->
                     ( model, Cmd.none )
@@ -999,6 +1074,42 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        TransactionError errorMessage ->
+            -- For now, do nothing
+            -- TODO: Show error message to user in UI
+            ( model, Cmd.none )
+
+        TransactionDetails { transactionId, description, year, month, day, total, credits, debits } ->
+            -- Update the edit dialog with the fetched transaction details
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    if dialogModel.transactionId == Just transactionId then
+                        let
+                            creditsList =
+                                Dict.toList credits |> List.map (\( group, Amount amount ) -> ( group, formatAmountValue amount, Complete ))
+
+                            debitsList =
+                                Dict.toList debits |> List.map (\( group, Amount amount ) -> ( group, formatAmountValue amount, Complete ))
+                        in
+                        ( { model
+                            | showDialog =
+                                Just
+                                    (AddSpendingDialog
+                                        { dialogModel
+                                            | credits = creditsList
+                                            , debits = debitsList
+                                        }
+                                    )
+                          }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
 
 markInvalidPrefix prefix list =
     list
@@ -1219,9 +1330,64 @@ view model =
                                                 (canSubmitGroup dialogModel)
 
                                         AddSpendingDialog dialogModel ->
-                                            config "Add Spending"
+                                            let
+                                                title =
+                                                    case dialogModel.transactionId of
+                                                        Nothing ->
+                                                            "Add Transaction"
+
+                                                        Just _ ->
+                                                            "Edit Transaction"
+                                            in
+                                            config title
                                                 (addSpendingInputs model.windowWidth dialogModel)
                                                 (canSubmitSpending dialogModel)
+
+                                        ConfirmDeleteDialog transactionId ->
+                                            { closeMessage = Just Cancel
+                                            , maskAttributes = []
+                                            , containerAttributes =
+                                                [ Background.color (rgb 1 1 1)
+                                                , Border.solid
+                                                , Border.rounded 5
+                                                , Border.width 1
+                                                , centerX
+                                                , centerY
+                                                , shrink |> maximum (model.windowHeight * 9 // 10) |> height
+                                                , scrollbarY
+                                                ]
+                                            , headerAttributes =
+                                                [ padding 20
+                                                , Background.color green
+                                                ]
+                                            , bodyAttributes =
+                                                [ padding 20
+                                                , height fill
+                                                ]
+                                            , footerAttributes =
+                                                [ Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
+                                                , Border.solid
+                                                ]
+                                            , header = Just (text "Confirm Delete")
+                                            , body =
+                                                Just
+                                                    (column [ spacing 20 ]
+                                                        [ Element.text "Are you sure you want to delete this transaction?" ]
+                                                    )
+                                            , footer =
+                                                Just
+                                                    (row [ centerX, spacing 20, padding 20, alignRight ]
+                                                        [ Input.button redButtonStyle
+                                                            { label = text "Cancel"
+                                                            , onPress = Just Cancel
+                                                            }
+                                                        , Input.button greenButtonStyle
+                                                            { label = text "Delete"
+                                                            , onPress = Just (ConfirmDeleteTransaction transactionId)
+                                                            }
+                                                        ]
+                                                    )
+                                            }
 
                                         PasswordDialog dialogModel ->
                                             config "Password"
@@ -1267,7 +1433,7 @@ view model =
                                     }
                                 , Input.button greenButtonStyle
                                     { label = text "Add Spending"
-                                    , onPress = Just ShowAddSpendingDialog
+                                    , onPress = Just (ShowAddSpendingDialog Nothing)
                                     }
                                 ]
                              , Input.text (textFieldAttributes .nameValidity)
@@ -1571,6 +1737,16 @@ viewTransaction transaction =
         , transaction.description |> text
         , transaction.share |> (\(Amount amount) -> amount) |> viewAmount |> text
         , "(Total: " ++ (transaction.total |> (\(Amount amount) -> amount) |> viewAmount) ++ ")" |> text
+        , row [ spacing 10 ]
+            [ Input.button [ Background.color (rgb 0.8 0.8 1.0), padding 5, Border.rounded 3 ]
+                { onPress = Just (ShowAddSpendingDialog (Just transaction.transactionId))
+                , label = text "Edit"
+                }
+            , Input.button [ Background.color (rgb 1.0 0.8 0.8), padding 5, Border.rounded 3 ]
+                { onPress = Just (ShowConfirmDeleteDialog transaction.transactionId)
+                , label = text "Delete"
+                }
+            ]
         ]
 
 
@@ -1689,6 +1865,37 @@ viewAmount amount =
         |> (++) "."
         |> (++) (absAmount // 100 |> String.fromInt)
         |> (++) sign
+
+
+{-| Convert amount from cents (Int) to dollar string with decimal point
+-}
+formatAmountValue : Int -> String
+formatAmountValue cents =
+    let
+        absolute =
+            abs cents
+
+        beforeComma =
+            absolute // 100
+
+        afterComma =
+            modBy 100 absolute
+
+        afterCommaString =
+            if afterComma < 10 then
+                "0" ++ String.fromInt afterComma
+
+            else
+                String.fromInt afterComma
+
+        sign =
+            if cents < 0 then
+                "-"
+
+            else
+                ""
+    in
+    sign ++ String.fromInt beforeComma ++ "." ++ afterCommaString
 
 
 parseAmountValue : String -> Maybe Int
