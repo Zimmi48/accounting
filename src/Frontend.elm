@@ -1371,8 +1371,10 @@ view model =
                                             , header = Just (text "Confirm Delete")
                                             , body =
                                                 Just
-                                                    (column [ spacing 20 ]
-                                                        [ Element.text "Are you sure you want to delete this transaction?" ]
+                                                    (column [ spacing 15 ]
+                                                        [ Element.paragraph []
+                                                            [ Element.text "Are you sure you want to delete this transaction?" ]
+                                                        ]
                                                     )
                                             , footer =
                                                 Just
