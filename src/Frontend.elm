@@ -185,9 +185,14 @@ update msg model =
                     case List.find (\t -> t.transactionId == transactionId) model.groupTransactions of
                         Just transaction ->
                             let
-                                date = Date.fromCalendarDate transactionId.year (Date.numberToMonth transactionId.month) transactionId.day
-                                dateText = Date.format "yyyy-MM-dd" date
-                                total = transaction.total |> (\(Amount amount) -> amount) |> viewAmount
+                                date =
+                                    Date.fromCalendarDate transactionId.year (Date.numberToMonth transactionId.month) transactionId.day
+
+                                dateText =
+                                    Date.format "yyyy-MM-dd" date
+
+                                total =
+                                    transaction.total |> (\(Amount amount) -> amount) |> viewAmount
                             in
                             ( { model
                                 | showDialog =
@@ -199,8 +204,8 @@ update msg model =
                                             , dateText = dateText
                                             , datePickerModel = DatePicker.init
                                             , total = total
-                                            , credits = []  -- Will be populated when TransactionDetails arrives
-                                            , debits = []   -- Will be populated when TransactionDetails arrives
+                                            , credits = [] -- Will be populated when TransactionDetails arrives
+                                            , debits = [] -- Will be populated when TransactionDetails arrives
                                             , submitted = False
                                             }
                                         )
@@ -224,11 +229,11 @@ update msg model =
 
         SetToday today ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | datePickerModel = DatePicker.setToday today dialogModel.datePickerModel
                                     }
@@ -276,7 +281,7 @@ update msg model =
                             , Lamdera.sendToBackend (CreateGroup dialogModel.name members)
                             )
 
-                        Just (AddSpendingDialog dialogModel) ->
+                        Just (SpendingDialog dialogModel) ->
                             let
                                 credits =
                                     dialogModel.credits
@@ -313,79 +318,37 @@ update msg model =
                                     ( { model
                                         | showDialog =
                                             Just
-                                                (AddSpendingDialog
+                                                (SpendingDialog
                                                     { dialogModel | submitted = True }
                                                 )
                                       }
-                                    , Lamdera.sendToBackend
-                                        (CreateSpending
-                                            { description = dialogModel.description
-                                            , year = Date.year date
-                                            , month = Date.monthNumber date
-                                            , day = Date.day date
-                                            , total = Amount total
-                                            , credits = credits
-                                            , debits = debits
-                                            }
-                                        )
-                                    )
-
-                                _ ->
-                                    ( model, Cmd.none )
-
-                        Just (EditTransactionDialog dialogModel) ->
-                            let
-                                credits =
-                                    dialogModel.credits
-                                        |> List.map
-                                            (\( group, amount, _ ) ->
-                                                ( group
-                                                , amount
-                                                    |> parseAmountValue
-                                                    |> Maybe.withDefault 0
+                                    , case dialogModel.transactionId of
+                                        Nothing ->
+                                            Lamdera.sendToBackend
+                                                (CreateSpending
+                                                    { description = dialogModel.description
+                                                    , year = Date.year date
+                                                    , month = Date.monthNumber date
+                                                    , day = Date.day date
+                                                    , total = Amount total
+                                                    , credits = credits
+                                                    , debits = debits
+                                                    }
                                                 )
-                                            )
-                                        |> Dict.fromListDedupe (+)
-                                        |> Dict.map (\_ -> Amount)
 
-                                debits =
-                                    dialogModel.debits
-                                        |> List.map
-                                            (\( group, amount, _ ) ->
-                                                ( group
-                                                , amount
-                                                    |> parseAmountValue
-                                                    |> Maybe.withDefault 0
+                                        Just transactionId ->
+                                            Lamdera.sendToBackend
+                                                (EditTransaction
+                                                    { transactionId = transactionId
+                                                    , description = dialogModel.description
+                                                    , year = Date.year date
+                                                    , month = Date.monthNumber date
+                                                    , day = Date.day date
+                                                    , total = Amount total
+                                                    , credits = credits
+                                                    , debits = debits
+                                                    }
                                                 )
-                                            )
-                                        |> Dict.fromListDedupe (+)
-                                        |> Dict.map (\_ -> Amount)
-                            in
-                            case
-                                ( dialogModel.date
-                                , parseAmountValue dialogModel.total
-                                )
-                            of
-                                ( Just date, Just total ) ->
-                                    ( { model
-                                        | showDialog =
-                                            Just
-                                                (EditTransactionDialog
-                                                    { dialogModel | submitted = True }
-                                                )
-                                      }
-                                    , Lamdera.sendToBackend
-                                        (EditTransaction
-                                            { transactionId = dialogModel.transactionId
-                                            , description = dialogModel.description
-                                            , year = Date.year date
-                                            , month = Date.monthNumber date
-                                            , day = Date.day date
-                                            , total = Amount total
-                                            , credits = credits
-                                            , debits = debits
-                                            }
-                                        )
                                     )
 
                                 _ ->
@@ -441,13 +404,8 @@ update msg model =
                         , Lamdera.sendToBackend (CheckValidName name)
                         )
 
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddSpendingDialog { dialogModel | description = name }) }
-                    , Cmd.none
-                    )
-
-                Just (EditTransactionDialog dialogModel) ->
-                    ( { model | showDialog = Just (EditTransactionDialog { dialogModel | description = name }) }
+                Just (SpendingDialog dialogModel) ->
+                    ( { model | showDialog = Just (SpendingDialog { dialogModel | description = name }) }
                     , Cmd.none
                     )
 
@@ -553,8 +511,8 @@ update msg model =
 
         UpdateTotal total ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddSpendingDialog { dialogModel | total = total }) }
+                Just (SpendingDialog dialogModel) ->
+                    ( { model | showDialog = Just (SpendingDialog { dialogModel | total = total }) }
                     , Cmd.none
                     )
 
@@ -563,11 +521,11 @@ update msg model =
 
         ChangeDatePicker changeEvent ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     (case changeEvent of
                                         DatePicker.DateChanged date ->
                                             { dialogModel
@@ -597,11 +555,11 @@ update msg model =
 
         AddCreditor group ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | credits =
                                             dialogModel.credits
@@ -617,11 +575,11 @@ update msg model =
 
         UpdateCreditor index group ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | credits =
                                             dialogModel.credits
@@ -644,11 +602,11 @@ update msg model =
 
         UpdateCredit index amount ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | credits =
                                             dialogModel.credits
@@ -664,11 +622,11 @@ update msg model =
 
         AddDebitor group ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | debits =
                                             dialogModel.debits
@@ -684,11 +642,11 @@ update msg model =
 
         UpdateDebitor index group ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | debits =
                                             dialogModel.debits
@@ -711,11 +669,11 @@ update msg model =
 
         UpdateDebit index amount ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | debits =
                                             dialogModel.debits
@@ -988,11 +946,11 @@ updateFromBackend msg model =
 
         InvalidGroupPrefix prefix ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | credits =
                                             dialogModel.credits
@@ -1020,11 +978,11 @@ updateFromBackend msg model =
 
         AutocompleteGroupPrefix response ->
             case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
+                Just (SpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
-                                (AddSpendingDialog
+                                (SpendingDialog
                                     { dialogModel
                                         | credits =
                                             dialogModel.credits
@@ -1117,33 +1075,38 @@ updateFromBackend msg model =
                     ( model, Cmd.none )
 
         TransactionError errorMessage ->
-            -- For now, just close any open dialog and show the error in console
+            -- For now, do nothing
             -- TODO: Show error message to user in UI
-            ( { model | showDialog = Nothing }, Cmd.none )
+            ( model, Cmd.none )
 
         TransactionDetails { transactionId, description, year, month, day, total, credits, debits } ->
             -- Update the edit dialog with the fetched transaction details
             case model.showDialog of
-                Just (EditTransactionDialog dialogModel) ->
-                    if dialogModel.transactionId == transactionId then
+                Just (SpendingDialog dialogModel) ->
+                    if dialogModel.transactionId == Just transactionId then
                         let
-                            creditsList = Dict.toList credits |> List.map (\(group, Amount amount) -> (group, String.fromInt amount, Complete))
-                            debitsList = Dict.toList debits |> List.map (\(group, Amount amount) -> (group, String.fromInt amount, Complete))
+                            creditsList =
+                                Dict.toList credits |> List.map (\( group, Amount amount ) -> ( group, String.fromInt amount, Complete ))
+
+                            debitsList =
+                                Dict.toList debits |> List.map (\( group, Amount amount ) -> ( group, String.fromInt amount, Complete ))
                         in
-                        ( { model 
-                            | showDialog = 
-                                Just (EditTransactionDialog 
-                                    { dialogModel 
-                                        | credits = creditsList
-                                        , debits = debitsList
-                                    }
-                                )
+                        ( { model
+                            | showDialog =
+                                Just
+                                    (SpendingDialog
+                                        { dialogModel
+                                            | credits = creditsList
+                                            , debits = debitsList
+                                        }
+                                    )
                           }
                         , Cmd.none
                         )
+
                     else
                         ( model, Cmd.none )
-                        
+
                 _ ->
                     ( model, Cmd.none )
 
@@ -1366,33 +1329,39 @@ view model =
                                                 (addGroupInputs model.windowWidth dialogModel)
                                                 (canSubmitGroup dialogModel)
 
-                                        AddSpendingDialog dialogModel ->
-                                            config "Add Spending"
-                                                (addSpendingInputs model.windowWidth dialogModel)
-                                                (canSubmitSpending dialogModel)
+                                        SpendingDialog dialogModel ->
+                                            let
+                                                title =
+                                                    case dialogModel.transactionId of
+                                                        Nothing ->
+                                                            "Add Transaction"
 
-                                        EditTransactionDialog dialogModel ->
-                                            config "Edit Transaction"
+                                                        Just _ ->
+                                                            "Edit Transaction"
+                                            in
+                                            config title
                                                 (addSpendingInputs model.windowWidth dialogModel)
                                                 (canSubmitSpending dialogModel)
 
                                         ConfirmDeleteDialog transactionId ->
-                                            { body = 
-                                                Just (Element.column [ spacing 20, width fill ]
-                                                    [ Element.text "Are you sure you want to delete this transaction?"
-                                                    , Element.row [ spacing 10, width fill ]
-                                                        [ Input.button 
-                                                            [ Background.color (rgb 0.8 1.0 0.8), padding 10, Border.rounded 5, width (fillPortion 1) ]
-                                                            { onPress = Just (ConfirmDeleteTransaction transactionId)
-                                                            , label = Element.text "Yes, Delete"
-                                                            }
-                                                        , Input.button 
-                                                            [ Background.color (rgb 1.0 0.8 0.8), padding 10, Border.rounded 5, width (fillPortion 1) ]
-                                                            { onPress = Just Cancel
-                                                            , label = Element.text "Cancel"
-                                                            }
+                                            { body =
+                                                Just
+                                                    (Element.column [ spacing 20, width fill ]
+                                                        [ Element.text "Are you sure you want to delete this transaction?"
+                                                        , Element.row [ spacing 10, width fill ]
+                                                            [ Input.button
+                                                                [ Background.color (rgb 0.8 1.0 0.8), padding 10, Border.rounded 5, width (fillPortion 1) ]
+                                                                { onPress = Just (ConfirmDeleteTransaction transactionId)
+                                                                , label = Element.text "Yes, Delete"
+                                                                }
+                                                            , Input.button
+                                                                [ Background.color (rgb 1.0 0.8 0.8), padding 10, Border.rounded 5, width (fillPortion 1) ]
+                                                                { onPress = Just Cancel
+                                                                , label = Element.text "Cancel"
+                                                                }
+                                                            ]
                                                         ]
-                                                    ])
+                                                    )
                                             , bodyAttributes = []
                                             , closeMessage = Just Cancel
                                             , containerAttributes = []

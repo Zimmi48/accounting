@@ -67,7 +67,7 @@ type FrontendMsg
     | NoOpFrontendMsg
     | ShowAddPersonDialog
     | ShowAddGroupDialog
-    | ShowSpendingDialog (Maybe TransactionId)  -- Nothing for create, Just for edit
+    | ShowSpendingDialog (Maybe TransactionId) -- Nothing for create, Just for edit
     | ShowConfirmDeleteDialog TransactionId
     | ConfirmDeleteTransaction TransactionId
     | SetToday Date
@@ -226,7 +226,7 @@ type NameValidity
 
 
 type alias SpendingDialogModel =
-    { transactionId : Maybe TransactionId  -- Nothing for create, Just for edit
+    { transactionId : Maybe TransactionId -- Nothing for create, Just for edit
     , description : String
     , date : Maybe Date
     , dateText : String
@@ -274,7 +274,7 @@ type alias Spending =
 
     -- associates each group with an amount (credit = positive or debit = negative) in this transaction
     , groupCredits : Dict String (Amount Credit)
-    
+
     -- status of the transaction
     , status : TransactionStatus
     }

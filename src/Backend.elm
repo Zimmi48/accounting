@@ -108,7 +108,8 @@ updateFromFrontend sessionId clientId msg model =
 
         ( True, CreateSpending { description, year, month, day, total, credits, debits } ) ->
             let
-                groupMembersKey = getGroupMembersKey credits debits model
+                groupMembersKey =
+                    getGroupMembersKey credits debits model
 
                 spending =
                     { description = description
@@ -119,8 +120,9 @@ updateFromFrontend sessionId clientId msg model =
                             |> addAmounts credits
                     , status = Active
                     }
-                
-                updatedModel = addSpendingToModel year month day spending model
+
+                updatedModel =
+                    addSpendingToModel year month day spending model
             in
             ( updatedModel, Lamdera.sendToFrontend clientId OperationSuccessful )
 
@@ -142,6 +144,7 @@ updateFromFrontend sessionId clientId msg model =
                             updateSpending index spending =
                                 if index == transactionId.index then
                                     { spending | status = Replaced }
+
                                 else
                                     spending
 
@@ -151,13 +154,13 @@ updateFromFrontend sessionId clientId msg model =
 
                             updateMonth : Month -> Month
                             updateMonth oldMonth =
-                                { oldMonth 
+                                { oldMonth
                                     | days = Dict.update transactionId.day (Maybe.map updateDay) oldMonth.days
                                 }
 
                             updateYear : Year -> Year
                             updateYear oldYear =
-                                { oldYear 
+                                { oldYear
                                     | months = Dict.update transactionId.month (Maybe.map updateMonth) oldYear.months
                                 }
 
@@ -173,14 +176,15 @@ updateFromFrontend sessionId clientId msg model =
                                 }
 
                             -- Step 1: Remove old transaction from totals
-                            modelWithReplaced = 
-                                { model 
+                            modelWithReplaced =
+                                { model
                                     | years = Dict.update transactionId.year (Maybe.map updateYear) model.years
                                 }
-                                |> removeSpendingFromModel transactionId oldTransaction
+                                    |> removeSpendingFromModel transactionId oldTransaction
 
                             -- Step 2: Add new transaction
-                            finalModel = addSpendingToModel year month day newSpending modelWithReplaced
+                            finalModel =
+                                addSpendingToModel year month day newSpending modelWithReplaced
                         in
                         ( finalModel, Lamdera.sendToFrontend clientId OperationSuccessful )
 
@@ -201,6 +205,7 @@ updateFromFrontend sessionId clientId msg model =
                             updateSpending index spending =
                                 if index == transactionId.index then
                                     { spending | status = Deleted }
+
                                 else
                                     spending
 
@@ -210,24 +215,25 @@ updateFromFrontend sessionId clientId msg model =
 
                             updateMonth : Month -> Month
                             updateMonth month =
-                                { month 
+                                { month
                                     | days = Dict.update transactionId.day (Maybe.map updateDay) month.days
                                 }
 
                             updateYear : Year -> Year
                             updateYear year =
-                                { year 
+                                { year
                                     | months = Dict.update transactionId.month (Maybe.map updateMonth) year.months
                                 }
 
                             -- Mark transaction as deleted
                             modelWithDeleted =
-                                { model 
+                                { model
                                     | years = Dict.update transactionId.year (Maybe.map updateYear) model.years
                                 }
 
                             -- Remove from totals
-                            finalModel = removeSpendingFromModel transactionId transaction modelWithDeleted
+                            finalModel =
+                                removeSpendingFromModel transactionId transaction modelWithDeleted
                         in
                         ( finalModel, Lamdera.sendToFrontend clientId OperationSuccessful )
 
@@ -257,10 +263,11 @@ updateFromFrontend sessionId clientId msg model =
                     else
                         -- Convert groupCredits back to credits and debits
                         let
-                            (credits, debits) = separateCreditsAndDebits transaction.groupCredits
+                            ( credits, debits ) =
+                                separateCreditsAndDebits transaction.groupCredits
                         in
                         ( model
-                        , Lamdera.sendToFrontend clientId 
+                        , Lamdera.sendToFrontend clientId
                             (TransactionDetails
                                 { transactionId = transactionId
                                 , description = transaction.description
@@ -342,7 +349,7 @@ updateFromFrontend sessionId clientId msg model =
                                                         Dict.get group spending.groupCredits
                                                             |> Maybe.map
                                                                 (\share ->
-                                                                    { transactionId = 
+                                                                    { transactionId =
                                                                         { year = year
                                                                         , month = month
                                                                         , day = day
@@ -356,6 +363,7 @@ updateFromFrontend sessionId clientId msg model =
                                                                     , share = toDebit share
                                                                     }
                                                                 )
+
                                                     else
                                                         Nothing
                                                 )
@@ -560,7 +568,8 @@ addSpendingToDay groupMembersKey spending maybeDay =
             }
 
 
-{-| Remove spending amount from the hierarchy totals. Used for deletes and edits. -}
+{-| Remove spending amount from the hierarchy totals. Used for deletes and edits.
+-}
 removeSpendingFromYear : Int -> Int -> String -> Spending -> Maybe Year -> Maybe Year
 removeSpendingFromYear month day groupMembersKey spending maybeYear =
     case maybeYear of
@@ -572,14 +581,14 @@ removeSpendingFromYear month day groupMembersKey spending maybeYear =
                 updatedMonths =
                     year.months
                         |> Dict.update month (removeSpendingFromMonth day groupMembersKey spending)
-                
+
                 updatedTotalGroupCredits =
                     year.totalGroupCredits
                         |> addToTotalGroupCredits groupMembersKey (negateSpending spending)
             in
-            Just 
+            Just
                 { months = updatedMonths
-                , totalGroupCredits = updatedTotalGroupCredits  
+                , totalGroupCredits = updatedTotalGroupCredits
                 }
 
 
@@ -594,12 +603,12 @@ removeSpendingFromMonth day groupMembersKey spending maybeMonth =
                 updatedDays =
                     month.days
                         |> Dict.update day (removeSpendingFromDay groupMembersKey spending)
-                
+
                 updatedTotalGroupCredits =
                     month.totalGroupCredits
                         |> addToTotalGroupCredits groupMembersKey (negateSpending spending)
             in
-            Just 
+            Just
                 { days = updatedDays
                 , totalGroupCredits = updatedTotalGroupCredits
                 }
@@ -617,13 +626,14 @@ removeSpendingFromDay groupMembersKey spending maybeDay =
                     day.totalGroupCredits
                         |> addToTotalGroupCredits groupMembersKey (negateSpending spending)
             in
-            Just 
+            Just
                 { spendings = day.spendings
                 , totalGroupCredits = updatedTotalGroupCredits
                 }
 
 
-{-| Create a negative version of a spending for subtraction -}
+{-| Create a negative version of a spending for subtraction
+-}
 negateSpending : Spending -> Spending
 negateSpending spending =
     { spending
@@ -632,7 +642,8 @@ negateSpending spending =
     }
 
 
-{-| Find a specific transaction by ID -}
+{-| Find a specific transaction by ID
+-}
 findTransaction : TransactionId -> Model -> Maybe Spending
 findTransaction transactionId model =
     model.years
@@ -642,19 +653,21 @@ findTransaction transactionId model =
         |> Maybe.andThen (.spendings >> List.drop transactionId.index >> List.head)
 
 
-{-| Check if a transaction is active (not deleted or replaced) -}
+{-| Check if a transaction is active (not deleted or replaced)
+-}
 isTransactionActive : TransactionId -> Model -> Bool
 isTransactionActive transactionId model =
     case findTransaction transactionId model of
         Just transaction ->
             transaction.status == Active
-        
+
         Nothing ->
             False
 
 
-{-| Get group members key for a spending -}
-getGroupMembersKey : Dict String (Amount Credit) -> Dict String (Amount Debit) -> Model -> String  
+{-| Get group members key for a spending
+-}
+getGroupMembersKey : Dict String (Amount Credit) -> Dict String (Amount Debit) -> Model -> String
 getGroupMembersKey credits debits model =
     let
         groupMembers =
@@ -674,7 +687,8 @@ getGroupMembersKey credits debits model =
         |> String.join ","
 
 
-{-| Get group members key for an existing spending -}
+{-| Get group members key for an existing spending
+-}
 getGroupMembersKeyForSpending : Spending -> Model -> String
 getGroupMembersKeyForSpending spending model =
     let
@@ -695,12 +709,14 @@ getGroupMembersKeyForSpending spending model =
         |> String.join ","
 
 
-{-| Add a spending to the model, updating all totals and person belongsTo sets -}
+{-| Add a spending to the model, updating all totals and person belongsTo sets
+-}
 addSpendingToModel : Int -> Int -> Int -> Spending -> Model -> Model
 addSpendingToModel year month day spending model =
     let
-        groupMembersKey = getGroupMembersKeyForSpending spending model
-        
+        groupMembersKey =
+            getGroupMembersKeyForSpending spending model
+
         groupMembers =
             Dict.keys spending.groupCredits
                 |> List.map
@@ -727,6 +743,7 @@ addSpendingToModel year month day spending model =
                             | belongsTo =
                                 Set.insert groupMembersKey person.belongsTo
                         }
+
                     else
                         person
                 )
@@ -734,11 +751,13 @@ addSpendingToModel year month day spending model =
     }
 
 
-{-| Remove a spending from the model totals (but keep the spending record marked as deleted) -}
+{-| Remove a spending from the model totals (but keep the spending record marked as deleted)
+-}
 removeSpendingFromModel : TransactionId -> Spending -> Model -> Model
 removeSpendingFromModel transactionId spending model =
     let
-        groupMembersKey = getGroupMembersKeyForSpending spending model
+        groupMembersKey =
+            getGroupMembersKeyForSpending spending model
     in
     { model
         | years =
@@ -750,17 +769,18 @@ removeSpendingFromModel transactionId spending model =
     }
 
 
-{-| Convert stored groupCredits back to separate credits and debits -}
-separateCreditsAndDebits : Dict String (Amount Credit) -> (Dict String (Amount Credit), Dict String (Amount Debit))
+{-| Convert stored groupCredits back to separate credits and debits
+-}
+separateCreditsAndDebits : Dict String (Amount Credit) -> ( Dict String (Amount Credit), Dict String (Amount Debit) )
 separateCreditsAndDebits groupCredits =
     let
-        credits = 
-            groupCredits 
+        credits =
+            groupCredits
                 |> Dict.filter (\_ (Amount amount) -> amount > 0)
-        
-        debits = 
-            groupCredits 
+
+        debits =
+            groupCredits
                 |> Dict.filter (\_ (Amount amount) -> amount < 0)
                 |> Dict.map (\_ (Amount amount) -> Amount -amount)
     in
-    (credits, debits)
+    ( credits, debits )
