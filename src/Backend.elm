@@ -677,7 +677,6 @@ getGroupMembersKey credits debits model =
 
 {-| Get group members key for an existing spending
 -}
-getGroupMembersKeyForSpending : Spending -> Model -> String
 getGroupMembersKeyForSpending spending model =
     let
         groupMembers =
@@ -691,10 +690,12 @@ getGroupMembersKeyForSpending spending model =
                 |> List.concat
                 |> Set.fromList
     in
-    Set.toList groupMembers
+    ( Set.toList groupMembers
         |> List.filterMap (flip Dict.get model.persons)
         |> List.map (.id >> String.fromInt)
         |> String.join ","
+    , groupMembers
+    )
 
 
 {-| Add a spending to the model, updating all totals and person belongsTo sets
@@ -702,19 +703,8 @@ getGroupMembersKeyForSpending spending model =
 addSpendingToModel : Int -> Int -> Int -> Spending -> Model -> Model
 addSpendingToModel year month day spending model =
     let
-        groupMembersKey =
+        ( groupMembersKey, groupMembers ) =
             getGroupMembersKeyForSpending spending model
-
-        groupMembers =
-            Dict.keys spending.groupCredits
-                |> List.map
-                    (\group ->
-                        Dict.get group model.groups
-                            |> Maybe.map Dict.keys
-                            |> Maybe.withDefault [ group ]
-                    )
-                |> List.concat
-                |> Set.fromList
     in
     { model
         | years =
@@ -744,7 +734,7 @@ addSpendingToModel year month day spending model =
 removeSpendingFromModel : TransactionId -> Spending -> Model -> Model
 removeSpendingFromModel transactionId spending model =
     let
-        groupMembersKey =
+        ( groupMembersKey, groupMembers ) =
             getGroupMembersKeyForSpending spending model
     in
     { model
