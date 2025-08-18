@@ -67,7 +67,7 @@ type FrontendMsg
     | NoOpFrontendMsg
     | ShowAddPersonDialog
     | ShowAddGroupDialog
-    | ShowSpendingDialog (Maybe TransactionId) -- Nothing for create, Just for edit
+    | ShowAddSpendingDialog (Maybe TransactionId) -- Nothing for create, Just for edit
     | ShowConfirmDeleteDialog TransactionId
     | ConfirmDeleteTransaction TransactionId
     | SetToday Date
@@ -191,7 +191,7 @@ type ToFrontend
 type Dialog
     = AddPersonDialog AddPersonDialogModel
     | AddGroupDialog AddGroupDialogModel
-    | SpendingDialog SpendingDialogModel
+    | AddSpendingDialog AddSpendingDialogModel
     | ConfirmDeleteDialog TransactionId
     | PasswordDialog PasswordDialogModel
 
@@ -225,7 +225,7 @@ type NameValidity
     | InvalidPrefix
 
 
-type alias SpendingDialogModel =
+type alias AddSpendingDialogModel =
     { transactionId : Maybe TransactionId -- Nothing for create, Just for edit
     , description : String
     , date : Maybe Date
