@@ -1086,10 +1086,10 @@ updateFromBackend msg model =
                     if dialogModel.transactionId == Just transactionId then
                         let
                             creditsList =
-                                Dict.toList credits |> List.map (\( group, Amount amount ) -> ( group, String.fromInt amount, Complete ))
+                                Dict.toList credits |> List.map (\( group, Amount amount ) -> ( group, formatAmountValue amount, Complete ))
 
                             debitsList =
-                                Dict.toList debits |> List.map (\( group, Amount amount ) -> ( group, String.fromInt amount, Complete ))
+                                Dict.toList debits |> List.map (\( group, Amount amount ) -> ( group, formatAmountValue amount, Complete ))
                         in
                         ( { model
                             | showDialog =
@@ -1344,32 +1344,49 @@ view model =
                                                 (canSubmitSpending dialogModel)
 
                                         ConfirmDeleteDialog transactionId ->
-                                            { body =
+                                            { closeMessage = Just Cancel
+                                            , maskAttributes = []
+                                            , containerAttributes =
+                                                [ Background.color (rgb 1 1 1)
+                                                , Border.solid
+                                                , Border.rounded 5
+                                                , Border.width 1
+                                                , centerX
+                                                , centerY
+                                                , shrink |> maximum (model.windowHeight * 9 // 10) |> height
+                                                , scrollbarY
+                                                ]
+                                            , headerAttributes =
+                                                [ padding 20
+                                                , Background.color green
+                                                ]
+                                            , bodyAttributes =
+                                                [ padding 20
+                                                , height fill
+                                                ]
+                                            , footerAttributes =
+                                                [ Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
+                                                , Border.solid
+                                                ]
+                                            , header = Just (text "Confirm Delete")
+                                            , body =
                                                 Just
-                                                    (Element.column [ spacing 20, width fill ]
-                                                        [ Element.text "Are you sure you want to delete this transaction?"
-                                                        , Element.row [ spacing 10, width fill ]
-                                                            [ Input.button
-                                                                [ Background.color (rgb 0.8 1.0 0.8), padding 10, Border.rounded 5, width (fillPortion 1) ]
-                                                                { onPress = Just (ConfirmDeleteTransaction transactionId)
-                                                                , label = Element.text "Yes, Delete"
-                                                                }
-                                                            , Input.button
-                                                                [ Background.color (rgb 1.0 0.8 0.8), padding 10, Border.rounded 5, width (fillPortion 1) ]
-                                                                { onPress = Just Cancel
-                                                                , label = Element.text "Cancel"
-                                                                }
-                                                            ]
+                                                    (column [ spacing 20 ]
+                                                        [ Element.text "Are you sure you want to delete this transaction?" ]
+                                                    )
+                                            , footer =
+                                                Just
+                                                    (row [ centerX, spacing 20, padding 20, alignRight ]
+                                                        [ Input.button redButtonStyle
+                                                            { label = text "Cancel"
+                                                            , onPress = Just Cancel
+                                                            }
+                                                        , Input.button greenButtonStyle
+                                                            { label = text "Delete"
+                                                            , onPress = Just (ConfirmDeleteTransaction transactionId)
+                                                            }
                                                         ]
                                                     )
-                                            , bodyAttributes = []
-                                            , closeMessage = Just Cancel
-                                            , containerAttributes = []
-                                            , footer = Nothing
-                                            , footerAttributes = []
-                                            , header = Just (Element.text "Confirm Delete")
-                                            , headerAttributes = []
-                                            , maskAttributes = []
                                             }
 
                                         PasswordDialog dialogModel ->
@@ -1848,6 +1865,37 @@ viewAmount amount =
         |> (++) "."
         |> (++) (absAmount // 100 |> String.fromInt)
         |> (++) sign
+
+
+{-| Convert amount from cents (Int) to dollar string with decimal point
+-}
+formatAmountValue : Int -> String
+formatAmountValue cents =
+    let
+        absolute =
+            abs cents
+
+        beforeComma =
+            absolute // 100
+
+        afterComma =
+            modBy 100 absolute
+
+        afterCommaString =
+            if afterComma < 10 then
+                "0" ++ String.fromInt afterComma
+
+            else
+                String.fromInt afterComma
+
+        sign =
+            if cents < 0 then
+                "-"
+
+            else
+                ""
+    in
+    sign ++ String.fromInt beforeComma ++ "." ++ afterCommaString
 
 
 parseAmountValue : String -> Maybe Int

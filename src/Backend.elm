@@ -264,7 +264,7 @@ updateFromFrontend sessionId clientId msg model =
                         -- Convert groupCredits back to credits and debits
                         let
                             ( credits, debits ) =
-                                separateCreditsAndDebits transaction.groupCredits
+                                separateCreditsAndDebits transaction.total transaction.groupCredits
                         in
                         ( model
                         , Lamdera.sendToFrontend clientId
@@ -653,18 +653,6 @@ findTransaction transactionId model =
         |> Maybe.andThen (.spendings >> List.drop transactionId.index >> List.head)
 
 
-{-| Check if a transaction is active (not deleted or replaced)
--}
-isTransactionActive : TransactionId -> Model -> Bool
-isTransactionActive transactionId model =
-    case findTransaction transactionId model of
-        Just transaction ->
-            transaction.status == Active
-
-        Nothing ->
-            False
-
-
 {-| Get group members key for a spending
 -}
 getGroupMembersKey : Dict String (Amount Credit) -> Dict String (Amount Debit) -> Model -> String
@@ -770,17 +758,25 @@ removeSpendingFromModel transactionId spending model =
 
 
 {-| Convert stored groupCredits back to separate credits and debits
+When total is negative, the logic is inverted: negative amounts become credits, positive become debits
 -}
-separateCreditsAndDebits : Dict String (Amount Credit) -> ( Dict String (Amount Credit), Dict String (Amount Debit) )
-separateCreditsAndDebits groupCredits =
+separateCreditsAndDebits : Amount Credit -> Dict String (Amount Credit) -> ( Dict String (Amount Credit), Dict String (Amount Debit) )
+separateCreditsAndDebits (Amount total) groupCredits =
     let
-        credits =
+        positive =
             groupCredits
                 |> Dict.filter (\_ (Amount amount) -> amount > 0)
+                |> Dict.map (\_ (Amount amount) -> Amount amount)
 
-        debits =
+        negative =
             groupCredits
                 |> Dict.filter (\_ (Amount amount) -> amount < 0)
                 |> Dict.map (\_ (Amount amount) -> Amount -amount)
     in
-    ( credits, debits )
+    if total < 0 then
+        -- For negative totals: negative amounts are credits, positive amounts are debits
+        ( negative, positive )
+
+    else
+        -- For positive totals: positive amounts are credits, negative amounts are debits
+        ( positive, negative )
