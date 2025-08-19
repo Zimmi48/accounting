@@ -756,12 +756,30 @@ separateCreditsAndDebits (Amount total) groupCredits =
         positive =
             groupCredits
                 |> Dict.filter (\_ (Amount amount) -> amount > 0)
-                |> Dict.map (\_ (Amount amount) -> Amount amount)
+                |> Dict.map
+                    (\_ (Amount amount) ->
+                        if total < 0 then
+                            -- For negative totals: convert positive amounts to negative
+                            Amount -amount
+
+                        else
+                            -- For positive totals: keep positive amounts as positive
+                            Amount amount
+                    )
 
         negative =
             groupCredits
                 |> Dict.filter (\_ (Amount amount) -> amount < 0)
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                |> Dict.map
+                    (\_ (Amount amount) ->
+                        if total < 0 then
+                            -- For negative totals: keep negative amounts as negative
+                            Amount amount
+
+                        else
+                            -- For positive totals: convert negative amounts to positive debits
+                            Amount -amount
+                    )
     in
     if total < 0 then
         -- For negative totals: negative amounts are credits, positive amounts are debits
