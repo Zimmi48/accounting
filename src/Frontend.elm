@@ -1423,7 +1423,7 @@ view model =
                                 , width fill
                                 , Background.color (rgb 1 1 1)
                                 , Border.shadow { offset = ( 0, 2 ), size = 1, blur = 4, color = rgba 0 0 0 0.1 }
-                                , paddingXY 0 10
+                                , paddingEach { top = 20, left = 0, right = 0, bottom = 10 }
                                 ]
                                 ((if model.windowWidth > 650 then
                                     row [ centerX, spacing 70, padding 20 ]
@@ -1447,7 +1447,7 @@ view model =
                                 )
                             )
                         ]
-                        (column [ width fill, spacing 20, paddingEach { top = 100, left = 20, right = 20, bottom = 20 } ]
+                        (column [ width fill, spacing 20, paddingEach { top = 120, left = 20, right = 20, bottom = 20 } ]
                             ([ Input.text (textFieldAttributes .nameValidity)
                                 { label = labelStyle model.windowWidth "Your name:"
                                 , placeholder = Nothing
