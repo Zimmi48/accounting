@@ -1421,6 +1421,7 @@ view model =
                             (el
                                 [ alignTop
                                 , width fill
+                                , Background.color (rgb 1 1 1)
                                 , Border.shadow { offset = ( 0, 2 ), size = 1, blur = 4, color = rgba 0 0 0 0.1 }
                                 ]
                                 ((if model.windowWidth > 650 then
