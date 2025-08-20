@@ -1417,28 +1417,38 @@ view model =
                     -- Elm UI body
                     [ layout
                         [ inFront (Dialog.view dialogConfig)
-                        ]
-                        (column [ width fill, spacing 20, padding 20 ]
-                            ([ (if model.windowWidth > 650 then
+                        , inFront
+                            (el
+                                [ alignTop
+                                , width fill
+                                , Background.color (rgb 1 1 1)
+                                , Border.shadow { offset = ( 0, 2 ), size = 1, blur = 4, color = rgba 0 0 0 0.1 }
+                                , paddingXY 0 10
+                                ]
+                                ((if model.windowWidth > 650 then
                                     row [ centerX, spacing 70, padding 20 ]
 
-                                else
+                                  else
                                     column [ centerX, spacing 20, padding 20 ]
-                               )
-                                [ Input.button greenButtonStyle
-                                    { label = text "Add Person"
-                                    , onPress = Just ShowAddPersonDialog
-                                    }
-                                , Input.button greenButtonStyle
-                                    { label = text "Add Group / Account"
-                                    , onPress = Just ShowAddGroupDialog
-                                    }
-                                , Input.button greenButtonStyle
-                                    { label = text "Add Spending"
-                                    , onPress = Just (ShowAddSpendingDialog Nothing)
-                                    }
-                                ]
-                             , Input.text (textFieldAttributes .nameValidity)
+                                 )
+                                    [ Input.button greenButtonStyle
+                                        { label = text "Add Person"
+                                        , onPress = Just ShowAddPersonDialog
+                                        }
+                                    , Input.button greenButtonStyle
+                                        { label = text "Add Group / Account"
+                                        , onPress = Just ShowAddGroupDialog
+                                        }
+                                    , Input.button greenButtonStyle
+                                        { label = text "Add Spending"
+                                        , onPress = Just (ShowAddSpendingDialog Nothing)
+                                        }
+                                    ]
+                                )
+                            )
+                        ]
+                        (column [ width fill, spacing 20, paddingEach { top = 100, left = 20, right = 20, bottom = 20 } ]
+                            ([ Input.text (textFieldAttributes .nameValidity)
                                 { label = labelStyle model.windowWidth "Your name:"
                                 , placeholder = Nothing
                                 , onChange = UpdateName
