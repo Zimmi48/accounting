@@ -1416,8 +1416,7 @@ view model =
                 , body =
                     -- Elm UI body
                     [ layout
-                        [ inFront (Dialog.view dialogConfig)
-                        , inFront
+                        [ inFront
                             (el
                                 [ alignTop
                                 , width fill
@@ -1445,6 +1444,7 @@ view model =
                                     ]
                                 )
                             )
+                        , inFront (Dialog.view dialogConfig)
                         ]
                         (column
                             [ width fill
