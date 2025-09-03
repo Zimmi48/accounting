@@ -272,8 +272,11 @@ type alias Spending =
     -- total amount of the transaction
     , total : Amount Credit
 
-    -- associates each group with an amount (credit = positive or debit = negative) in this transaction
-    , groupCredits : Dict String (Amount Credit)
+    -- groups that receive credit (positive amounts)
+    , credits : Dict String (Amount Credit)
+
+    -- groups that are debited (positive amounts, but semantically debits)
+    , debits : Dict String (Amount Debit)
 
     -- status of the transaction
     , status : TransactionStatus
@@ -314,6 +317,11 @@ addAmount value maybeAmount =
 
         Just (Amount amount) ->
             Just (Amount (amount + value))
+
+
+addAmountToAmount : Amount a -> Amount a -> Amount a
+addAmountToAmount (Amount a) (Amount b) =
+    Amount (a + b)
 
 
 addAmounts : Dict String (Amount a) -> Dict String (Amount a) -> Dict String (Amount a)
@@ -391,7 +399,8 @@ spendingCodec =
     Codec.object Spending
         |> Codec.field "description" .description Codec.string
         |> Codec.field "total" .total amountCodec
-        |> Codec.field "groupCredits" .groupCredits (Codec.dict amountCodec)
+        |> Codec.field "credits" .credits (Codec.dict amountCodec)
+        |> Codec.field "debits" .debits (Codec.dict amountCodec)
         |> Codec.field "status" .status transactionStatusCodec
         |> Codec.buildObject
 

@@ -114,10 +114,8 @@ updateFromFrontend sessionId clientId msg model =
                 spending =
                     { description = description
                     , total = total
-                    , groupCredits =
-                        debits
-                            |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                            |> addAmounts credits
+                    , credits = credits
+                    , debits = debits
                     , status = Active
                     }
 
@@ -168,10 +166,8 @@ updateFromFrontend sessionId clientId msg model =
                             newSpending =
                                 { description = description
                                 , total = total
-                                , groupCredits =
-                                    debits
-                                        |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                                        |> addAmounts credits
+                                , credits = credits
+                                , debits = debits
                                 , status = Active
                                 }
 
@@ -261,11 +257,6 @@ updateFromFrontend sessionId clientId msg model =
                         ( model, Lamdera.sendToFrontend clientId (TransactionError "Transaction is not active") )
 
                     else
-                        -- Convert groupCredits back to credits and debits
-                        let
-                            ( credits, debits ) =
-                                separateCreditsAndDebits transaction.total transaction.groupCredits
-                        in
                         ( model
                         , Lamdera.sendToFrontend clientId
                             (TransactionDetails
@@ -275,8 +266,8 @@ updateFromFrontend sessionId clientId msg model =
                                 , month = transactionId.month
                                 , day = transactionId.day
                                 , total = transaction.total
-                                , credits = credits
-                                , debits = debits
+                                , credits = transaction.credits
+                                , debits = transaction.debits
                                 }
                             )
                         )
@@ -346,9 +337,10 @@ updateFromFrontend sessionId clientId msg model =
                                             List.indexedMap
                                                 (\index spending ->
                                                     if spending.status == Active then
-                                                        Dict.get group spending.groupCredits
-                                                            |> Maybe.map
-                                                                (\share ->
+                                                        -- Look for the group in both credits and debits
+                                                        case ( Dict.get group spending.credits, Dict.get group spending.debits ) of
+                                                            ( Just credit, Nothing ) ->
+                                                                Just
                                                                     { transactionId =
                                                                         { year = year
                                                                         , month = month
@@ -360,9 +352,43 @@ updateFromFrontend sessionId clientId msg model =
                                                                     , month = month
                                                                     , day = day
                                                                     , total = (\(Amount a) -> Amount a) spending.total
-                                                                    , share = toDebit share
+                                                                    , share = toDebit credit
                                                                     }
-                                                                )
+
+                                                            ( Nothing, Just debit ) ->
+                                                                Just
+                                                                    { transactionId =
+                                                                        { year = year
+                                                                        , month = month
+                                                                        , day = day
+                                                                        , index = index
+                                                                        }
+                                                                    , description = spending.description
+                                                                    , year = year
+                                                                    , month = month
+                                                                    , day = day
+                                                                    , total = (\(Amount a) -> Amount a) spending.total
+                                                                    , share = debit
+                                                                    }
+
+                                                            ( Just credit, Just debit ) ->
+                                                                Just
+                                                                    { transactionId =
+                                                                        { year = year
+                                                                        , month = month
+                                                                        , day = day
+                                                                        , index = index
+                                                                        }
+                                                                    , description = spending.description
+                                                                    , year = year
+                                                                    , month = month
+                                                                    , day = day
+                                                                    , total = (\(Amount a) -> Amount a) spending.total
+                                                                    , share = addAmountToAmount (toDebit credit) debit
+                                                                    }
+
+                                                            ( Nothing, Nothing ) ->
+                                                                Nothing
 
                                                     else
                                                         Nothing
@@ -502,7 +528,14 @@ addToTotalGroupCredits :
     -> Spending
     -> Dict String (Dict String (Amount Credit))
     -> Dict String (Dict String (Amount Credit))
-addToTotalGroupCredits groupMembersKey { groupCredits } =
+addToTotalGroupCredits groupMembersKey { credits, debits } =
+    let
+        -- Convert debits to negative credits for aggregation
+        groupCredits =
+            debits
+                |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                |> addAmounts credits
+    in
     Dict.update groupMembersKey
         (Maybe.map (addAmounts groupCredits >> Just)
             >> Maybe.withDefault (Just groupCredits)
@@ -511,13 +544,20 @@ addToTotalGroupCredits groupMembersKey { groupCredits } =
 
 addSpendingToYear : Int -> Int -> String -> Spending -> Maybe Year -> Year
 addSpendingToYear month day groupMembersKey spending maybeYear =
+    let
+        -- Convert debits to negative credits for aggregation
+        groupCredits =
+            spending.debits
+                |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                |> addAmounts spending.credits
+    in
     case maybeYear of
         Nothing ->
             { months =
                 Dict.singleton month
                     (addSpendingToMonth day groupMembersKey spending Nothing)
             , totalGroupCredits =
-                Dict.singleton groupMembersKey spending.groupCredits
+                Dict.singleton groupMembersKey groupCredits
             }
 
         Just year ->
@@ -532,13 +572,20 @@ addSpendingToYear month day groupMembersKey spending maybeYear =
 
 addSpendingToMonth : Int -> String -> Spending -> Maybe Month -> Month
 addSpendingToMonth day groupMembersKey spending maybeMonth =
+    let
+        -- Convert debits to negative credits for aggregation
+        groupCredits =
+            spending.debits
+                |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                |> addAmounts spending.credits
+    in
     case maybeMonth of
         Nothing ->
             { days =
                 Dict.singleton day
                     (addSpendingToDay groupMembersKey spending Nothing)
             , totalGroupCredits =
-                Dict.singleton groupMembersKey spending.groupCredits
+                Dict.singleton groupMembersKey groupCredits
             }
 
         Just month ->
@@ -553,11 +600,18 @@ addSpendingToMonth day groupMembersKey spending maybeMonth =
 
 addSpendingToDay : String -> Spending -> Maybe Day -> Day
 addSpendingToDay groupMembersKey spending maybeDay =
+    let
+        -- Convert debits to negative credits for aggregation
+        groupCredits =
+            spending.debits
+                |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                |> addAmounts spending.credits
+    in
     case maybeDay of
         Nothing ->
             { spendings = [ spending ]
             , totalGroupCredits =
-                Dict.singleton groupMembersKey spending.groupCredits
+                Dict.singleton groupMembersKey groupCredits
             }
 
         Just day ->
@@ -638,7 +692,8 @@ negateSpending : Spending -> Spending
 negateSpending spending =
     { spending
         | total = (\(Amount a) -> Amount -a) spending.total
-        , groupCredits = Dict.map (\_ (Amount a) -> Amount -a) spending.groupCredits
+        , credits = Dict.map (\_ (Amount a) -> Amount -a) spending.credits
+        , debits = Dict.map (\_ (Amount a) -> Amount -a) spending.debits
     }
 
 
@@ -680,7 +735,7 @@ getGroupMembersKey credits debits model =
 getGroupMembersKeyForSpending spending model =
     let
         groupMembers =
-            Dict.keys spending.groupCredits
+            (Dict.keys spending.credits ++ Dict.keys spending.debits)
                 |> List.map
                     (\group ->
                         Dict.get group model.groups
@@ -745,46 +800,3 @@ removeSpendingFromModel transactionId spending model =
             model.totalGroupCredits
                 |> addToTotalGroupCredits groupMembersKey (negateSpending spending)
     }
-
-
-{-| Convert stored groupCredits back to separate credits and debits
-When total is negative, the logic is inverted: negative amounts become credits, positive become debits
--}
-separateCreditsAndDebits : Amount Credit -> Dict String (Amount Credit) -> ( Dict String (Amount Credit), Dict String (Amount Debit) )
-separateCreditsAndDebits (Amount total) groupCredits =
-    let
-        positive =
-            groupCredits
-                |> Dict.filter (\_ (Amount amount) -> amount > 0)
-                |> Dict.map
-                    (\_ (Amount amount) ->
-                        if total < 0 then
-                            -- For negative totals: convert positive amounts to negative
-                            Amount -amount
-
-                        else
-                            -- For positive totals: keep positive amounts as positive
-                            Amount amount
-                    )
-
-        negative =
-            groupCredits
-                |> Dict.filter (\_ (Amount amount) -> amount < 0)
-                |> Dict.map
-                    (\_ (Amount amount) ->
-                        if total < 0 then
-                            -- For negative totals: keep negative amounts as negative
-                            Amount amount
-
-                        else
-                            -- For positive totals: convert negative amounts to positive debits
-                            Amount -amount
-                    )
-    in
-    if total < 0 then
-        -- For negative totals: negative amounts are credits, positive amounts are debits
-        ( negative, positive )
-
-    else
-        -- For positive totals: positive amounts are credits, negative amounts are debits
-        ( positive, negative )
