@@ -525,37 +525,23 @@ checkValidName model name =
 
 addToTotalGroupCredits :
     String
-    -> Spending
+    -> Dict String (Amount Credit)
     -> Dict String (Dict String (Amount Credit))
     -> Dict String (Dict String (Amount Credit))
-addToTotalGroupCredits groupMembersKey { credits, debits } =
-    let
-        -- Convert debits to negative credits for aggregation
-        groupCredits =
-            debits
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                |> addAmounts credits
-    in
+addToTotalGroupCredits groupMembersKey groupCredits =
     Dict.update groupMembersKey
         (Maybe.map (addAmounts groupCredits >> Just)
             >> Maybe.withDefault (Just groupCredits)
         )
 
 
-addSpendingToYear : Int -> Int -> String -> Spending -> Maybe Year -> Year
-addSpendingToYear month day groupMembersKey spending maybeYear =
-    let
-        -- Convert debits to negative credits for aggregation
-        groupCredits =
-            spending.debits
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                |> addAmounts spending.credits
-    in
+addSpendingToYear : Int -> Int -> String -> Dict String (Amount Credit) -> Spending -> Maybe Year -> Year
+addSpendingToYear month day groupMembersKey groupCredits spending maybeYear =
     case maybeYear of
         Nothing ->
             { months =
                 Dict.singleton month
-                    (addSpendingToMonth day groupMembersKey spending Nothing)
+                    (addSpendingToMonth day groupMembersKey groupCredits spending Nothing)
             , totalGroupCredits =
                 Dict.singleton groupMembersKey groupCredits
             }
@@ -563,27 +549,20 @@ addSpendingToYear month day groupMembersKey spending maybeYear =
         Just year ->
             { months =
                 year.months
-                    |> Dict.update month (addSpendingToMonth day groupMembersKey spending >> Just)
+                    |> Dict.update month (addSpendingToMonth day groupMembersKey groupCredits spending >> Just)
             , totalGroupCredits =
                 year.totalGroupCredits
-                    |> addToTotalGroupCredits groupMembersKey spending
+                    |> addToTotalGroupCredits groupMembersKey groupCredits
             }
 
 
-addSpendingToMonth : Int -> String -> Spending -> Maybe Month -> Month
-addSpendingToMonth day groupMembersKey spending maybeMonth =
-    let
-        -- Convert debits to negative credits for aggregation
-        groupCredits =
-            spending.debits
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                |> addAmounts spending.credits
-    in
+addSpendingToMonth : Int -> String -> Dict String (Amount Credit) -> Spending -> Maybe Month -> Month
+addSpendingToMonth day groupMembersKey groupCredits spending maybeMonth =
     case maybeMonth of
         Nothing ->
             { days =
                 Dict.singleton day
-                    (addSpendingToDay groupMembersKey spending Nothing)
+                    (addSpendingToDay groupMembersKey groupCredits spending Nothing)
             , totalGroupCredits =
                 Dict.singleton groupMembersKey groupCredits
             }
@@ -591,22 +570,15 @@ addSpendingToMonth day groupMembersKey spending maybeMonth =
         Just month ->
             { days =
                 month.days
-                    |> Dict.update day (addSpendingToDay groupMembersKey spending >> Just)
+                    |> Dict.update day (addSpendingToDay groupMembersKey groupCredits spending >> Just)
             , totalGroupCredits =
                 month.totalGroupCredits
-                    |> addToTotalGroupCredits groupMembersKey spending
+                    |> addToTotalGroupCredits groupMembersKey groupCredits
             }
 
 
-addSpendingToDay : String -> Spending -> Maybe Day -> Day
-addSpendingToDay groupMembersKey spending maybeDay =
-    let
-        -- Convert debits to negative credits for aggregation
-        groupCredits =
-            spending.debits
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                |> addAmounts spending.credits
-    in
+addSpendingToDay : String -> Dict String (Amount Credit) -> Spending -> Maybe Day -> Day
+addSpendingToDay groupMembersKey groupCredits spending maybeDay =
     case maybeDay of
         Nothing ->
             { spendings = [ spending ]
@@ -618,14 +590,14 @@ addSpendingToDay groupMembersKey spending maybeDay =
             { spendings = spending :: day.spendings
             , totalGroupCredits =
                 day.totalGroupCredits
-                    |> addToTotalGroupCredits groupMembersKey spending
+                    |> addToTotalGroupCredits groupMembersKey groupCredits
             }
 
 
 {-| Remove spending amount from the hierarchy totals. Used for deletes and edits.
 -}
-removeSpendingFromYear : Int -> Int -> String -> Spending -> Maybe Year -> Maybe Year
-removeSpendingFromYear month day groupMembersKey spending maybeYear =
+removeSpendingFromYear : Int -> Int -> String -> Dict String (Amount Credit) -> Maybe Year -> Maybe Year
+removeSpendingFromYear month day groupMembersKey groupCredits maybeYear =
     case maybeYear of
         Nothing ->
             Nothing
@@ -634,11 +606,11 @@ removeSpendingFromYear month day groupMembersKey spending maybeYear =
             let
                 updatedMonths =
                     year.months
-                        |> Dict.update month (removeSpendingFromMonth day groupMembersKey spending)
+                        |> Dict.update month (removeSpendingFromMonth day groupMembersKey groupCredits)
 
                 updatedTotalGroupCredits =
                     year.totalGroupCredits
-                        |> addToTotalGroupCredits groupMembersKey (negateSpending spending)
+                        |> addToTotalGroupCredits groupMembersKey groupCredits
             in
             Just
                 { months = updatedMonths
@@ -646,8 +618,8 @@ removeSpendingFromYear month day groupMembersKey spending maybeYear =
                 }
 
 
-removeSpendingFromMonth : Int -> String -> Spending -> Maybe Month -> Maybe Month
-removeSpendingFromMonth day groupMembersKey spending maybeMonth =
+removeSpendingFromMonth : Int -> String -> Dict String (Amount Credit) -> Maybe Month -> Maybe Month
+removeSpendingFromMonth day groupMembersKey groupCredits maybeMonth =
     case maybeMonth of
         Nothing ->
             Nothing
@@ -656,11 +628,11 @@ removeSpendingFromMonth day groupMembersKey spending maybeMonth =
             let
                 updatedDays =
                     month.days
-                        |> Dict.update day (removeSpendingFromDay groupMembersKey spending)
+                        |> Dict.update day (removeSpendingFromDay groupMembersKey groupCredits)
 
                 updatedTotalGroupCredits =
                     month.totalGroupCredits
-                        |> addToTotalGroupCredits groupMembersKey (negateSpending spending)
+                        |> addToTotalGroupCredits groupMembersKey groupCredits
             in
             Just
                 { days = updatedDays
@@ -668,8 +640,8 @@ removeSpendingFromMonth day groupMembersKey spending maybeMonth =
                 }
 
 
-removeSpendingFromDay : String -> Spending -> Maybe Day -> Maybe Day
-removeSpendingFromDay groupMembersKey spending maybeDay =
+removeSpendingFromDay : String -> Dict String (Amount Credit) -> Maybe Day -> Maybe Day
+removeSpendingFromDay groupMembersKey groupCredits maybeDay =
     case maybeDay of
         Nothing ->
             Nothing
@@ -678,23 +650,12 @@ removeSpendingFromDay groupMembersKey spending maybeDay =
             let
                 updatedTotalGroupCredits =
                     day.totalGroupCredits
-                        |> addToTotalGroupCredits groupMembersKey (negateSpending spending)
+                        |> addToTotalGroupCredits groupMembersKey groupCredits
             in
             Just
                 { spendings = day.spendings
                 , totalGroupCredits = updatedTotalGroupCredits
                 }
-
-
-{-| Create a negative version of a spending for subtraction
--}
-negateSpending : Spending -> Spending
-negateSpending spending =
-    { spending
-        | total = (\(Amount a) -> Amount -a) spending.total
-        , credits = Dict.map (\_ (Amount a) -> Amount -a) spending.credits
-        , debits = Dict.map (\_ (Amount a) -> Amount -a) spending.debits
-    }
 
 
 {-| Find a specific transaction by ID
@@ -732,6 +693,7 @@ getGroupMembersKey credits debits model =
 
 {-| Get group members key for an existing spending
 -}
+getGroupMembersKeyForSpending : Spending -> Model -> ( String, Set String )
 getGroupMembersKeyForSpending spending model =
     let
         groupMembers =
@@ -760,14 +722,20 @@ addSpendingToModel year month day spending model =
     let
         ( groupMembersKey, groupMembers ) =
             getGroupMembersKeyForSpending spending model
+
+        -- Convert debits to negative credits for aggregation
+        groupCredits =
+            spending.debits
+                |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                |> addAmounts spending.credits
     in
     { model
         | years =
             model.years
-                |> Dict.update year (addSpendingToYear month day groupMembersKey spending >> Just)
+                |> Dict.update year (addSpendingToYear month day groupMembersKey groupCredits spending >> Just)
         , totalGroupCredits =
             model.totalGroupCredits
-                |> addToTotalGroupCredits groupMembersKey spending
+                |> addToTotalGroupCredits groupMembersKey groupCredits
         , persons =
             Dict.map
                 (\name person ->
@@ -791,12 +759,19 @@ removeSpendingFromModel transactionId spending model =
     let
         ( groupMembersKey, groupMembers ) =
             getGroupMembersKeyForSpending spending model
+
+        -- Convert debits to negative credits for aggregation and negate the whole
+        groupCredits =
+            spending.debits
+                |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                |> addAmounts spending.credits
+                |> Dict.map (\_ (Amount amount) -> Amount -amount)
     in
     { model
         | years =
             model.years
-                |> Dict.update transactionId.year (removeSpendingFromYear transactionId.month transactionId.day groupMembersKey spending)
+                |> Dict.update transactionId.year (removeSpendingFromYear transactionId.month transactionId.day groupMembersKey groupCredits)
         , totalGroupCredits =
             model.totalGroupCredits
-                |> addToTotalGroupCredits groupMembersKey (negateSpending spending)
+                |> addToTotalGroupCredits groupMembersKey groupCredits
     }
