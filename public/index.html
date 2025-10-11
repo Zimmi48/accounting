@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accounting</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script src="/app.js"></script>
+    <script>
+        // Initialize Elm app
+        const app = Elm.Frontend.init({
+            node: document.getElementById('app')
+        });
+
+        // Function to detect preferred color scheme
+        function detectPreferredTheme() {
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            app.ports.preferredThemeReceived.send(prefersDark);
+        }
+
+        // Port: Request preferred theme
+        app.ports.requestPreferredTheme.subscribe(function() {
+            detectPreferredTheme();
+        });
+
+        // Listen for changes to the color scheme preference
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+                app.ports.preferredThemeReceived.send(e.matches);
+            });
+        }
+    </script>
+</body>
+</html>
