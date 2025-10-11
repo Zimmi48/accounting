@@ -95,7 +95,6 @@ type FrontendMsg
     | UpdatePassword String
     | UpdateJson String
     | ViewportChanged Int Int
-    | PreferredThemeDetected Bool
 
 
 type ToBackend

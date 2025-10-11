@@ -1,4 +1,4 @@
-port module Frontend exposing (..)
+module Frontend exposing (..)
 
 import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest(..))
@@ -29,12 +29,6 @@ import Types exposing (..)
 import Url
 
 
-port requestPreferredTheme : () -> Cmd msg
-
-
-port preferredThemeReceived : (Bool -> msg) -> Sub msg
-
-
 type alias Model =
     FrontendModel
 
@@ -46,17 +40,9 @@ app =
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions = subscriptions
+        , subscriptions = \_ -> onResize ViewportChanged
         , view = view
         }
-
-
-subscriptions : Model -> Sub FrontendMsg
-subscriptions _ =
-    Sub.batch
-        [ onResize ViewportChanged
-        , preferredThemeReceived PreferredThemeDetected
-        ]
 
 
 init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
@@ -89,7 +75,6 @@ init url key =
             )
             getViewport
         , Lamdera.sendToBackend CheckAuthentication
-        , requestPreferredTheme ()
         ]
     )
 
@@ -737,17 +722,7 @@ update msg model =
             , Cmd.none
             )
 
-        PreferredThemeDetected isDark ->
-            ( { model
-                | theme =
-                    if isDark then
-                        DarkTheme
 
-                    else
-                        LightTheme
-              }
-            , Cmd.none
-            )
 
 
 type alias ColorPalette =
@@ -1231,6 +1206,7 @@ completeToLongestCommonPrefix { prefixLower, longestCommonPrefix, complete } lis
 view : Model -> Browser.Document FrontendMsg
 view model =
     let
+        -- Get the color palette based on current theme
         palette =
             getPalette model.theme
     in
