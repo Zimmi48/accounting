@@ -1250,6 +1250,8 @@ view model =
                             , px (model.windowHeight * 8 // 10) |> height
                             , Font.family [ Font.monospace ]
                             , Font.size 14
+                            , Background.color palette.inputBackground
+                            , Font.color palette.text
                             ]
                             { text = json
                             , placeholder = Just (Input.placeholder [] (text "Paste JSON here"))
@@ -1432,7 +1434,7 @@ view model =
 
                                         PasswordDialog dialogModel ->
                                             config "Password"
-                                                [ Input.currentPassword []
+                                                [ Input.currentPassword (inputStyle palette)
                                                     { label = labelStyle model.windowWidth "Password"
                                                     , placeholder = Nothing
                                                     , onChange = UpdatePassword
@@ -1446,10 +1448,10 @@ view model =
                     textFieldAttributes field =
                         case field model of
                             InvalidPrefix ->
-                                [ Background.color palette.error ]
+                                inputStyle palette ++ [ Background.color palette.error ]
 
                             _ ->
-                                []
+                                inputStyle palette
                 in
                 { title = "Accounting"
                 , body =
@@ -1582,6 +1584,7 @@ type alias Palette =
     , surface : Color
     , navbar : Color
     , text : Color
+    , inputBackground : Color
     , accent : Color
     , accentText : Color
     , error : Color
@@ -1598,6 +1601,7 @@ lightPalette =
     , surface = rgb 0.9 0.9 0.9
     , navbar = rgb 1 1 1
     , text = rgb 0 0 0
+    , inputBackground = rgb 1 1 1
     , accent = rgb255 152 251 152
     , accentText = rgb 0 0 0
     , error = rgb 1 0.5 0.5
@@ -1614,6 +1618,7 @@ darkPalette =
     , surface = rgb 0.22 0.22 0.22
     , navbar = rgb 0.08 0.08 0.08
     , text = rgb 0.9 0.9 0.9
+    , inputBackground = rgb 0.2 0.2 0.2
     , accent = rgb255 80 160 80
     , accentText = rgb 0.95 0.95 0.95
     , error = rgb 0.75 0.3 0.3
@@ -1634,14 +1639,21 @@ getPalette theme =
             darkPalette
 
 
+inputStyle : Palette -> List (Attribute msg)
+inputStyle palette =
+    [ Background.color palette.inputBackground
+    , Font.color palette.text
+    ]
+
+
 nameInput palette windowWidth { name, nameInvalid } =
     let
         attributes =
             if nameInvalid then
-                [ Background.color palette.error ]
+                inputStyle palette ++ [ Background.color palette.error ]
 
             else
-                []
+                inputStyle palette
     in
     [ Input.text attributes
         { label = labelStyle windowWidth "Name"
@@ -1670,13 +1682,13 @@ addGroupInputs palette windowWidth ({ members } as model) =
 
 
 addSpendingInputs palette windowWidth { description, date, dateText, datePickerModel, total, credits, debits } =
-    [ Input.text []
+    [ Input.text (inputStyle palette)
         { label = labelStyle windowWidth "Description"
         , placeholder = Nothing
         , onChange = UpdateName
         , text = description
         }
-    , DatePicker.input []
+    , DatePicker.input (inputStyle palette)
         { label = labelStyle windowWidth "Date"
         , placeholder = Nothing
         , onChange = ChangeDatePicker
@@ -1685,7 +1697,7 @@ addSpendingInputs palette windowWidth { description, date, dateText, datePickerM
         , settings = DatePicker.defaultSettings
         , model = datePickerModel
         }
-    , Input.text []
+    , Input.text (inputStyle palette)
         { label = labelStyle windowWidth "Total"
         , placeholder = Nothing
         , onChange = UpdateTotal
@@ -1725,7 +1737,7 @@ listInputs palette windowWidth nameLabel valueLabel addMsg updateNameMsg updateV
     in
     (if List.all (\( name, _, _ ) -> String.length name > 0) items then
         [ row [ spacing 20 ]
-            [ Input.text []
+            [ Input.text (inputStyle palette)
                 { label =
                     labelStyle windowWidth
                         (nameLabel
@@ -1736,7 +1748,7 @@ listInputs palette windowWidth nameLabel valueLabel addMsg updateNameMsg updateV
                 , onChange = addMsg
                 , text = ""
                 }
-            , Input.text []
+            , Input.text (inputStyle palette)
                 { label = labelStyle windowWidth valueLabel
                 , placeholder = Nothing
                 , onChange = \_ -> NoOpFrontendMsg
@@ -1754,10 +1766,10 @@ listInputs palette windowWidth nameLabel valueLabel addMsg updateNameMsg updateV
                     attributes =
                         case nameValidity of
                             InvalidPrefix ->
-                                [ Background.color palette.error ]
+                                inputStyle palette ++ [ Background.color palette.error ]
 
                             _ ->
-                                []
+                                inputStyle palette
                 in
                 row [ spacing 20 ]
                     [ Input.text attributes
@@ -1771,7 +1783,7 @@ listInputs palette windowWidth nameLabel valueLabel addMsg updateNameMsg updateV
                         , onChange = updateNameMsg index
                         , text = name
                         }
-                    , Input.text []
+                    , Input.text (inputStyle palette)
                         { label = labelStyle windowWidth valueLabel
                         , placeholder = Nothing
                         , onChange = updateValueMsg index
