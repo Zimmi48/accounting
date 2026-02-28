@@ -1585,6 +1585,7 @@ type alias Palette =
     , navbar : Color
     , text : Color
     , inputBackground : Color
+    , border : Color
     , accent : Color
     , accentText : Color
     , error : Color
@@ -1602,6 +1603,7 @@ lightPalette =
     , navbar = rgb 1 1 1
     , text = rgb 0 0 0
     , inputBackground = rgb 1 1 1
+    , border = rgb 0.75 0.75 0.75
     , accent = rgb255 152 251 152
     , accentText = rgb 0 0 0
     , error = rgb 1 0.5 0.5
@@ -1619,6 +1621,7 @@ darkPalette =
     , navbar = rgb 0.08 0.08 0.08
     , text = rgb 0.9 0.9 0.9
     , inputBackground = rgb 0.2 0.2 0.2
+    , border = rgb 0.4 0.4 0.4
     , accent = rgb255 80 160 80
     , accentText = rgb 0.95 0.95 0.95
     , error = rgb 0.75 0.3 0.3
@@ -1643,6 +1646,7 @@ inputStyle : Palette -> List (Attribute msg)
 inputStyle palette =
     [ Background.color palette.inputBackground
     , Font.color palette.text
+    , Border.color palette.border
     ]
 
 
