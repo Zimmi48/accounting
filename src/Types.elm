@@ -38,7 +38,13 @@ type alias FrontendModel =
     , windowWidth : Int
     , windowHeight : Int
     , checkingAuthentication : Bool
+    , theme : Theme
     }
+
+
+type Theme
+    = LightMode
+    | DarkMode
 
 
 type Page
@@ -89,6 +95,7 @@ type FrontendMsg
     | UpdatePassword String
     | UpdateJson String
     | ViewportChanged Int Int
+    | ToggleTheme
 
 
 type ToBackend

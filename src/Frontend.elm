@@ -63,6 +63,7 @@ init url key =
       , windowWidth = 1000
       , windowHeight = 1000
       , checkingAuthentication = True
+      , theme = LightMode
       }
     , Cmd.batch
         [ routingCmds
@@ -721,6 +722,19 @@ update msg model =
             , Cmd.none
             )
 
+        ToggleTheme ->
+            ( { model
+                | theme =
+                    case model.theme of
+                        LightMode ->
+                            DarkMode
+
+                        DarkMode ->
+                            LightMode
+              }
+            , Cmd.none
+            )
+
 
 computeRemainder { total } list =
     ((total
@@ -1151,11 +1165,30 @@ completeToLongestCommonPrefix { prefixLower, longestCommonPrefix, complete } lis
 
 view : Model -> Browser.Document FrontendMsg
 view model =
+    let
+        palette =
+            getPalette model.theme
+
+        themeButton =
+            Input.button
+                (buttonStyle ++ [ Background.color palette.surface, Font.color palette.text, Border.color palette.text ])
+                { label =
+                    text
+                        (case model.theme of
+                            LightMode ->
+                                "🌙 Dark Mode"
+
+                            DarkMode ->
+                                "☀️ Light Mode"
+                        )
+                , onPress = Just ToggleTheme
+                }
+    in
     case model.page of
         NotFound ->
             { title = "Accounting - Not Found"
             , body =
-                [ layout []
+                [ layout [ Background.color palette.background, Font.color palette.text ]
                     (column [ centerX, padding 20, spacing 20 ]
                         [ row [] [ text "Page not found" ]
                         , row []
@@ -1176,6 +1209,8 @@ view model =
                 [ layout
                     [ centerX
                     , padding 50
+                    , Background.color palette.background
+                    , Font.color palette.text
                     ]
                     (column
                         [ shrink |> maximum (model.windowHeight * 9 // 10) |> height
@@ -1207,7 +1242,7 @@ view model =
         Import json ->
             { title = "Accounting - Import"
             , body =
-                [ layout []
+                [ layout [ Background.color palette.background, Font.color palette.text ]
                     (column [ padding 20, spacing 20, width fill ]
                         [ el [ centerX ] (text "Import JSON")
                         , Input.multiline
@@ -1215,6 +1250,8 @@ view model =
                             , px (model.windowHeight * 8 // 10) |> height
                             , Font.family [ Font.monospace ]
                             , Font.size 14
+                            , Background.color palette.inputBackground
+                            , Font.color palette.text
                             ]
                             { text = json
                             , placeholder = Just (Input.placeholder [] (text "Paste JSON here"))
@@ -1223,7 +1260,7 @@ view model =
                             , spellcheck = False
                             }
                         , el [ centerX ]
-                            (Input.button greenButtonStyle
+                            (Input.button (greenButtonStyle palette)
                                 { label = text "Import"
                                 , onPress =
                                     if String.length json > 0 then
@@ -1242,7 +1279,7 @@ view model =
             if model.checkingAuthentication then
                 { title = "Accounting"
                 , body =
-                    [ layout []
+                    [ layout [ Background.color palette.background, Font.color palette.text ]
                         (column [ centerX, centerY, spacing 20 ]
                             [ el [ centerX ] (text "🔄")
                             , el [ centerX ] (text "Checking authentication...")
@@ -1257,7 +1294,8 @@ view model =
                         { closeMessage = Just Cancel
                         , maskAttributes = []
                         , containerAttributes =
-                            [ Background.color (rgb 1 1 1)
+                            [ Background.color palette.background
+                            , Font.color palette.text
                             , Border.solid
                             , Border.rounded 5
                             , Border.width 1
@@ -1268,7 +1306,8 @@ view model =
                             ]
                         , headerAttributes =
                             [ padding 20
-                            , Background.color green
+                            , Background.color palette.accent
+                            , Font.color palette.accentText
                             ]
                         , bodyAttributes =
                             [ padding 20
@@ -1287,16 +1326,16 @@ view model =
                         , footer =
                             Just
                                 (row [ centerX, spacing 20, padding 20, alignRight ]
-                                    [ Input.button redButtonStyle
+                                    [ Input.button (redButtonStyle palette)
                                         { label = text "Cancel"
                                         , onPress = Just Cancel
                                         }
                                     , Input.button
                                         (if canSubmit then
-                                            greenButtonStyle
+                                            greenButtonStyle palette
 
                                          else
-                                            grayButtonStyle
+                                            grayButtonStyle palette
                                         )
                                         { label = text "Submit"
                                         , onPress =
@@ -1317,7 +1356,7 @@ view model =
                                     case dialog of
                                         AddPersonDialog dialogModel ->
                                             config "Add Person"
-                                                (nameInput model.windowWidth dialogModel)
+                                                (nameInput palette model.windowWidth dialogModel)
                                                 (canSubmitPerson dialogModel)
 
                                         AddGroupDialog dialogModel ->
@@ -1326,7 +1365,7 @@ view model =
                                                     "Add Group / Account"
                                             in
                                             config label
-                                                (addGroupInputs model.windowWidth dialogModel)
+                                                (addGroupInputs palette model.windowWidth dialogModel)
                                                 (canSubmitGroup dialogModel)
 
                                         AddSpendingDialog dialogModel ->
@@ -1340,14 +1379,15 @@ view model =
                                                             "Edit Transaction"
                                             in
                                             config title
-                                                (addSpendingInputs model.windowWidth dialogModel)
+                                                (addSpendingInputs palette model.windowWidth dialogModel)
                                                 (canSubmitSpending dialogModel)
 
                                         ConfirmDeleteDialog transactionId ->
                                             { closeMessage = Just Cancel
                                             , maskAttributes = []
                                             , containerAttributes =
-                                                [ Background.color (rgb 1 1 1)
+                                                [ Background.color palette.background
+                                                , Font.color palette.text
                                                 , Border.solid
                                                 , Border.rounded 5
                                                 , Border.width 1
@@ -1358,7 +1398,8 @@ view model =
                                                 ]
                                             , headerAttributes =
                                                 [ padding 20
-                                                , Background.color green
+                                                , Background.color palette.accent
+                                                , Font.color palette.accentText
                                                 ]
                                             , bodyAttributes =
                                                 [ padding 20
@@ -1379,11 +1420,11 @@ view model =
                                             , footer =
                                                 Just
                                                     (row [ centerX, spacing 20, padding 20, alignRight ]
-                                                        [ Input.button redButtonStyle
+                                                        [ Input.button (redButtonStyle palette)
                                                             { label = text "Cancel"
                                                             , onPress = Just Cancel
                                                             }
-                                                        , Input.button greenButtonStyle
+                                                        , Input.button (greenButtonStyle palette)
                                                             { label = text "Delete"
                                                             , onPress = Just (ConfirmDeleteTransaction transactionId)
                                                             }
@@ -1393,7 +1434,7 @@ view model =
 
                                         PasswordDialog dialogModel ->
                                             config "Password"
-                                                [ Input.currentPassword []
+                                                [ Input.currentPassword (inputStyle palette)
                                                     { label = labelStyle model.windowWidth "Password"
                                                     , placeholder = Nothing
                                                     , onChange = UpdatePassword
@@ -1407,10 +1448,10 @@ view model =
                     textFieldAttributes field =
                         case field model of
                             InvalidPrefix ->
-                                [ Background.color red ]
+                                inputStyle palette ++ [ Background.color palette.error ]
 
                             _ ->
-                                []
+                                inputStyle palette
                 in
                 { title = "Accounting"
                 , body =
@@ -1420,7 +1461,8 @@ view model =
                             (el
                                 [ alignTop
                                 , width fill
-                                , Background.color (rgb 1 1 1)
+                                , Background.color palette.navbar
+                                , Font.color palette.text
                                 , Border.shadow { offset = ( 0, 2 ), size = 1, blur = 4, color = rgba 0 0 0 0.1 }
                                 ]
                                 ((if model.windowWidth > 650 then
@@ -1429,22 +1471,25 @@ view model =
                                   else
                                     column [ centerX, spacing 20, padding 20 ]
                                  )
-                                    [ Input.button greenButtonStyle
+                                    [ Input.button (greenButtonStyle palette)
                                         { label = text "Add Person"
                                         , onPress = Just ShowAddPersonDialog
                                         }
-                                    , Input.button greenButtonStyle
+                                    , Input.button (greenButtonStyle palette)
                                         { label = text "Add Group / Account"
                                         , onPress = Just ShowAddGroupDialog
                                         }
-                                    , Input.button greenButtonStyle
+                                    , Input.button (greenButtonStyle palette)
                                         { label = text "Add Spending"
                                         , onPress = Just (ShowAddSpendingDialog Nothing)
                                         }
+                                    , themeButton
                                     ]
                                 )
                             )
                         , inFront (Dialog.view dialogConfig)
+                        , Background.color palette.background
+                        , Font.color palette.text
                         ]
                         (column
                             [ width fill
@@ -1471,15 +1516,15 @@ view model =
                                 ++ (case model.userGroups of
                                         Just { debitors, creditors } ->
                                             [ row [ width fill, spaceEvenly, padding 20 ]
-                                                [ column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                                [ column [ spacing 10, Background.color palette.surface, padding 20 ]
                                                     [ text "Your Debitor Groups / Accounts"
                                                     , viewGroups model.user debitors
                                                     ]
-                                                , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                                , column [ spacing 10, Background.color palette.surface, padding 20 ]
                                                     [ text "Your Creditor Groups / Accounts"
                                                     , viewGroups model.user creditors
                                                     ]
-                                                , column [ spacing 10, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+                                                , column [ spacing 10, Background.color palette.surface, padding 20 ]
                                                     [ text "Amounts due"
                                                     , personalAmountsDue debitors creditors
                                                         |> Dict.toList
@@ -1498,7 +1543,7 @@ view model =
                                         , text = model.group
                                         }
                                    ]
-                                ++ List.map viewTransaction model.groupTransactions
+                                ++ List.map (viewTransaction palette) model.groupTransactions
                             )
                         )
                     ]
@@ -1522,34 +1567,97 @@ buttonStyle =
     ]
 
 
-greenButtonStyle =
-    buttonStyle ++ [ Background.color green ]
+greenButtonStyle palette =
+    buttonStyle ++ [ Background.color palette.accent, Font.color palette.accentText ]
 
 
-green =
-    rgb255 152 251 152
+redButtonStyle palette =
+    buttonStyle ++ [ Background.color palette.error, Font.color palette.errorText ]
 
 
-redButtonStyle =
-    buttonStyle ++ [ Background.color red ]
+grayButtonStyle palette =
+    buttonStyle ++ [ Background.color palette.disabledButton, Font.color palette.text ]
 
 
-red =
-    rgb 1 0.5 0.5
+type alias Palette =
+    { background : Color
+    , surface : Color
+    , navbar : Color
+    , text : Color
+    , inputBackground : Color
+    , border : Color
+    , accent : Color
+    , accentText : Color
+    , error : Color
+    , errorText : Color
+    , editButton : Color
+    , deleteButton : Color
+    , disabledButton : Color
+    }
 
 
-grayButtonStyle =
-    buttonStyle ++ [ Background.color (rgb 0.8 0.8 0.8) ]
+lightPalette : Palette
+lightPalette =
+    { background = rgb 1 1 1
+    , surface = rgb 0.9 0.9 0.9
+    , navbar = rgb 1 1 1
+    , text = rgb 0 0 0
+    , inputBackground = rgb 1 1 1
+    , border = rgb 0.75 0.75 0.75
+    , accent = rgb255 152 251 152
+    , accentText = rgb 0 0 0
+    , error = rgb 1 0.5 0.5
+    , errorText = rgb 0 0 0
+    , editButton = rgb 0.8 0.8 1.0
+    , deleteButton = rgb 1.0 0.8 0.8
+    , disabledButton = rgb 0.8 0.8 0.8
+    }
 
 
-nameInput windowWidth { name, nameInvalid } =
+darkPalette : Palette
+darkPalette =
+    { background = rgb 0.13 0.13 0.13
+    , surface = rgb 0.22 0.22 0.22
+    , navbar = rgb 0.08 0.08 0.08
+    , text = rgb 0.9 0.9 0.9
+    , inputBackground = rgb 0.2 0.2 0.2
+    , border = rgb 0.4 0.4 0.4
+    , accent = rgb255 80 160 80
+    , accentText = rgb 0.95 0.95 0.95
+    , error = rgb 0.75 0.3 0.3
+    , errorText = rgb 0.95 0.95 0.95
+    , editButton = rgb 0.25 0.25 0.5
+    , deleteButton = rgb 0.5 0.25 0.25
+    , disabledButton = rgb 0.35 0.35 0.35
+    }
+
+
+getPalette : Theme -> Palette
+getPalette theme =
+    case theme of
+        LightMode ->
+            lightPalette
+
+        DarkMode ->
+            darkPalette
+
+
+inputStyle : Palette -> List (Attribute msg)
+inputStyle palette =
+    [ Background.color palette.inputBackground
+    , Font.color palette.text
+    , Border.color palette.border
+    ]
+
+
+nameInput palette windowWidth { name, nameInvalid } =
     let
         attributes =
             if nameInvalid then
-                [ Background.color red ]
+                inputStyle palette ++ [ Background.color palette.error ]
 
             else
-                []
+                inputStyle palette
     in
     [ Input.text attributes
         { label = labelStyle windowWidth "Name"
@@ -1560,13 +1668,14 @@ nameInput windowWidth { name, nameInvalid } =
     ]
 
 
-addGroupInputs windowWidth ({ members } as model) =
+addGroupInputs palette windowWidth ({ members } as model) =
     let
         nbMembers =
             List.length members
     in
-    nameInput windowWidth model
+    nameInput palette windowWidth model
         ++ listInputs
+            palette
             windowWidth
             "Owner"
             "Share"
@@ -1576,14 +1685,14 @@ addGroupInputs windowWidth ({ members } as model) =
             members
 
 
-addSpendingInputs windowWidth { description, date, dateText, datePickerModel, total, credits, debits } =
-    [ Input.text []
+addSpendingInputs palette windowWidth { description, date, dateText, datePickerModel, total, credits, debits } =
+    [ Input.text (inputStyle palette)
         { label = labelStyle windowWidth "Description"
         , placeholder = Nothing
         , onChange = UpdateName
         , text = description
         }
-    , DatePicker.input []
+    , DatePicker.input (inputStyle palette)
         { label = labelStyle windowWidth "Date"
         , placeholder = Nothing
         , onChange = ChangeDatePicker
@@ -1592,15 +1701,16 @@ addSpendingInputs windowWidth { description, date, dateText, datePickerModel, to
         , settings = DatePicker.defaultSettings
         , model = datePickerModel
         }
-    , Input.text []
+    , Input.text (inputStyle palette)
         { label = labelStyle windowWidth "Total"
         , placeholder = Nothing
         , onChange = UpdateTotal
         , text = total
         }
-    , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+    , column [ spacing 20, Background.color palette.surface, padding 20 ]
         ([ text "Debitors" ]
             ++ listInputs
+                palette
                 windowWidth
                 "Debitor"
                 "Amount"
@@ -1609,9 +1719,10 @@ addSpendingInputs windowWidth { description, date, dateText, datePickerModel, to
                 UpdateDebit
                 debits
         )
-    , column [ spacing 20, Background.color (rgb 0.9 0.9 0.9), padding 20 ]
+    , column [ spacing 20, Background.color palette.surface, padding 20 ]
         ([ text "Creditors (payers)" ]
             ++ listInputs
+                palette
                 windowWidth
                 "Creditor"
                 "Amount"
@@ -1623,14 +1734,14 @@ addSpendingInputs windowWidth { description, date, dateText, datePickerModel, to
     ]
 
 
-listInputs windowWidth nameLabel valueLabel addMsg updateNameMsg updateValueMsg items =
+listInputs palette windowWidth nameLabel valueLabel addMsg updateNameMsg updateValueMsg items =
     let
         listSize =
             List.length items
     in
     (if List.all (\( name, _, _ ) -> String.length name > 0) items then
         [ row [ spacing 20 ]
-            [ Input.text []
+            [ Input.text (inputStyle palette)
                 { label =
                     labelStyle windowWidth
                         (nameLabel
@@ -1641,7 +1752,7 @@ listInputs windowWidth nameLabel valueLabel addMsg updateNameMsg updateValueMsg 
                 , onChange = addMsg
                 , text = ""
                 }
-            , Input.text []
+            , Input.text (inputStyle palette)
                 { label = labelStyle windowWidth valueLabel
                 , placeholder = Nothing
                 , onChange = \_ -> NoOpFrontendMsg
@@ -1659,10 +1770,10 @@ listInputs windowWidth nameLabel valueLabel addMsg updateNameMsg updateValueMsg 
                     attributes =
                         case nameValidity of
                             InvalidPrefix ->
-                                [ Background.color red ]
+                                inputStyle palette ++ [ Background.color palette.error ]
 
                             _ ->
-                                []
+                                inputStyle palette
                 in
                 row [ spacing 20 ]
                     [ Input.text attributes
@@ -1676,7 +1787,7 @@ listInputs windowWidth nameLabel valueLabel addMsg updateNameMsg updateValueMsg 
                         , onChange = updateNameMsg index
                         , text = name
                         }
-                    , Input.text []
+                    , Input.text (inputStyle palette)
                         { label = labelStyle windowWidth valueLabel
                         , placeholder = Nothing
                         , onChange = updateValueMsg index
@@ -1756,18 +1867,18 @@ canSubmitSpending { description, date, total, credits, debits, submitted } =
            )
 
 
-viewTransaction transaction =
-    row [ spacing 20, padding 20, Background.color (rgb 0.9 0.9 0.9) ]
+viewTransaction palette transaction =
+    row [ spacing 20, padding 20, Background.color palette.surface, Font.color palette.text ]
         [ String.fromInt transaction.year ++ "-" ++ String.fromInt transaction.month ++ "-" ++ String.fromInt transaction.day |> text
         , transaction.description |> text
         , transaction.share |> (\(Amount amount) -> amount) |> viewAmount |> text
         , "(Total: " ++ (transaction.total |> (\(Amount amount) -> amount) |> viewAmount) ++ ")" |> text
         , row [ spacing 10 ]
-            [ Input.button [ Background.color (rgb 0.8 0.8 1.0), padding 5, Border.rounded 3 ]
+            [ Input.button [ Background.color palette.editButton, padding 5, Border.rounded 3 ]
                 { onPress = Just (ShowAddSpendingDialog (Just transaction.transactionId))
                 , label = text "Edit"
                 }
-            , Input.button [ Background.color (rgb 1.0 0.8 0.8), padding 5, Border.rounded 3 ]
+            , Input.button [ Background.color palette.deleteButton, padding 5, Border.rounded 3 ]
                 { onPress = Just (ShowConfirmDeleteDialog transaction.transactionId)
                 , label = text "Delete"
                 }
