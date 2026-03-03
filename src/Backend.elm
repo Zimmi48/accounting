@@ -106,16 +106,12 @@ updateFromFrontend sessionId clientId msg model =
                 , Lamdera.sendToFrontend clientId (NameAlreadyExists name)
                 )
 
-        ( True, CreateSpending { description, year, month, day, total, credits, debits } ) ->
+        ( True, CreateSpending { description, year, month, day, total, subTransactions } ) ->
             let
-                groupMembersKey =
-                    getGroupMembersKey credits debits model
-
                 spending =
                     { description = description
                     , total = total
-                    , credits = credits
-                    , debits = debits
+                    , subTransactions = subTransactions
                     , status = Active
                     }
 
@@ -124,7 +120,7 @@ updateFromFrontend sessionId clientId msg model =
             in
             ( updatedModel, Lamdera.sendToFrontend clientId OperationSuccessful )
 
-        ( True, EditTransaction { transactionId, description, year, month, day, total, credits, debits } ) ->
+        ( True, EditTransaction { transactionId, description, year, month, day, total, subTransactions } ) ->
             -- First, validate that the transaction exists and is active
             case findTransaction transactionId model of
                 Nothing ->
@@ -166,8 +162,7 @@ updateFromFrontend sessionId clientId msg model =
                             newSpending =
                                 { description = description
                                 , total = total
-                                , credits = credits
-                                , debits = debits
+                                , subTransactions = subTransactions
                                 , status = Active
                                 }
 
@@ -266,8 +261,7 @@ updateFromFrontend sessionId clientId msg model =
                                 , month = transactionId.month
                                 , day = transactionId.day
                                 , total = transaction.total
-                                , credits = transaction.credits
-                                , debits = transaction.debits
+                                , subTransactions = transaction.subTransactions
                                 }
                             )
                         )
@@ -337,64 +331,88 @@ updateFromFrontend sessionId clientId msg model =
                                             List.indexedMap
                                                 (\index spending ->
                                                     if spending.status == Active then
-                                                        -- Look for the group in both credits and debits
-                                                        case ( Dict.get group spending.credits, Dict.get group spending.debits ) of
-                                                            ( Just credit, Nothing ) ->
-                                                                Just
-                                                                    { transactionId =
-                                                                        { year = year
-                                                                        , month = month
-                                                                        , day = day
-                                                                        , index = index
-                                                                        }
-                                                                    , description = spending.description
-                                                                    , year = year
-                                                                    , month = month
-                                                                    , day = day
-                                                                    , total = (\(Amount a) -> Amount a) spending.total
-                                                                    , share = toDebit credit
-                                                                    }
+                                                        -- Process each sub-transaction
+                                                        spending.subTransactions
+                                                            |> List.filterMap
+                                                                (\subTxn ->
+                                                                    let
+                                                                        -- Determine effective date (from sub-transaction or spending's date)
+                                                                        ( effectiveYear, effectiveMonth, effectiveDay ) =
+                                                                            case subTxn.date of
+                                                                                Just dateOverride ->
+                                                                                    ( dateOverride.year, dateOverride.month, dateOverride.day )
 
-                                                            ( Nothing, Just debit ) ->
-                                                                Just
-                                                                    { transactionId =
-                                                                        { year = year
-                                                                        , month = month
-                                                                        , day = day
-                                                                        , index = index
-                                                                        }
-                                                                    , description = spending.description
-                                                                    , year = year
-                                                                    , month = month
-                                                                    , day = day
-                                                                    , total = (\(Amount a) -> Amount a) spending.total
-                                                                    , share = debit
-                                                                    }
+                                                                                Nothing ->
+                                                                                    ( year, month, day )
 
-                                                            ( Just credit, Just debit ) ->
-                                                                Just
-                                                                    { transactionId =
-                                                                        { year = year
-                                                                        , month = month
-                                                                        , day = day
-                                                                        , index = index
-                                                                        }
-                                                                    , description = spending.description
-                                                                    , year = year
-                                                                    , month = month
-                                                                    , day = day
-                                                                    , total = (\(Amount a) -> Amount a) spending.total
-                                                                    , share = addAmountToAmount (toDebit credit) debit
-                                                                    }
+                                                                        -- Build full description
+                                                                        fullDescription =
+                                                                            case subTxn.secondaryDescription of
+                                                                                Just secondary ->
+                                                                                    spending.description ++ " - " ++ secondary
 
-                                                            ( Nothing, Nothing ) ->
-                                                                Nothing
+                                                                                Nothing ->
+                                                                                    spending.description
+                                                                    in
+                                                                    -- Look for the group in both credits and debits
+                                                                    case ( Dict.get group subTxn.credits, Dict.get group subTxn.debits ) of
+                                                                        ( Just credit, Nothing ) ->
+                                                                            Just
+                                                                                { transactionId =
+                                                                                    { year = year
+                                                                                    , month = month
+                                                                                    , day = day
+                                                                                    , index = index
+                                                                                    }
+                                                                                , description = fullDescription
+                                                                                , year = effectiveYear
+                                                                                , month = effectiveMonth
+                                                                                , day = effectiveDay
+                                                                                , total = (\(Amount a) -> Amount a) spending.total
+                                                                                , share = toDebit credit
+                                                                                }
+
+                                                                        ( Nothing, Just debit ) ->
+                                                                            Just
+                                                                                { transactionId =
+                                                                                    { year = year
+                                                                                    , month = month
+                                                                                    , day = day
+                                                                                    , index = index
+                                                                                    }
+                                                                                , description = fullDescription
+                                                                                , year = effectiveYear
+                                                                                , month = effectiveMonth
+                                                                                , day = effectiveDay
+                                                                                , total = (\(Amount a) -> Amount a) spending.total
+                                                                                , share = debit
+                                                                                }
+
+                                                                        ( Just credit, Just debit ) ->
+                                                                            Just
+                                                                                { transactionId =
+                                                                                    { year = year
+                                                                                    , month = month
+                                                                                    , day = day
+                                                                                    , index = index
+                                                                                    }
+                                                                                , description = fullDescription
+                                                                                , year = effectiveYear
+                                                                                , month = effectiveMonth
+                                                                                , day = effectiveDay
+                                                                                , total = (\(Amount a) -> Amount a) spending.total
+                                                                                , share = addAmountToAmount (toDebit credit) debit
+                                                                                }
+
+                                                                        ( Nothing, Nothing ) ->
+                                                                            Nothing
+                                                                )
 
                                                     else
-                                                        Nothing
+                                                        []
                                                 )
                                                 spendings
-                                                |> List.filterMap identity
+                                                |> List.concat
                                                 |> (++) accDays
                                         )
                                         accMonths
@@ -669,20 +687,24 @@ findTransaction transactionId model =
         |> Maybe.andThen (.spendings >> List.drop transactionId.index >> List.head)
 
 
-{-| Get group members key for a spending
+{-| Get group members key for a spending - now aggregates across all sub-transactions
 -}
-getGroupMembersKey : Dict String (Amount Credit) -> Dict String (Amount Debit) -> Model -> String
-getGroupMembersKey credits debits model =
+getGroupMembersKey : List SubTransaction -> Model -> String
+getGroupMembersKey subTransactions model =
     let
         groupMembers =
-            (Dict.keys credits ++ Dict.keys debits)
-                |> List.map
-                    (\group ->
-                        Dict.get group model.groups
-                            |> Maybe.map Dict.keys
-                            |> Maybe.withDefault [ group ]
+            subTransactions
+                |> List.concatMap
+                    (\subTxn ->
+                        (Dict.keys subTxn.credits ++ Dict.keys subTxn.debits)
+                            |> List.map
+                                (\group ->
+                                    Dict.get group model.groups
+                                        |> Maybe.map Dict.keys
+                                        |> Maybe.withDefault [ group ]
+                                )
+                            |> List.concat
                     )
-                |> List.concat
                 |> Set.fromList
     in
     Set.toList groupMembers
@@ -697,14 +719,18 @@ getGroupMembersKeyForSpending : Spending -> Model -> ( String, Set String )
 getGroupMembersKeyForSpending spending model =
     let
         groupMembers =
-            (Dict.keys spending.credits ++ Dict.keys spending.debits)
-                |> List.map
-                    (\group ->
-                        Dict.get group model.groups
-                            |> Maybe.map Dict.keys
-                            |> Maybe.withDefault [ group ]
+            spending.subTransactions
+                |> List.concatMap
+                    (\subTxn ->
+                        (Dict.keys subTxn.credits ++ Dict.keys subTxn.debits)
+                            |> List.map
+                                (\group ->
+                                    Dict.get group model.groups
+                                        |> Maybe.map Dict.keys
+                                        |> Maybe.withDefault [ group ]
+                                )
+                            |> List.concat
                     )
-                |> List.concat
                 |> Set.fromList
     in
     ( Set.toList groupMembers
@@ -723,11 +749,20 @@ addSpendingToModel year month day spending model =
         ( groupMembersKey, groupMembers ) =
             getGroupMembersKeyForSpending spending model
 
-        -- Convert debits to negative credits for aggregation
+        -- Convert debits to negative credits for aggregation, accumulating across all sub-transactions
         groupCredits =
-            spending.debits
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                |> addAmounts spending.credits
+            spending.subTransactions
+                |> List.foldl
+                    (\subTxn acc ->
+                        let
+                            subTxnCredits =
+                                subTxn.debits
+                                    |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                                    |> addAmounts subTxn.credits
+                        in
+                        addAmounts subTxnCredits acc
+                    )
+                    Dict.empty
     in
     { model
         | years =
@@ -760,11 +795,21 @@ removeSpendingFromModel transactionId spending model =
         ( groupMembersKey, groupMembers ) =
             getGroupMembersKeyForSpending spending model
 
-        -- Convert debits to negative credits for aggregation and negate the whole
+        -- Convert debits to negative credits for aggregation and negate the whole,
+        -- accumulating across all sub-transactions
         groupCredits =
-            spending.debits
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                |> addAmounts spending.credits
+            spending.subTransactions
+                |> List.foldl
+                    (\subTxn acc ->
+                        let
+                            subTxnCredits =
+                                subTxn.debits
+                                    |> Dict.map (\_ (Amount amount) -> Amount -amount)
+                                    |> addAmounts subTxn.credits
+                        in
+                        addAmounts subTxnCredits acc
+                    )
+                    Dict.empty
                 |> Dict.map (\_ (Amount amount) -> Amount -amount)
     in
     { model
