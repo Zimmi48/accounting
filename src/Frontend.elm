@@ -309,6 +309,15 @@ update msg model =
                                             )
                                         |> Dict.fromListDedupe (+)
                                         |> Dict.map (\_ -> Amount)
+
+                                -- Create a single sub-transaction with no date/description override
+                                subTransactions =
+                                    [ { date = Nothing
+                                      , secondaryDescription = Nothing
+                                      , credits = credits
+                                      , debits = debits
+                                      }
+                                    ]
                             in
                             case
                                 ( dialogModel.date
@@ -332,8 +341,7 @@ update msg model =
                                                     , month = Date.monthNumber date
                                                     , day = Date.day date
                                                     , total = Amount total
-                                                    , credits = credits
-                                                    , debits = debits
+                                                    , subTransactions = subTransactions
                                                     }
                                                 )
 
@@ -346,8 +354,7 @@ update msg model =
                                                     , month = Date.monthNumber date
                                                     , day = Date.day date
                                                     , total = Amount total
-                                                    , credits = credits
-                                                    , debits = debits
+                                                    , subTransactions = subTransactions
                                                     }
                                                 )
                                     )
@@ -1093,12 +1100,20 @@ updateFromBackend msg model =
             -- TODO: Show error message to user in UI
             ( model, Cmd.none )
 
-        TransactionDetails { transactionId, description, year, month, day, total, credits, debits } ->
+        TransactionDetails { transactionId, description, year, month, day, total, subTransactions } ->
             -- Update the edit dialog with the fetched transaction details
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     if dialogModel.transactionId == Just transactionId then
                         let
+                            -- For backward compatibility, extract credits/debits from first sub-transaction
+                            -- In the future, this could be enhanced to support multiple sub-transactions in the UI
+                            ( credits, debits ) =
+                                subTransactions
+                                    |> List.head
+                                    |> Maybe.map (\subTxn -> ( subTxn.credits, subTxn.debits ))
+                                    |> Maybe.withDefault ( Dict.empty, Dict.empty )
+
                             creditsList =
                                 Dict.toList credits |> List.map (\( group, Amount amount ) -> ( group, formatAmountValue amount, Complete ))
 
