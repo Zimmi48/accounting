@@ -1497,7 +1497,7 @@ view model =
                             , paddingEach
                                 { top =
                                     if model.windowWidth < 650 then
-                                        230
+                                        300
 
                                     else
                                         100
