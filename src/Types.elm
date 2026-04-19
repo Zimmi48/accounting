@@ -1,5 +1,6 @@
 module Types exposing (..)
 
+import Array exposing (Array)
 import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
@@ -26,6 +27,7 @@ type alias FrontendModel =
     , groupTransactions :
         List
             { transactionId : TransactionId
+            , spendingId : SpendingId
             , description : String
             , year : Int
             , month : Int
@@ -55,6 +57,7 @@ type Page
 
 type alias BackendModel =
     { years : Dict Int Year
+    , spendings : Array Spending
     , groups : Dict String Group
 
     -- person set -> group -> amount
@@ -62,6 +65,7 @@ type alias BackendModel =
     , totalGroupCredits : Dict String (Dict String (Amount Credit))
     , persons : Dict String Person
     , nextPersonId : Int
+    , nextSpendingId : SpendingId
     , loggedInSessions : Set SessionId
     }
 
@@ -72,9 +76,9 @@ type FrontendMsg
     | NoOpFrontendMsg
     | ShowAddPersonDialog
     | ShowAddGroupDialog
-    | ShowAddSpendingDialog (Maybe TransactionId) -- Nothing for create, Just for edit
-    | ShowConfirmDeleteDialog TransactionId
-    | ConfirmDeleteTransaction TransactionId
+    | ShowAddSpendingDialog (Maybe SpendingReference) -- Nothing for create, Just for edit
+    | ShowConfirmDeleteDialog SpendingId
+    | ConfirmDeleteSpending SpendingId
     | SetToday Date
     | Submit
     | Cancel
@@ -82,14 +86,22 @@ type FrontendMsg
     | AddMember String
     | UpdateMember Int String
     | UpdateShare Int String
-    | ChangeDatePicker DatePicker.ChangeEvent
-    | UpdateTotal String
-    | AddCreditor String
-    | UpdateCreditor Int String
-    | UpdateCredit Int String
-    | AddDebitor String
-    | UpdateDebitor Int String
-    | UpdateDebit Int String
+    | UpdateSpendingDate DatePicker.ChangeEvent
+    | UpdateSpendingTotal String
+    | AddCredit
+    | RemoveCredit Int
+    | ToggleCreditDetails Int
+    | UpdateCreditDate Int DatePicker.ChangeEvent
+    | UpdateCreditSecondaryDescription Int String
+    | UpdateCreditGroup Int String
+    | UpdateCreditAmount Int String
+    | AddDebit
+    | RemoveDebit Int
+    | ToggleDebitDetails Int
+    | UpdateDebitDate Int DatePicker.ChangeEvent
+    | UpdateDebitSecondaryDescription Int String
+    | UpdateDebitGroup Int String
+    | UpdateDebitAmount Int String
     | UpdateGroupName String
     | UpdatePassword String
     | UpdateJson String
@@ -106,25 +118,17 @@ type ToBackend
     | CreateGroup String (Dict String Share)
     | CreateSpending
         { description : String
-        , year : Int
-        , month : Int
-        , day : Int
         , total : Amount Credit
-        , credits : Dict String (Amount Credit)
-        , debits : Dict String (Amount Debit)
+        , transactions : List SpendingTransaction
         }
-    | EditTransaction
-        { transactionId : TransactionId
+    | EditSpending
+        { spendingId : SpendingId
         , description : String
-        , year : Int
-        , month : Int
-        , day : Int
         , total : Amount Credit
-        , credits : Dict String (Amount Credit)
-        , debits : Dict String (Amount Debit)
+        , transactions : List SpendingTransaction
         }
-    | DeleteTransaction TransactionId
-    | RequestTransactionDetails TransactionId
+    | DeleteSpending SpendingId
+    | RequestSpendingDetails SpendingId
     | RequestUserGroups String
     | RequestGroupTransactions String
     | RequestAllTransactions
@@ -133,11 +137,32 @@ type ToBackend
     | ImportJson String
 
 
+type alias SpendingId =
+    Int
+
+
 type alias TransactionId =
     { year : Int
     , month : Int
     , day : Int
     , index : Int
+    }
+
+
+type alias SpendingReference =
+    { spendingId : SpendingId
+    , transactionId : TransactionId
+    }
+
+
+type alias SpendingTransaction =
+    { year : Int
+    , month : Int
+    , day : Int
+    , secondaryDescription : String
+    , group : String
+    , amount : Amount ()
+    , side : TransactionSide
     }
 
 
@@ -171,6 +196,7 @@ type ToFrontend
         , transactions :
             List
                 { transactionId : TransactionId
+                , spendingId : SpendingId
                 , description : String
                 , year : Int
                 , month : Int
@@ -181,16 +207,12 @@ type ToFrontend
         }
     | AuthenticationStatus Bool
     | JsonExport String
-    | TransactionError String
-    | TransactionDetails
-        { transactionId : TransactionId
+    | SpendingError String
+    | SpendingDetails
+        { spendingId : SpendingId
         , description : String
-        , year : Int
-        , month : Int
-        , day : Int
         , total : Amount Credit
-        , credits : Dict String (Amount Credit)
-        , debits : Dict String (Amount Debit)
+        , transactions : List SpendingTransaction
         }
 
 
@@ -198,7 +220,7 @@ type Dialog
     = AddPersonDialog AddPersonDialogModel
     | AddGroupDialog AddGroupDialogModel
     | AddSpendingDialog AddSpendingDialogModel
-    | ConfirmDeleteDialog TransactionId
+    | ConfirmDeleteDialog SpendingId
     | PasswordDialog PasswordDialogModel
 
 
@@ -232,19 +254,27 @@ type NameValidity
 
 
 type alias AddSpendingDialogModel =
-    { transactionId : Maybe TransactionId -- Nothing for create, Just for edit
+    { spendingId : Maybe SpendingId -- Nothing for create, Just for edit
     , description : String
+    , total : String
     , date : Maybe Date
     , dateText : String
     , datePickerModel : DatePicker.Model
-    , total : String
-
-    -- group name, amount, name validity
-    , credits : List ( String, String, NameValidity )
-
-    -- group name, amount, name validity
-    , debits : List ( String, String, NameValidity )
+    , credits : List TransactionLine
+    , debits : List TransactionLine
     , submitted : Bool
+    }
+
+
+type alias TransactionLine =
+    { date : Maybe Date
+    , dateText : String
+    , datePickerModel : DatePicker.Model
+    , secondaryDescription : String
+    , detailsExpanded : Bool
+    , group : String
+    , amount : String
+    , nameValidity : NameValidity
     }
 
 
@@ -267,26 +297,37 @@ type alias Month =
 
 
 type alias Day =
-    { spendings : List Spending
+    { transactions : List Transaction
     , totalGroupCredits : Dict String (Dict String (Amount Credit))
     }
 
 
 type alias Spending =
     { description : String
-
-    -- total amount of the transaction
     , total : Amount Credit
+    , transactionIds : List TransactionId
 
-    -- groups that receive credit (positive amounts)
-    , credits : Dict String (Amount Credit)
-
-    -- groups that are debited (positive amounts, but semantically debits)
-    , debits : Dict String (Amount Debit)
-
-    -- status of the transaction
+    -- status of the spending
     , status : TransactionStatus
     }
+
+
+type alias Transaction =
+    { id : TransactionId
+    , spendingId : SpendingId
+    , secondaryDescription : String
+    , group : String
+    , amount : Amount ()
+    , side : TransactionSide
+    , groupMembersKey : String
+    , groupMembers : Set String
+    , status : TransactionStatus
+    }
+
+
+type TransactionSide
+    = CreditTransaction
+    | DebitTransaction
 
 
 type TransactionStatus

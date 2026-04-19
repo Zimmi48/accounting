@@ -6,12 +6,15 @@ How to decide who handles what.
 
 | Work Type | Route To | Examples |
 |-----------|----------|----------|
-| {domain 1} | {Name} | {example tasks} |
-| {domain 2} | {Name} | {example tasks} |
-| {domain 3} | {Name} | {example tasks} |
-| Code review | {Name} | Review PRs, check quality, suggest improvements |
-| Testing | {Name} | Write tests, find edge cases, verify fixes |
-| Scope & priorities | {Name} | What to build next, trade-offs, decisions |
+| Architecture, migrations, cross-cutting design | Ripley | Model changes, migration strategy, contract changes |
+| Frontend Elm UI and flows | Hicks | Forms, views, update logic, Elm UI polish |
+| Backend and Lamdera server logic | Bishop | Backend.elm changes, shared model wiring, business rules |
+| Full-stack recovery and cross-layer revisions | Newt | Compile-first model changes, contract repair, coordinated revisions |
+| Full-stack recovery and generated-artifact cleanup | Hudson | Codec regeneration, compile-safe repair, review-ready intermediate states |
+| Full-stack model corrections | Dallas | Data-model corrections, one-sided transaction normalization, compile-safe contract repairs |
+| Code review | Ripley | Review PRs, check quality, suggest improvements |
+| Testing | Vasquez | Write tests, find edge cases, verify fixes |
+| Scope & priorities | Ripley | What to build next, trade-offs, decisions |
 | Async issue work (bugs, tests, small features) | @copilot 🤖 | Well-defined tasks matching capability profile |
 | Session logging | Scribe | Automatic — never needs routing |
 
@@ -19,8 +22,14 @@ How to decide who handles what.
 
 | Label | Action | Who |
 |-------|--------|-----|
-| `squad` | Triage: analyze issue, evaluate @copilot fit, assign `squad:{member}` label | Lead |
-| `squad:{name}` | Pick up issue and complete the work | Named member |
+| `squad` | Triage: analyze issue, evaluate @copilot fit, assign `squad:{member}` label | Ripley |
+| `squad:ripley` | Pick up issue and complete the work | Ripley |
+| `squad:hicks` | Pick up issue and complete the work | Hicks |
+| `squad:bishop` | Pick up issue and complete the work | Bishop |
+| `squad:newt` | Pick up issue and complete the work | Newt |
+| `squad:hudson` | Pick up issue and complete the work | Hudson |
+| `squad:dallas` | Pick up issue and complete the work | Dallas |
+| `squad:vasquez` | Pick up issue and complete the work | Vasquez |
 | `squad:copilot` | Assign to @copilot for autonomous work (if enabled) | @copilot 🤖 |
 
 ### How Issue Assignment Works

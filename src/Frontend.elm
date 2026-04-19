@@ -158,15 +158,15 @@ update msg model =
             , Cmd.none
             )
 
-        ShowAddSpendingDialog maybeTransactionId ->
-            case maybeTransactionId of
+        ShowAddSpendingDialog maybeReference ->
+            case maybeReference of
                 Nothing ->
                     -- Create new spending
                     ( { model
                         | showDialog =
                             Just
                                 (AddSpendingDialog
-                                    { transactionId = Nothing
+                                    { spendingId = Nothing
                                     , description = ""
                                     , date = Nothing
                                     , dateText = ""
@@ -181,13 +181,13 @@ update msg model =
                     , Task.perform SetToday Date.today
                     )
 
-                Just transactionId ->
+                Just reference ->
                     -- Edit existing transaction
-                    case List.find (\t -> t.transactionId == transactionId) model.groupTransactions of
+                    case List.find (\t -> t.transactionId == reference.transactionId) model.groupTransactions of
                         Just transaction ->
                             let
                                 date =
-                                    Date.fromCalendarDate transactionId.year (Date.numberToMonth transactionId.month) transactionId.day
+                                    Date.fromCalendarDate transaction.year (Date.numberToMonth transaction.month) transaction.day
 
                                 dateText =
                                     Date.format "yyyy-MM-dd" date
@@ -199,45 +199,72 @@ update msg model =
                                 | showDialog =
                                     Just
                                         (AddSpendingDialog
-                                            { transactionId = Just transactionId
+                                            { spendingId = Just reference.spendingId
                                             , description = transaction.description
                                             , date = Just date
                                             , dateText = dateText
                                             , datePickerModel = DatePicker.initWithToday date
                                             , total = total
-                                            , credits = [] -- Will be populated when TransactionDetails arrives
-                                            , debits = [] -- Will be populated when TransactionDetails arrives
+                                            , credits = [] -- Will be populated when SpendingDetails arrives
+                                            , debits = [] -- Will be populated when SpendingDetails arrives
                                             , submitted = False
                                             }
                                         )
                               }
                             , Cmd.batch
                                 [ Task.perform SetToday Date.today
-                                , Lamdera.sendToBackend (RequestTransactionDetails transactionId)
+                                , Lamdera.sendToBackend (RequestSpendingDetails reference.spendingId)
                                 ]
                             )
 
                         Nothing ->
                             ( model, Cmd.none )
 
-        ShowConfirmDeleteDialog transactionId ->
-            ( { model | showDialog = Just (ConfirmDeleteDialog transactionId) }, Cmd.none )
+        ShowConfirmDeleteDialog spendingId ->
+            ( { model | showDialog = Just (ConfirmDeleteDialog spendingId) }, Cmd.none )
 
-        ConfirmDeleteTransaction transactionId ->
+        ConfirmDeleteSpending spendingId ->
             ( { model | showDialog = Nothing }
-            , Lamdera.sendToBackend (DeleteTransaction transactionId)
+            , Lamdera.sendToBackend (DeleteSpending spendingId)
             )
 
         SetToday today ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
+                    let
+                        spendingDate =
+                            dialogModel.date |> Maybe.withDefault today
+
+                        applyDefault =
+                            applySpendingDateDefault dialogModel.date spendingDate
+
+                        setTodayInLine line =
+                            { line | datePickerModel = DatePicker.setToday today line.datePickerModel }
+                    in
                     ( { model
                         | showDialog =
                             Just
                                 (AddSpendingDialog
-                                    { dialogModel
-                                        | datePickerModel = DatePicker.setToday today dialogModel.datePickerModel
-                                    }
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | datePickerModel = DatePicker.setToday today dialogModel.datePickerModel
+                                            , date = Just spendingDate
+                                            , dateText =
+                                                if dialogModel.dateText == "" then
+                                                    Date.toIsoString spendingDate
+
+                                                else
+                                                    dialogModel.dateText
+                                            , credits =
+                                                dialogModel.credits
+                                                    |> List.map setTodayInLine
+                                                    |> applyDefault
+                                            , debits =
+                                                dialogModel.debits
+                                                    |> List.map setTodayInLine
+                                                    |> applyDefault
+                                        }
+                                    )
                                 )
                       }
                     , Cmd.none
@@ -284,76 +311,43 @@ update msg model =
 
                         Just (AddSpendingDialog dialogModel) ->
                             let
-                                credits =
-                                    dialogModel.credits
-                                        |> List.map
-                                            (\( group, amount, _ ) ->
-                                                ( group
-                                                , amount
-                                                    |> parseAmountValue
-                                                    |> Maybe.withDefault 0
-                                                )
-                                            )
-                                        |> Dict.fromListDedupe (+)
-                                        |> Dict.map (\_ -> Amount)
+                                maybeTotal =
+                                    dialogModel.total |> parseAmountValue
 
-                                debits =
-                                    dialogModel.debits
-                                        |> List.map
-                                            (\( group, amount, _ ) ->
-                                                ( group
-                                                , amount
-                                                    |> parseAmountValue
-                                                    |> Maybe.withDefault 0
-                                                )
-                                            )
-                                        |> Dict.fromListDedupe (+)
-                                        |> Dict.map (\_ -> Amount)
+                                transactions =
+                                    dialogTransactions dialogModel
                             in
-                            case
-                                ( dialogModel.date
-                                , parseAmountValue dialogModel.total
+                            if List.isEmpty transactions || Maybe.isNothing maybeTotal then
+                                ( model, Cmd.none )
+
+                            else
+                                ( { model
+                                    | showDialog =
+                                        Just
+                                            (AddSpendingDialog
+                                                { dialogModel | submitted = True }
+                                            )
+                                  }
+                                , case dialogModel.spendingId of
+                                    Nothing ->
+                                        Lamdera.sendToBackend
+                                            (CreateSpending
+                                                { description = dialogModel.description
+                                                , total = maybeTotal |> Maybe.withDefault 0 |> Amount
+                                                , transactions = transactions
+                                                }
+                                            )
+
+                                    Just spendingId ->
+                                        Lamdera.sendToBackend
+                                            (EditSpending
+                                                { spendingId = spendingId
+                                                , description = dialogModel.description
+                                                , total = maybeTotal |> Maybe.withDefault 0 |> Amount
+                                                , transactions = transactions
+                                                }
+                                            )
                                 )
-                            of
-                                ( Just date, Just total ) ->
-                                    ( { model
-                                        | showDialog =
-                                            Just
-                                                (AddSpendingDialog
-                                                    { dialogModel | submitted = True }
-                                                )
-                                      }
-                                    , case dialogModel.transactionId of
-                                        Nothing ->
-                                            Lamdera.sendToBackend
-                                                (CreateSpending
-                                                    { description = dialogModel.description
-                                                    , year = Date.year date
-                                                    , month = Date.monthNumber date
-                                                    , day = Date.day date
-                                                    , total = Amount total
-                                                    , credits = credits
-                                                    , debits = debits
-                                                    }
-                                                )
-
-                                        Just transactionId ->
-                                            Lamdera.sendToBackend
-                                                (EditTransaction
-                                                    { transactionId = transactionId
-                                                    , description = dialogModel.description
-                                                    , year = Date.year date
-                                                    , month = Date.monthNumber date
-                                                    , day = Date.day date
-                                                    , total = Amount total
-                                                    , credits = credits
-                                                    , debits = debits
-                                                    }
-                                                )
-                                    )
-
-                                _ ->
-                                    ( model, Cmd.none )
 
                         Just (ConfirmDeleteDialog _) ->
                             -- This should not happen as ConfirmDeleteDialog has its own buttons
@@ -510,41 +504,49 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateTotal total ->
-            case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model | showDialog = Just (AddSpendingDialog { dialogModel | total = total }) }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        ChangeDatePicker changeEvent ->
+        UpdateSpendingTotal total ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
                                 (AddSpendingDialog
-                                    (case changeEvent of
-                                        DatePicker.DateChanged date ->
-                                            { dialogModel
-                                                | date = Just date
-                                                , dateText = Date.toIsoString date
-                                                , datePickerModel = DatePicker.close dialogModel.datePickerModel
-                                            }
+                                    (normalizeSpendingDialogLines { dialogModel | total = total })
+                                )
+                      }
+                    , Cmd.none
+                    )
 
-                                        DatePicker.TextChanged dateText ->
-                                            { dialogModel
-                                                | date =
-                                                    Date.fromIsoString dateText
-                                                        |> Result.toMaybe
-                                                , dateText = dateText
-                                            }
+                _ ->
+                    ( model, Cmd.none )
 
-                                        DatePicker.PickerChanged subMsg ->
-                                            { dialogModel | datePickerModel = DatePicker.update subMsg dialogModel.datePickerModel }
+        UpdateSpendingDate changeEvent ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (updateSpendingDate changeEvent dialogModel)
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        AddCredit ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | credits = addTransactionLine dialogModel.date dialogModel.total dialogModel.credits
+                                        }
                                     )
                                 )
                       }
@@ -554,41 +556,21 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        AddCreditor group ->
+        UpdateCreditGroup index group ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
                                 (AddSpendingDialog
-                                    { dialogModel
-                                        | credits =
-                                            dialogModel.credits
-                                                |> addGroup dialogModel group
-                                    }
-                                )
-                      }
-                    , Lamdera.sendToBackend (AutocompleteGroup group)
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        UpdateCreditor index group ->
-            case model.showDialog of
-                Just (AddSpendingDialog dialogModel) ->
-                    ( { model
-                        | showDialog =
-                            Just
-                                (AddSpendingDialog
-                                    { dialogModel
-                                        | credits =
-                                            dialogModel.credits
-                                                |> updateNameInList
-                                                    index
-                                                    group
-                                                    (computeRemainder dialogModel)
-                                    }
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | credits =
+                                                updateTransactionLine index
+                                                    (\line -> { line | group = group, nameValidity = Incomplete })
+                                                    dialogModel.credits
+                                        }
+                                    )
                                 )
                       }
                     , if String.length group > 0 then
@@ -601,18 +583,21 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateCredit index amount ->
+        UpdateCreditAmount index amount ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
                                 (AddSpendingDialog
-                                    { dialogModel
-                                        | credits =
-                                            dialogModel.credits
-                                                |> updateValueInList index amount
-                                    }
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | credits =
+                                                updateTransactionLine index
+                                                    (\line -> { line | amount = amount })
+                                                    dialogModel.credits
+                                        }
+                                    )
                                 )
                       }
                     , Cmd.none
@@ -621,41 +606,127 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        AddDebitor group ->
+        RemoveCredit index ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
                                 (AddSpendingDialog
-                                    { dialogModel
-                                        | debits =
-                                            dialogModel.debits
-                                                |> addGroup dialogModel group
-                                    }
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | credits = removeTransactionLine index dialogModel.credits
+                                        }
+                                    )
                                 )
                       }
-                    , Lamdera.sendToBackend (AutocompleteGroup group)
+                    , Cmd.none
                     )
 
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateDebitor index group ->
+        ToggleCreditDetails index ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
                                 (AddSpendingDialog
-                                    { dialogModel
-                                        | debits =
-                                            dialogModel.debits
-                                                |> updateNameInList
-                                                    index
-                                                    group
-                                                    (computeRemainder dialogModel)
-                                    }
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | credits =
+                                                updateTransactionLine index
+                                                    (\line -> { line | detailsExpanded = not line.detailsExpanded })
+                                                    dialogModel.credits
+                                        }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateCreditDate index changeEvent ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | credits = updateTransactionLineDate index changeEvent dialogModel.credits
+                                        }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateCreditSecondaryDescription index description ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | credits =
+                                                updateTransactionLine index
+                                                    (\line -> { line | secondaryDescription = description })
+                                                    dialogModel.credits
+                                        }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        AddDebit ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | debits = addTransactionLine dialogModel.date dialogModel.total dialogModel.debits
+                                        }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateDebitGroup index group ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | debits =
+                                                updateTransactionLine index
+                                                    (\line -> { line | group = group, nameValidity = Incomplete })
+                                                    dialogModel.debits
+                                        }
+                                    )
                                 )
                       }
                     , if String.length group > 0 then
@@ -668,18 +739,107 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UpdateDebit index amount ->
+        UpdateDebitAmount index amount ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
                     ( { model
                         | showDialog =
                             Just
                                 (AddSpendingDialog
-                                    { dialogModel
-                                        | debits =
-                                            dialogModel.debits
-                                                |> updateValueInList index amount
-                                    }
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | debits =
+                                                updateTransactionLine index
+                                                    (\line -> { line | amount = amount })
+                                                    dialogModel.debits
+                                        }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateDebitDate index changeEvent ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | debits = updateTransactionLineDate index changeEvent dialogModel.debits
+                                        }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        UpdateDebitSecondaryDescription index description ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | debits =
+                                                updateTransactionLine index
+                                                    (\line -> { line | secondaryDescription = description })
+                                                    dialogModel.debits
+                                        }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        RemoveDebit index ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | debits = removeTransactionLine index dialogModel.debits
+                                        }
+                                    )
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        ToggleDebitDetails index ->
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just
+                                (AddSpendingDialog
+                                    (normalizeSpendingDialogLines
+                                        { dialogModel
+                                            | debits =
+                                                updateTransactionLine index
+                                                    (\line -> { line | detailsExpanded = not line.detailsExpanded })
+                                                    dialogModel.debits
+                                        }
+                                    )
                                 )
                       }
                     , Cmd.none
@@ -736,21 +896,268 @@ update msg model =
             )
 
 
-computeRemainder { total } list =
+emptySpendingDialog spendingId description total =
+    normalizeSpendingDialogLines
+        { spendingId = spendingId
+        , description = description
+        , total = total
+        , date = Nothing
+        , dateText = ""
+        , datePickerModel = DatePicker.init
+        , credits = []
+        , debits = []
+        , submitted = False
+        }
+
+
+setSpendingDateValue date dialogModel =
+    { dialogModel
+        | date = Just date
+        , dateText = Date.toIsoString date
+        , datePickerModel = DatePicker.initWithToday date
+    }
+
+
+defaultTransactionLine maybeDate amount =
+    { date = maybeDate
+    , dateText = maybeDate |> Maybe.map Date.toIsoString |> Maybe.withDefault ""
+    , datePickerModel =
+        maybeDate
+            |> Maybe.map DatePicker.initWithToday
+            |> Maybe.withDefault DatePicker.init
+    , secondaryDescription = ""
+    , detailsExpanded = False
+    , group = ""
+    , amount = amount
+    , nameValidity = Incomplete
+    }
+
+
+remainingAmount total lines =
     ((total
         |> parseAmountValue
         |> Maybe.withDefault 0
      )
-        - (list
-            |> List.filterMap (\( _, amount, _ ) -> amount |> parseAmountValue)
+        - (lines
+            |> List.filterMap (.amount >> parseAmountValue)
             |> List.sum
           )
     )
-        |> viewAmount
+        |> formatAmountValue
 
 
-addGroup model name list =
-    addNameInList name (computeRemainder model list) list
+addTransactionLine maybeDate total lines =
+    lines ++ [ defaultTransactionLine maybeDate (defaultTransactionLineAmount total lines) ]
+
+
+removeTransactionLine index lines =
+    lines
+        |> List.indexedMap Tuple.pair
+        |> List.filter (\( currentIndex, _ ) -> currentIndex /= index)
+        |> List.map Tuple.second
+
+
+updateTransactionLine index updateLine lines =
+    List.updateAt index updateLine lines
+
+
+updateTransactionLineDate index changeEvent lines =
+    updateTransactionLine index
+        (\line ->
+            case changeEvent of
+                DatePicker.DateChanged date ->
+                    { line
+                        | date = Just date
+                        , dateText = Date.toIsoString date
+                        , datePickerModel = DatePicker.close line.datePickerModel
+                    }
+
+                DatePicker.TextChanged dateText ->
+                    { line
+                        | date = Date.fromIsoString dateText |> Result.toMaybe
+                        , dateText = dateText
+                    }
+
+                DatePicker.PickerChanged subMsg ->
+                    { line | datePickerModel = DatePicker.update subMsg line.datePickerModel }
+        )
+        lines
+
+
+defaultTransactionLineAmount total lines =
+    if String.trim total == "" then
+        ""
+
+    else
+        remainingAmount total lines
+
+
+transactionLineIsComplete line =
+    String.trim line.group
+        /= ""
+        && (line.amount |> parseAmountValue |> Maybe.isJust)
+        && Maybe.isJust line.date
+
+
+transactionLineIsBlank spendingDate line =
+    String.trim line.group
+        == ""
+        && String.trim line.amount
+        == ""
+        && not (transactionLineHasCustomDetails spendingDate line)
+
+
+normalizeTransactionLines maybeDate total lines =
+    let
+        nonBlankLines =
+            lines
+                |> List.filter (transactionLineIsBlank maybeDate >> not)
+    in
+    if List.last nonBlankLines |> Maybe.map transactionLineIsComplete |> Maybe.withDefault True then
+        nonBlankLines ++ [ defaultTransactionLine maybeDate (defaultTransactionLineAmount total nonBlankLines) ]
+
+    else
+        nonBlankLines
+
+
+normalizeTransactionLinesWithoutAutofill maybeDate lines =
+    let
+        nonBlankLines =
+            lines
+                |> List.filter (transactionLineIsBlank maybeDate >> not)
+    in
+    if List.last nonBlankLines |> Maybe.map transactionLineIsComplete |> Maybe.withDefault True then
+        nonBlankLines ++ [ defaultTransactionLine maybeDate "" ]
+
+    else
+        nonBlankLines
+
+
+normalizeSpendingDialogLines dialogModel =
+    { dialogModel
+        | credits = normalizeTransactionLinesWithoutAutofill dialogModel.date dialogModel.credits
+        , debits = normalizeTransactionLinesWithoutAutofill dialogModel.date dialogModel.debits
+    }
+
+
+lineUsesDefaultDate previousSpendingDate line =
+    case ( previousSpendingDate, line.date ) of
+        ( _, Nothing ) ->
+            True
+
+        ( Just previousDate, Just lineDate ) ->
+            lineDate == previousDate
+
+        ( Nothing, Just _ ) ->
+            False
+
+
+setTransactionLineDate date line =
+    { line
+        | date = Just date
+        , dateText = Date.toIsoString date
+        , datePickerModel = DatePicker.initWithToday date
+    }
+
+
+applySpendingDateDefault previousSpendingDate newDate =
+    List.map
+        (\line ->
+            if lineUsesDefaultDate previousSpendingDate line then
+                setTransactionLineDate newDate line
+
+            else
+                line
+        )
+
+
+updateSpendingDate changeEvent dialogModel =
+    case changeEvent of
+        DatePicker.DateChanged date ->
+            let
+                applyDefault =
+                    applySpendingDateDefault dialogModel.date date
+
+                updatedDialog =
+                    dialogModel |> setSpendingDateValue date
+            in
+            normalizeSpendingDialogLines
+                { updatedDialog
+                    | credits = applyDefault dialogModel.credits
+                    , debits = applyDefault dialogModel.debits
+                }
+
+        DatePicker.TextChanged dateText ->
+            case Date.fromIsoString dateText |> Result.toMaybe of
+                Just date ->
+                    let
+                        applyDefault =
+                            applySpendingDateDefault dialogModel.date date
+
+                        updatedDialog =
+                            dialogModel |> setSpendingDateValue date
+                    in
+                    normalizeSpendingDialogLines
+                        { updatedDialog
+                            | dateText = dateText
+                            , credits = applyDefault dialogModel.credits
+                            , debits = applyDefault dialogModel.debits
+                        }
+
+                Nothing ->
+                    { dialogModel | date = Nothing, dateText = dateText }
+
+        DatePicker.PickerChanged subMsg ->
+            { dialogModel | datePickerModel = DatePicker.update subMsg dialogModel.datePickerModel }
+
+
+transactionLineFromSpendingTransaction side transaction =
+    if transaction.side == side then
+        case transaction.amount of
+            Amount amount ->
+                let
+                    date =
+                        Date.fromCalendarDate transaction.year (Date.numberToMonth transaction.month) transaction.day
+                in
+                Just
+                    { date = Just date
+                    , dateText = Date.toIsoString date
+                    , datePickerModel = DatePicker.initWithToday date
+                    , secondaryDescription = transaction.secondaryDescription
+                    , detailsExpanded = False
+                    , group = transaction.group
+                    , amount = formatAmountValue amount
+                    , nameValidity = Complete
+                    }
+
+    else
+        Nothing
+
+
+transactionLineToSpendingTransaction side line =
+    case ( line.date, parseAmountValue line.amount ) of
+        ( Just date, Just amount ) ->
+            Just
+                { year = Date.year date
+                , month = Date.monthNumber date
+                , day = Date.day date
+                , secondaryDescription = line.secondaryDescription
+                , group = line.group
+                , amount = Amount amount
+                , side = side
+                }
+
+        _ ->
+            Nothing
+
+
+dialogTransactions dialogModel =
+    (dialogModel.debits
+        |> List.filterMap (transactionLineToSpendingTransaction DebitTransaction)
+    )
+        ++ (dialogModel.credits
+                |> List.filterMap (transactionLineToSpendingTransaction CreditTransaction)
+           )
 
 
 addNameInList name defaultValue list =
@@ -966,12 +1373,8 @@ updateFromBackend msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | credits =
-                                            dialogModel.credits
-                                                |> markInvalidPrefix prefix
-                                        , debits =
-                                            dialogModel.debits
-                                                |> markInvalidPrefix prefix
+                                        | credits = dialogModel.credits |> markInvalidGroupPrefix prefix
+                                        , debits = dialogModel.debits |> markInvalidGroupPrefix prefix
                                     }
                                 )
                       }
@@ -998,12 +1401,8 @@ updateFromBackend msg model =
                             Just
                                 (AddSpendingDialog
                                     { dialogModel
-                                        | credits =
-                                            dialogModel.credits
-                                                |> completeToLongestCommonPrefix response
-                                        , debits =
-                                            dialogModel.debits
-                                                |> completeToLongestCommonPrefix response
+                                        | credits = dialogModel.credits |> completeGroupPrefix response
+                                        , debits = dialogModel.debits |> completeGroupPrefix response
                                     }
                                 )
                       }
@@ -1088,31 +1487,73 @@ updateFromBackend msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        TransactionError errorMessage ->
-            -- For now, do nothing
+        SpendingError _ ->
             -- TODO: Show error message to user in UI
-            ( model, Cmd.none )
+            case model.showDialog of
+                Just (AddSpendingDialog dialogModel) ->
+                    ( { model
+                        | showDialog =
+                            Just (AddSpendingDialog { dialogModel | submitted = False })
+                      }
+                    , Cmd.none
+                    )
 
-        TransactionDetails { transactionId, description, year, month, day, total, credits, debits } ->
+                _ ->
+                    ( model, Cmd.none )
+
+        SpendingDetails { spendingId, description, total, transactions } ->
             -- Update the edit dialog with the fetched transaction details
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
-                    if dialogModel.transactionId == Just transactionId then
+                    if dialogModel.spendingId == Just spendingId then
                         let
-                            creditsList =
-                                Dict.toList credits |> List.map (\( group, Amount amount ) -> ( group, formatAmountValue amount, Complete ))
+                            spendingDate =
+                                transactions
+                                    |> List.sortBy (\transaction -> ( transaction.year, transaction.month, transaction.day ))
+                                    |> List.head
+                                    |> Maybe.map
+                                        (\transaction ->
+                                            Date.fromCalendarDate
+                                                transaction.year
+                                                (Date.numberToMonth transaction.month)
+                                                transaction.day
+                                        )
 
-                            debitsList =
-                                Dict.toList debits |> List.map (\( group, Amount amount ) -> ( group, formatAmountValue amount, Complete ))
+                            credits =
+                                transactions
+                                    |> List.filterMap (transactionLineFromSpendingTransaction CreditTransaction)
+
+                            debits =
+                                transactions
+                                    |> List.filterMap (transactionLineFromSpendingTransaction DebitTransaction)
                         in
                         ( { model
                             | showDialog =
                                 Just
                                     (AddSpendingDialog
-                                        { dialogModel
-                                            | credits = creditsList
-                                            , debits = debitsList
-                                        }
+                                        (normalizeSpendingDialogLines
+                                            { dialogModel
+                                                | description = description
+                                                , total = total |> (\(Amount amount) -> formatAmountValue amount)
+                                                , date =
+                                                    case spendingDate of
+                                                        Just spendingDateValue ->
+                                                            Just spendingDateValue
+
+                                                        Nothing ->
+                                                            dialogModel.date
+                                                , dateText =
+                                                    spendingDate
+                                                        |> Maybe.map Date.toIsoString
+                                                        |> Maybe.withDefault dialogModel.dateText
+                                                , datePickerModel =
+                                                    spendingDate
+                                                        |> Maybe.map DatePicker.initWithToday
+                                                        |> Maybe.withDefault dialogModel.datePickerModel
+                                                , credits = credits
+                                                , debits = debits
+                                            }
+                                        )
                                     )
                           }
                         , Cmd.none
@@ -1160,6 +1601,45 @@ completeToLongestCommonPrefix { prefixLower, longestCommonPrefix, complete } lis
 
                 else
                     ( name, value, nameValidity )
+            )
+
+
+markInvalidGroupPrefix prefix lines =
+    lines
+        |> List.map
+            (\line ->
+                if String.startsWith prefix line.group then
+                    { line | nameValidity = InvalidPrefix }
+
+                else
+                    line
+            )
+
+
+completeGroupPrefix { prefixLower, longestCommonPrefix, complete } lines =
+    lines
+        |> List.map
+            (\line ->
+                let
+                    groupLower =
+                        String.toLower line.group
+                in
+                if
+                    String.startsWith prefixLower groupLower
+                        && String.startsWith groupLower (String.toLower longestCommonPrefix)
+                then
+                    { line
+                        | group = longestCommonPrefix
+                        , nameValidity =
+                            if complete then
+                                Complete
+
+                            else
+                                Incomplete
+                    }
+
+                else
+                    line
             )
 
 
@@ -1371,18 +1851,18 @@ view model =
                                         AddSpendingDialog dialogModel ->
                                             let
                                                 title =
-                                                    case dialogModel.transactionId of
+                                                    case dialogModel.spendingId of
                                                         Nothing ->
-                                                            "Add Transaction"
+                                                            "Add Spending"
 
                                                         Just _ ->
-                                                            "Edit Transaction"
+                                                            "Edit Spending"
                                             in
                                             config title
                                                 (addSpendingInputs palette model.windowWidth dialogModel)
                                                 (canSubmitSpending dialogModel)
 
-                                        ConfirmDeleteDialog transactionId ->
+                                        ConfirmDeleteDialog spendingId ->
                                             { closeMessage = Just Cancel
                                             , maskAttributes = []
                                             , containerAttributes =
@@ -1414,7 +1894,7 @@ view model =
                                                 Just
                                                     (column [ spacing 15 ]
                                                         [ Element.paragraph []
-                                                            [ Element.text "Are you sure you want to delete this transaction?" ]
+                                                            [ Element.text "Are you sure you want to delete this spending?" ]
                                                         ]
                                                     )
                                             , footer =
@@ -1426,7 +1906,7 @@ view model =
                                                             }
                                                         , Input.button (greenButtonStyle palette)
                                                             { label = text "Delete"
-                                                            , onPress = Just (ConfirmDeleteTransaction transactionId)
+                                                            , onPress = Just (ConfirmDeleteSpending spendingId)
                                                             }
                                                         ]
                                                     )
@@ -1579,6 +2059,26 @@ grayButtonStyle palette =
     buttonStyle ++ [ Background.color palette.disabledButton, Font.color palette.text ]
 
 
+iconButtonStyle palette =
+    [ Background.color palette.disabledButton
+    , Font.color palette.text
+    , Border.color palette.border
+    , Border.width 1
+    , padding 7
+    , Border.rounded 999
+    ]
+
+
+deleteIconButtonStyle palette =
+    [ Background.color palette.deleteButton
+    , Font.color palette.text
+    , Border.color palette.border
+    , Border.width 1
+    , padding 7
+    , Border.rounded 999
+    ]
+
+
 type alias Palette =
     { background : Color
     , surface : Color
@@ -1685,7 +2185,7 @@ addGroupInputs palette windowWidth ({ members } as model) =
             members
 
 
-addSpendingInputs palette windowWidth { description, date, dateText, datePickerModel, total, credits, debits } =
+addSpendingInputs palette windowWidth { description, total, date, dateText, datePickerModel, credits, debits } =
     [ Input.text (inputStyle palette)
         { label = labelStyle windowWidth "Description"
         , placeholder = Nothing
@@ -1695,7 +2195,7 @@ addSpendingInputs palette windowWidth { description, date, dateText, datePickerM
     , DatePicker.input (inputStyle palette)
         { label = labelStyle windowWidth "Date"
         , placeholder = Nothing
-        , onChange = ChangeDatePicker
+        , onChange = UpdateSpendingDate
         , selected = date
         , text = dateText
         , settings = DatePicker.defaultSettings
@@ -1704,34 +2204,207 @@ addSpendingInputs palette windowWidth { description, date, dateText, datePickerM
     , Input.text (inputStyle palette)
         { label = labelStyle windowWidth "Total"
         , placeholder = Nothing
-        , onChange = UpdateTotal
+        , onChange = UpdateSpendingTotal
         , text = total
         }
-    , column [ spacing 20, Background.color palette.surface, padding 20 ]
-        ([ text "Debitors" ]
-            ++ listInputs
-                palette
-                windowWidth
-                "Debitor"
-                "Amount"
-                AddDebitor
-                UpdateDebitor
-                UpdateDebit
-                debits
-        )
-    , column [ spacing 20, Background.color palette.surface, padding 20 ]
-        ([ text "Creditors (payers)" ]
-            ++ listInputs
-                palette
-                windowWidth
-                "Creditor"
-                "Amount"
-                AddCreditor
-                UpdateCreditor
-                UpdateCredit
-                credits
-        )
+    , transactionLineInputs
+        palette
+        windowWidth
+        date
+        "Debitors"
+        "Debitor"
+        AddDebit
+        RemoveDebit
+        ToggleDebitDetails
+        UpdateDebitDate
+        UpdateDebitSecondaryDescription
+        UpdateDebitGroup
+        UpdateDebitAmount
+        debits
+    , transactionLineInputs
+        palette
+        windowWidth
+        date
+        "Creditors (payers)"
+        "Creditor"
+        AddCredit
+        RemoveCredit
+        ToggleCreditDetails
+        UpdateCreditDate
+        UpdateCreditSecondaryDescription
+        UpdateCreditGroup
+        UpdateCreditAmount
+        credits
     ]
+
+
+transactionLineInputs palette windowWidth spendingDate title lineLabel addMsg removeMsg toggleDetailsMsg updateDateMsg updateSecondaryDescriptionMsg updateGroupMsg updateAmountMsg lines =
+    column [ spacing 15, Background.color palette.surface, padding 20, width fill ]
+        ([ row [ spacing 10, width fill ]
+            [ text title ]
+         ]
+            ++ (lines
+                    |> List.indexedMap
+                        (\index line ->
+                            let
+                                attributes =
+                                    case line.nameValidity of
+                                        InvalidPrefix ->
+                                            inputStyle palette ++ [ Background.color palette.error ]
+
+                                        _ ->
+                                            inputStyle palette
+
+                                detailsVisible =
+                                    transactionLineDetailsVisible spendingDate line
+
+                                showRemoveButton =
+                                    List.length lines > 1 || not (transactionLineIsBlank spendingDate line)
+                            in
+                            column
+                                [ spacing 12
+                                , Background.color palette.background
+                                , padding 15
+                                , width fill
+                                , Border.rounded 5
+                                ]
+                                ([ row [ spacing 10, width fill ]
+                                    ([ el [ width fill ] none
+                                     , transactionLineDetailsToggle palette spendingDate line (toggleDetailsMsg index)
+                                     ]
+                                        ++ (if showRemoveButton then
+                                                [ Input.button
+                                                    (deleteIconButtonStyle palette)
+                                                    { label = removeIcon
+                                                    , onPress = Just (removeMsg index)
+                                                    }
+                                                ]
+
+                                            else
+                                                []
+                                           )
+                                    )
+                                 , wrappedRow [ spacing 15, width fill ]
+                                    [ el [ width (transactionLineFlexibleFieldWidth windowWidth) ]
+                                        (Input.text (attributes ++ [ width fill ])
+                                            { label = labelStyle windowWidth (lineLabel ++ " " ++ String.fromInt (index + 1))
+                                            , placeholder = Nothing
+                                            , onChange = updateGroupMsg index
+                                            , text = line.group
+                                            }
+                                        )
+                                    , el [ width (transactionLineCompactFieldWidth windowWidth) ]
+                                        (Input.text (inputStyle palette ++ [ width fill ])
+                                            { label = labelStyle windowWidth "Amount"
+                                            , placeholder = Nothing
+                                            , onChange = updateAmountMsg index
+                                            , text = line.amount
+                                            }
+                                        )
+                                    ]
+                                 ]
+                                    ++ (if detailsVisible then
+                                            [ wrappedRow [ spacing 15, width fill ]
+                                                [ el [ width (transactionLineFlexibleFieldWidth windowWidth) ]
+                                                    (Input.text (inputStyle palette ++ [ width fill ])
+                                                        { label = labelStyle windowWidth "Description"
+                                                        , placeholder = Nothing
+                                                        , onChange = updateSecondaryDescriptionMsg index
+                                                        , text = line.secondaryDescription
+                                                        }
+                                                    )
+                                                , el [ width (transactionLineCompactFieldWidth windowWidth) ]
+                                                    (DatePicker.input (inputStyle palette ++ [ width fill ])
+                                                        { label = labelStyle windowWidth "Date"
+                                                        , placeholder = Nothing
+                                                        , onChange = updateDateMsg index
+                                                        , selected = line.date
+                                                        , text = line.dateText
+                                                        , settings = DatePicker.defaultSettings
+                                                        , model = line.datePickerModel
+                                                        }
+                                                    )
+                                                ]
+                                            ]
+
+                                        else
+                                            []
+                                       )
+                                )
+                        )
+               )
+        )
+
+
+transactionLineHasCustomDetails spendingDate line =
+    String.trim line.secondaryDescription
+        /= ""
+        || not (lineUsesDefaultDate spendingDate line)
+
+
+transactionLineFlexibleFieldWidth windowWidth =
+    if windowWidth > 650 then
+        fill
+
+    else
+        fillPortion 1
+
+
+transactionLineCompactFieldWidth windowWidth =
+    if windowWidth > 650 then
+        px 150
+
+    else
+        fillPortion 1
+
+
+transactionLineDetailsVisible spendingDate line =
+    line.detailsExpanded || transactionLineHasCustomDetails spendingDate line
+
+
+transactionLineDetailsToggle palette spendingDate line toggleMsg =
+    if transactionLineHasCustomDetails spendingDate line then
+        el (iconButtonStyle palette) detailsExpandedIcon
+
+    else
+        Input.button
+            (iconButtonStyle palette)
+            { label =
+                if line.detailsExpanded then
+                    detailsExpandedIcon
+
+                else
+                    detailsCollapsedIcon
+            , onPress = Just toggleMsg
+            }
+
+
+detailsCollapsedIcon =
+    strokedIcon "M7 5l5 5-5 5"
+
+
+detailsExpandedIcon =
+    strokedIcon "M5 7l5 5 5-5"
+
+
+removeIcon =
+    strokedIcon "M6 6l8 8M14 6l-8 8"
+
+
+strokedIcon pathData =
+    html <|
+        Html.node "svg"
+            [ Attr.attribute "viewBox" "0 0 20 20"
+            , Attr.attribute "width" "16"
+            , Attr.attribute "height" "16"
+            , Attr.attribute "fill" "none"
+            , Attr.attribute "stroke" "currentColor"
+            , Attr.attribute "stroke-width" "1.75"
+            , Attr.attribute "stroke-linecap" "round"
+            , Attr.attribute "stroke-linejoin" "round"
+            , Attr.style "display" "block"
+            ]
+            [ Html.node "path" [ Attr.attribute "d" pathData ] [] ]
 
 
 listInputs palette windowWidth nameLabel valueLabel addMsg updateNameMsg updateValueMsg items =
@@ -1824,45 +2497,41 @@ canSubmitGroup { name, nameInvalid, members, submitted } =
            )
 
 
-canSubmitSpending { description, date, total, credits, debits, submitted } =
+validTransactionLines spendingDate lines =
+    let
+        meaningfulLines =
+            lines
+                |> List.filter (transactionLineIsBlank spendingDate >> not)
+    in
+    not (List.isEmpty meaningfulLines)
+        && (meaningfulLines
+                |> List.map
+                    (\line ->
+                        case ( line.date, parseAmountValue line.amount, line.nameValidity ) of
+                            ( Just _, Just _, Complete ) ->
+                                String.trim line.group /= ""
+
+                            _ ->
+                                False
+                    )
+                |> List.all identity
+           )
+
+
+canSubmitSpending { description, total, date, credits, debits, submitted } =
     not submitted
-        && Maybe.isJust date
         && String.length description
         > 0
+        && Maybe.isJust date
         && (total
                 |> parseAmountValue
-                |> Maybe.andThen
+                |> Maybe.map
                     (\totalInt ->
-                        Maybe.combine
-                            [ credits
-                                |> List.map
-                                    (\( _, amount, nameValidity ) ->
-                                        case nameValidity of
-                                            Complete ->
-                                                parseAmountValue amount
-
-                                            _ ->
-                                                Nothing
-                                    )
-                                |> Maybe.combine
-                                |> Maybe.map List.sum
-                                |> Maybe.map ((==) totalInt)
-                            , debits
-                                |> List.map
-                                    (\( _, amount, nameValidity ) ->
-                                        case nameValidity of
-                                            Complete ->
-                                                parseAmountValue amount
-
-                                            _ ->
-                                                Nothing
-                                    )
-                                |> Maybe.combine
-                                |> Maybe.map List.sum
-                                |> Maybe.map ((==) totalInt)
-                            ]
+                        totalInt
+                            > 0
+                            && validTransactionLines date credits
+                            && validTransactionLines date debits
                     )
-                |> Maybe.map (List.all identity)
                 |> Maybe.withDefault False
            )
 
@@ -1875,11 +2544,19 @@ viewTransaction palette transaction =
         , "(Total: " ++ (transaction.total |> (\(Amount amount) -> amount) |> viewAmount) ++ ")" |> text
         , row [ spacing 10 ]
             [ Input.button [ Background.color palette.editButton, padding 5, Border.rounded 3 ]
-                { onPress = Just (ShowAddSpendingDialog (Just transaction.transactionId))
+                { onPress =
+                    Just
+                        (ShowAddSpendingDialog
+                            (Just
+                                { spendingId = transaction.spendingId
+                                , transactionId = transaction.transactionId
+                                }
+                            )
+                        )
                 , label = text "Edit"
                 }
             , Input.button [ Background.color palette.deleteButton, padding 5, Border.rounded 3 ]
-                { onPress = Just (ShowConfirmDeleteDialog transaction.transactionId)
+                { onPress = Just (ShowConfirmDeleteDialog transaction.spendingId)
                 , label = text "Delete"
                 }
             ]
