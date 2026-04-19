@@ -11,19 +11,22 @@ A web application for managing group expenses and accounting, built with Elm and
 
 ## Development
 
-This project is built [Lamdera](https://lamdera.com/), a platform for building full-stack [Elm](https://elm-lang.org/) applications.
+This project is built with [Lamdera](https://lamdera.com/), a platform for building full-stack [Elm](https://elm-lang.org/) applications.
 
 ### Prerequisites
 
 - [Lamdera](https://lamdera.com/)
-- elm-format to keep the code properly formatted at each commit
-- elm-review for regenerating codecs (see below)
+- `elm-format` to keep the code properly formatted at each commit
+- `elm-review` for regenerating codecs (see below)
+- `elm-test` for running the tests
 
 ### Building
 
 To build and test the project locally:
 
 ```bash
+npm ci
+npm test
 lamdera live
 ```
 
@@ -43,18 +46,23 @@ To regenerate after changing types:
 
 CI automatically verifies the codecs match the auto-generated output.
 
+### Transaction and spending IDs
+
+Transaction and spending IDs are derived from their position in the datastructure (a global array for spendings and an array for each day for transactions). Therefore, the contract to respect is that these arrays can only be appended to, but never compacted. Removed or replaced transactions or spendings are marked as not being active anymore with `TransactionStatus`.
+
 ## Isolated DevContainer (Lamdera + Squad)
 
 This repository includes a Dev Container at `.devcontainer/` so you can run Copilot/Squad in an isolated environment instead of directly on your host.
 
 ### What it installs
 
-- Node.js 20 (base image)
+- Node.js 24 (base image)
 - `lamdera`
 - `elm-format`
 - `elm-review`
+- `copilot`
 - `@bradygaster/squad-cli`
-- GitHub CLI (`gh`) and attempts to install `github/gh-copilot` extension
+- GitHub CLI (`gh`) and the `github/gh-copilot` extension
 
 ### How to use
 
@@ -64,6 +72,7 @@ This repository includes a Dev Container at `.devcontainer/` so you can run Copi
 	```bash
 	gh auth login
 	gh auth status
+	lamdera login
 	```
 4. Verify tools:
 	```bash
@@ -82,6 +91,9 @@ For Squad + Copilot usage, run commands from the container terminal. If your Cop
 
 The project uses GitHub Actions for continuous integration. The workflow automatically:
 
+- Installs project-local npm dependencies
+- Checks formatting with `elm-format`.
+- Runs the Elm test suite with `npm test`
 - Compiles both Frontend and Backend Elm code
 - Caches dependencies for faster builds
 

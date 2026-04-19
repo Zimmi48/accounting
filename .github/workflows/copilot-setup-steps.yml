@@ -24,22 +24,26 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
+        cache: 'npm'
         
     - name: Install global dependencies
       run: |
         # Install Lamdera CLI for Elm development
         npm install -g lamdera
-        
+         
         # Install Elm tooling
         npm install -g elm-format elm-review
-        
+
+    - name: Install project dependencies
+      run: npm ci
+         
     - name: Cache Elm dependencies
       uses: actions/cache@v4
       with:
         path: |
           ~/.lamdera
           **/elm-stuff
-        key: copilot-env-${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json') }}
+        key: copilot-env-${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json', 'package-lock.json') }}
         restore-keys: |
           copilot-env-${{ runner.os }}-lamdera-
         
@@ -59,5 +63,8 @@ jobs:
         # Test compilation to ensure environment is working
         lamdera make src/Frontend.elm --output=/dev/null
         lamdera make src/Backend.elm --output=/dev/null
+
+        echo "=== Elm Test Suite ==="
+        npm test
         
         echo "Environment setup completed successfully!"

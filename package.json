@@ -1,0 +1,27 @@
+{
+  "name": "accounting",
+  "version": "1.0.0",
+  "description": "A web application for managing group expenses and accounting, built with Elm and Lamdera.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "elm-test --compiler \"$(which lamdera)\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zimmi48/accounting.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MPL-2.0",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Zimmi48/accounting/issues"
+  },
+  "homepage": "https://github.com/Zimmi48/accounting#readme",
+  "devDependencies": {
+    "elm-test": "^0.19.1-revision17"
+  }
+}

@@ -1,5 +1,6 @@
 module Backend exposing (..)
 
+import Array exposing (Array)
 import Basics.Extra exposing (flip)
 import Codecs
 import Dict exposing (Dict)
@@ -15,6 +16,22 @@ type alias Model =
     BackendModel
 
 
+type alias PendingTransaction =
+    -- This represents the fields of a Transaction + its date
+    { spendingId : SpendingId
+    , year : Int
+    , month : Int
+    , day : Int
+    , secondaryDescription : String
+    , group : String
+    , amount : Amount ()
+    , side : TransactionSide
+    , groupMembersKey : String
+    , groupMembers : Set String
+    , status : TransactionStatus
+    }
+
+
 app =
     Lamdera.backend
         { init = init
@@ -27,6 +44,7 @@ app =
 init : ( Model, Cmd BackendMsg )
 init =
     ( { years = Dict.empty
+      , spendings = Array.empty
       , groups = Dict.empty
       , totalGroupCredits = Dict.empty
       , persons = Dict.empty
@@ -107,130 +125,74 @@ updateFromFrontend sessionId clientId msg model =
                 , Lamdera.sendToFrontend clientId (NameAlreadyExists name)
                 )
 
-        ( True, CreateSpending { description, year, month, day, total, credits, debits } ) ->
-            let
-                groupMembersKey =
-                    getGroupMembersKey credits debits model
+        ( True, CreateSpending { description, total, transactions } ) ->
+            case validateSpendingTransactions total transactions of
+                Err errorMessage ->
+                    ( model, Lamdera.sendToFrontend clientId (SpendingError errorMessage) )
 
-                spending =
-                    { description = description
-                    , total = total
-                    , credits = credits
-                    , debits = debits
-                    , status = Active
-                    }
+                Ok normalizedTransactions ->
+                    ( createSpendingInModel description total normalizedTransactions model
+                    , Lamdera.sendToFrontend clientId OperationSuccessful
+                    )
 
-                updatedModel =
-                    addSpendingToModel year month day spending model
-            in
-            ( updatedModel, Lamdera.sendToFrontend clientId OperationSuccessful )
-
-        ( True, EditTransaction { transactionId, description, year, month, day, total, credits, debits } ) ->
-            -- First, validate that the transaction exists and is active
-            case findTransaction transactionId model of
+        ( True, EditSpending { spendingId, description, total, transactions } ) ->
+            -- First, validate that the spending exists and is active
+            case Array.get spendingId model.spendings of
                 Nothing ->
-                    ( model, Lamdera.sendToFrontend clientId (TransactionError "Transaction not found") )
+                    ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending not found") )
 
-                Just oldTransaction ->
-                    if oldTransaction.status /= Active then
-                        ( model, Lamdera.sendToFrontend clientId (TransactionError "Transaction is already deleted or replaced") )
+                Just spending ->
+                    if spending.status /= Active then
+                        ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending is already deleted or replaced") )
 
                     else
                         -- Valid edit: delete old, add new
-                        let
-                            -- Mark old transaction as replaced
-                            updateSpending : Int -> Spending -> Spending
-                            updateSpending index spending =
-                                if index == transactionId.index then
-                                    { spending | status = Replaced }
+                        case validateSpendingTransactions total transactions of
+                            Err errorMessage ->
+                                ( model, Lamdera.sendToFrontend clientId (SpendingError errorMessage) )
 
-                                else
-                                    spending
+                            Ok normalizedTransactions ->
+                                let
+                                    activeTransactions =
+                                        getSpendingTransactionsWithIds spendingId model
 
-                            updateDay : Day -> Day
-                            updateDay oldDay =
-                                { oldDay | spendings = List.indexedMap updateSpending oldDay.spendings }
+                                    cleanedModel =
+                                        List.foldl
+                                            removeTransactionFromModel
+                                            (model
+                                                |> setSpendingStatus spendingId Replaced
+                                                |> setTransactionStatuses spendingId Replaced
+                                            )
+                                            activeTransactions
+                                in
+                                ( createSpendingInModel description total normalizedTransactions cleanedModel
+                                , Lamdera.sendToFrontend clientId OperationSuccessful
+                                )
 
-                            updateMonth : Month -> Month
-                            updateMonth oldMonth =
-                                { oldMonth
-                                    | days = Dict.update transactionId.day (Maybe.map updateDay) oldMonth.days
-                                }
-
-                            updateYear : Year -> Year
-                            updateYear oldYear =
-                                { oldYear
-                                    | months = Dict.update transactionId.month (Maybe.map updateMonth) oldYear.months
-                                }
-
-                            -- Create new spending
-                            newSpending =
-                                { description = description
-                                , total = total
-                                , credits = credits
-                                , debits = debits
-                                , status = Active
-                                }
-
-                            -- Step 1: Remove old transaction from totals
-                            modelWithReplaced =
-                                { model
-                                    | years = Dict.update transactionId.year (Maybe.map updateYear) model.years
-                                }
-                                    |> removeSpendingFromModel transactionId oldTransaction
-
-                            -- Step 2: Add new transaction
-                            finalModel =
-                                addSpendingToModel year month day newSpending modelWithReplaced
-                        in
-                        ( finalModel, Lamdera.sendToFrontend clientId OperationSuccessful )
-
-        ( True, DeleteTransaction transactionId ) ->
-            -- First, validate that the transaction exists and is active
-            case findTransaction transactionId model of
+        ( True, DeleteSpending spendingId ) ->
+            -- First, validate that the spending exists and is active
+            case Array.get spendingId model.spendings of
                 Nothing ->
-                    ( model, Lamdera.sendToFrontend clientId (TransactionError "Transaction not found") )
+                    ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending not found") )
 
-                Just transaction ->
-                    if transaction.status /= Active then
-                        ( model, Lamdera.sendToFrontend clientId (TransactionError "Transaction is already deleted or replaced") )
+                Just spending ->
+                    if spending.status /= Active then
+                        ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending is already deleted or replaced") )
 
                     else
                         -- Valid delete: mark as deleted and remove from totals
                         let
-                            updateSpending : Int -> Spending -> Spending
-                            updateSpending index spending =
-                                if index == transactionId.index then
-                                    { spending | status = Deleted }
+                            activeTransactions =
+                                getSpendingTransactionsWithIds spendingId model
 
-                                else
-                                    spending
-
-                            updateDay : Day -> Day
-                            updateDay day =
-                                { day | spendings = List.indexedMap updateSpending day.spendings }
-
-                            updateMonth : Month -> Month
-                            updateMonth month =
-                                { month
-                                    | days = Dict.update transactionId.day (Maybe.map updateDay) month.days
-                                }
-
-                            updateYear : Year -> Year
-                            updateYear year =
-                                { year
-                                    | months = Dict.update transactionId.month (Maybe.map updateMonth) year.months
-                                }
-
-                            -- Mark transaction as deleted
-                            modelWithDeleted =
-                                { model
-                                    | years = Dict.update transactionId.year (Maybe.map updateYear) model.years
-                                }
-
-                            -- Remove from totals
                             finalModel =
-                                removeSpendingFromModel transactionId transaction modelWithDeleted
+                                List.foldl
+                                    removeTransactionFromModel
+                                    (model
+                                        |> setSpendingStatus spendingId Deleted
+                                        |> setTransactionStatuses spendingId Deleted
+                                    )
+                                    activeTransactions
                         in
                         ( finalModel, Lamdera.sendToFrontend clientId OperationSuccessful )
 
@@ -248,30 +210,35 @@ updateFromFrontend sessionId clientId msg model =
                 |> autocomplete clientId prefix AutocompleteGroupPrefix InvalidGroupPrefix
             )
 
-        ( True, RequestTransactionDetails transactionId ) ->
-            case findTransaction transactionId model of
+        ( True, RequestSpendingDetails spendingId ) ->
+            case Array.get spendingId model.spendings of
                 Nothing ->
-                    ( model, Lamdera.sendToFrontend clientId (TransactionError "Transaction not found") )
+                    ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending not found") )
 
-                Just transaction ->
-                    if transaction.status /= Active then
-                        ( model, Lamdera.sendToFrontend clientId (TransactionError "Transaction is not active") )
+                Just spending ->
+                    if spending.status /= Active then
+                        ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending is not active") )
 
                     else
-                        ( model
-                        , Lamdera.sendToFrontend clientId
-                            (TransactionDetails
-                                { transactionId = transactionId
-                                , description = transaction.description
-                                , year = transactionId.year
-                                , month = transactionId.month
-                                , day = transactionId.day
-                                , total = transaction.total
-                                , credits = transaction.credits
-                                , debits = transaction.debits
-                                }
-                            )
-                        )
+                        let
+                            spendingTransactions =
+                                spendingTransactionsForDetails spendingId model
+                        in
+                        case spendingTransactions of
+                            [] ->
+                                ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending has no active transactions") )
+
+                            _ ->
+                                ( model
+                                , Lamdera.sendToFrontend clientId
+                                    (SpendingDetails
+                                        { spendingId = spendingId
+                                        , description = spending.description
+                                        , total = spending.total
+                                        , transactions = spendingTransactions
+                                        }
+                                    )
+                                )
 
         ( True, RequestUserGroups user ) ->
             case Dict.get user model.persons of
@@ -329,83 +296,8 @@ updateFromFrontend sessionId clientId msg model =
         ( True, RequestGroupTransactions group ) ->
             let
                 transactions =
-                    Dict.foldr
-                        (\year { months } accYears ->
-                            Dict.foldr
-                                (\month { days } accMonths ->
-                                    Dict.foldr
-                                        (\day { spendings } accDays ->
-                                            List.indexedMap
-                                                (\index spending ->
-                                                    if spending.status == Active then
-                                                        -- Look for the group in both credits and debits
-                                                        case ( Dict.get group spending.credits, Dict.get group spending.debits ) of
-                                                            ( Just credit, Nothing ) ->
-                                                                Just
-                                                                    { transactionId =
-                                                                        { year = year
-                                                                        , month = month
-                                                                        , day = day
-                                                                        , index = index
-                                                                        }
-                                                                    , description = spending.description
-                                                                    , year = year
-                                                                    , month = month
-                                                                    , day = day
-                                                                    , total = (\(Amount a) -> Amount a) spending.total
-                                                                    , share = toDebit credit
-                                                                    }
-
-                                                            ( Nothing, Just debit ) ->
-                                                                Just
-                                                                    { transactionId =
-                                                                        { year = year
-                                                                        , month = month
-                                                                        , day = day
-                                                                        , index = index
-                                                                        }
-                                                                    , description = spending.description
-                                                                    , year = year
-                                                                    , month = month
-                                                                    , day = day
-                                                                    , total = (\(Amount a) -> Amount a) spending.total
-                                                                    , share = debit
-                                                                    }
-
-                                                            ( Just credit, Just debit ) ->
-                                                                Just
-                                                                    { transactionId =
-                                                                        { year = year
-                                                                        , month = month
-                                                                        , day = day
-                                                                        , index = index
-                                                                        }
-                                                                    , description = spending.description
-                                                                    , year = year
-                                                                    , month = month
-                                                                    , day = day
-                                                                    , total = (\(Amount a) -> Amount a) spending.total
-                                                                    , share = addAmountToAmount (toDebit credit) debit
-                                                                    }
-
-                                                            ( Nothing, Nothing ) ->
-                                                                Nothing
-
-                                                    else
-                                                        Nothing
-                                                )
-                                                spendings
-                                                |> List.filterMap identity
-                                                |> (++) accDays
-                                        )
-                                        accMonths
-                                        days
-                                )
-                                accYears
-                                months
-                        )
-                        []
-                        model.years
+                    allTransactionsWithIds model
+                        |> List.filterMap (groupTransactionForList model group)
             in
             ( model
             , Lamdera.sendToFrontend clientId
@@ -431,9 +323,10 @@ updateFromFrontend sessionId clientId msg model =
                     , Lamdera.sendToFrontend clientId OperationSuccessful
                     )
 
-                Err error ->
-                    -- Debug.log (Debug.toString error)
-                    ( model, Cmd.none )
+                Err _ ->
+                    ( model
+                    , Lamdera.sendToFrontend clientId (SpendingError "Import failed: the JSON could not be decoded.")
+                    )
 
 
 getGroupMembers model group =
@@ -536,169 +429,140 @@ addToTotalGroupCredits groupMembersKey groupCredits =
         )
 
 
-addSpendingToYear : Int -> Int -> String -> Dict String (Amount Credit) -> Spending -> Maybe Year -> Year
-addSpendingToYear month day groupMembersKey groupCredits spending maybeYear =
+dayTransactionCount : Int -> Int -> Int -> Model -> Int
+dayTransactionCount year month day model =
+    Dict.get year model.years
+        |> Maybe.andThen (.months >> Dict.get month)
+        |> Maybe.andThen (.days >> Dict.get day)
+        |> Maybe.map (.transactions >> Array.length)
+        |> Maybe.withDefault 0
+
+
+addTransactionToYear : PendingTransaction -> Dict String (Amount Credit) -> Maybe Year -> Year
+addTransactionToYear transaction groupCredits maybeYear =
     case maybeYear of
         Nothing ->
             { months =
-                Dict.singleton month
-                    (addSpendingToMonth day groupMembersKey groupCredits spending Nothing)
+                Dict.singleton transaction.month
+                    (addTransactionToMonth transaction groupCredits Nothing)
             , totalGroupCredits =
-                Dict.singleton groupMembersKey groupCredits
+                Dict.singleton transaction.groupMembersKey groupCredits
             }
 
         Just year ->
             { months =
                 year.months
-                    |> Dict.update month (addSpendingToMonth day groupMembersKey groupCredits spending >> Just)
+                    |> Dict.update transaction.month (addTransactionToMonth transaction groupCredits >> Just)
             , totalGroupCredits =
                 year.totalGroupCredits
-                    |> addToTotalGroupCredits groupMembersKey groupCredits
+                    |> addToTotalGroupCredits transaction.groupMembersKey groupCredits
             }
 
 
-addSpendingToMonth : Int -> String -> Dict String (Amount Credit) -> Spending -> Maybe Month -> Month
-addSpendingToMonth day groupMembersKey groupCredits spending maybeMonth =
+addTransactionToMonth : PendingTransaction -> Dict String (Amount Credit) -> Maybe Month -> Month
+addTransactionToMonth transaction groupCredits maybeMonth =
     case maybeMonth of
         Nothing ->
             { days =
-                Dict.singleton day
-                    (addSpendingToDay groupMembersKey groupCredits spending Nothing)
+                Dict.singleton transaction.day
+                    (addTransactionToDay transaction groupCredits Nothing)
             , totalGroupCredits =
-                Dict.singleton groupMembersKey groupCredits
+                Dict.singleton transaction.groupMembersKey groupCredits
             }
 
         Just month ->
             { days =
                 month.days
-                    |> Dict.update day (addSpendingToDay groupMembersKey groupCredits spending >> Just)
+                    |> Dict.update transaction.day (addTransactionToDay transaction groupCredits >> Just)
             , totalGroupCredits =
                 month.totalGroupCredits
-                    |> addToTotalGroupCredits groupMembersKey groupCredits
+                    |> addToTotalGroupCredits transaction.groupMembersKey groupCredits
             }
 
 
-addSpendingToDay : String -> Dict String (Amount Credit) -> Spending -> Maybe Day -> Day
-addSpendingToDay groupMembersKey groupCredits spending maybeDay =
+addTransactionToDay : PendingTransaction -> Dict String (Amount Credit) -> Maybe Day -> Day
+addTransactionToDay transaction groupCredits maybeDay =
     case maybeDay of
         Nothing ->
-            { spendings = [ spending ]
+            { transactions = Array.fromList [ storedTransaction transaction ]
             , totalGroupCredits =
-                Dict.singleton groupMembersKey groupCredits
+                Dict.singleton transaction.groupMembersKey groupCredits
             }
 
         Just day ->
-            { spendings = spending :: day.spendings
+            { transactions = Array.push (storedTransaction transaction) day.transactions
             , totalGroupCredits =
                 day.totalGroupCredits
-                    |> addToTotalGroupCredits groupMembersKey groupCredits
+                    |> addToTotalGroupCredits transaction.groupMembersKey groupCredits
             }
 
 
-{-| Remove spending amount from the hierarchy totals. Used for deletes and edits.
--}
-removeSpendingFromYear : Int -> Int -> String -> Dict String (Amount Credit) -> Maybe Year -> Maybe Year
-removeSpendingFromYear month day groupMembersKey groupCredits maybeYear =
+removeTransactionFromYear : TransactionId -> Transaction -> Dict String (Amount Credit) -> Maybe Year -> Maybe Year
+removeTransactionFromYear transactionId transaction groupCredits maybeYear =
     case maybeYear of
         Nothing ->
             Nothing
 
         Just year ->
-            let
-                updatedMonths =
-                    year.months
-                        |> Dict.update month (removeSpendingFromMonth day groupMembersKey groupCredits)
-
-                updatedTotalGroupCredits =
-                    year.totalGroupCredits
-                        |> addToTotalGroupCredits groupMembersKey groupCredits
-            in
             Just
-                { months = updatedMonths
-                , totalGroupCredits = updatedTotalGroupCredits
+                { months =
+                    year.months
+                        |> Dict.update transactionId.month (removeTransactionFromMonth transactionId transaction groupCredits)
+                , totalGroupCredits =
+                    year.totalGroupCredits
+                        |> addToTotalGroupCredits transaction.groupMembersKey groupCredits
                 }
 
 
-removeSpendingFromMonth : Int -> String -> Dict String (Amount Credit) -> Maybe Month -> Maybe Month
-removeSpendingFromMonth day groupMembersKey groupCredits maybeMonth =
+removeTransactionFromMonth : TransactionId -> Transaction -> Dict String (Amount Credit) -> Maybe Month -> Maybe Month
+removeTransactionFromMonth transactionId transaction groupCredits maybeMonth =
     case maybeMonth of
         Nothing ->
             Nothing
 
         Just month ->
-            let
-                updatedDays =
-                    month.days
-                        |> Dict.update day (removeSpendingFromDay groupMembersKey groupCredits)
-
-                updatedTotalGroupCredits =
-                    month.totalGroupCredits
-                        |> addToTotalGroupCredits groupMembersKey groupCredits
-            in
             Just
-                { days = updatedDays
-                , totalGroupCredits = updatedTotalGroupCredits
+                { days =
+                    month.days
+                        |> Dict.update transactionId.day (removeTransactionFromDay transaction.groupMembersKey groupCredits)
+                , totalGroupCredits =
+                    month.totalGroupCredits
+                        |> addToTotalGroupCredits transaction.groupMembersKey groupCredits
                 }
 
 
-removeSpendingFromDay : String -> Dict String (Amount Credit) -> Maybe Day -> Maybe Day
-removeSpendingFromDay groupMembersKey groupCredits maybeDay =
+removeTransactionFromDay : String -> Dict String (Amount Credit) -> Maybe Day -> Maybe Day
+removeTransactionFromDay groupMembersKey groupCredits maybeDay =
     case maybeDay of
         Nothing ->
             Nothing
 
         Just day ->
-            let
-                updatedTotalGroupCredits =
+            Just
+                { transactions = day.transactions
+                , totalGroupCredits =
                     day.totalGroupCredits
                         |> addToTotalGroupCredits groupMembersKey groupCredits
-            in
-            Just
-                { spendings = day.spendings
-                , totalGroupCredits = updatedTotalGroupCredits
                 }
 
 
 {-| Find a specific transaction by ID
 -}
-findTransaction : TransactionId -> Model -> Maybe Spending
+findTransaction : TransactionId -> Model -> Maybe Transaction
 findTransaction transactionId model =
-    model.years
-        |> Dict.get transactionId.year
+    Dict.get transactionId.year model.years
         |> Maybe.andThen (.months >> Dict.get transactionId.month)
         |> Maybe.andThen (.days >> Dict.get transactionId.day)
-        |> Maybe.andThen (.spendings >> List.drop transactionId.index >> List.head)
+        |> Maybe.andThen (.transactions >> Array.get transactionId.index)
 
 
 {-| Get group members key for a spending
 -}
-getGroupMembersKey : Dict String (Amount Credit) -> Dict String (Amount Debit) -> Model -> String
-getGroupMembersKey credits debits model =
+getGroupMembersKey : List String -> Model -> ( String, Set String )
+getGroupMembersKey groups model =
     let
         groupMembers =
-            (Dict.keys credits ++ Dict.keys debits)
-                |> List.map
-                    (\group ->
-                        Dict.get group model.groups
-                            |> Maybe.map Dict.keys
-                            |> Maybe.withDefault [ group ]
-                    )
-                |> List.concat
-                |> Set.fromList
-    in
-    Set.toList groupMembers
-        |> List.filterMap (flip Dict.get model.persons)
-        |> List.map (.id >> String.fromInt)
-        |> String.join ","
-
-
-{-| Get group members key for an existing spending
--}
-getGroupMembersKeyForSpending : Spending -> Model -> ( String, Set String )
-getGroupMembersKeyForSpending spending model =
-    let
-        groupMembers =
-            (Dict.keys spending.credits ++ Dict.keys spending.debits)
+            groups
                 |> List.map
                     (\group ->
                         Dict.get group model.groups
@@ -716,34 +580,348 @@ getGroupMembersKeyForSpending spending model =
     )
 
 
-{-| Add a spending to the model, updating all totals and person belongsTo sets
--}
-addSpendingToModel : Int -> Int -> Int -> Spending -> Model -> Model
-addSpendingToModel year month day spending model =
+validateSpendingTransactions : Amount Credit -> List SpendingTransaction -> Result String (List SpendingTransaction)
+validateSpendingTransactions (Amount total) transactions =
     let
-        ( groupMembersKey, groupMembers ) =
-            getGroupMembersKeyForSpending spending model
+        normalizedTransactions =
+            normalizeSpendingTransactions transactions
 
-        -- Convert debits to negative credits for aggregation
+        { credits, debits } =
+            spendingTransactionTotals normalizedTransactions
+    in
+    if List.isEmpty normalizedTransactions then
+        Err "A spending needs at least one transaction"
+
+    else if
+        List.all isBalancedTransaction normalizedTransactions
+            && credits
+            == debits
+            && credits
+            == total
+            && total
+            > 0
+    then
+        Ok normalizedTransactions
+
+    else
+        Err "Spending total must match total credits and total debits"
+
+
+normalizeSpendingTransactions : List SpendingTransaction -> List SpendingTransaction
+normalizeSpendingTransactions transactions =
+    transactions
+        |> List.foldl
+            (\transaction ->
+                Dict.update
+                    (normalizedTransactionKey transaction)
+                    (\maybeTransaction ->
+                        case maybeTransaction of
+                            Nothing ->
+                                Just transaction
+
+                            Just existingTransaction ->
+                                Just
+                                    { existingTransaction
+                                        | amount = addAmountToAmount existingTransaction.amount transaction.amount
+                                    }
+                    )
+            )
+            Dict.empty
+        |> Dict.values
+        |> List.filter
+            (\transaction ->
+                case transaction.amount of
+                    Amount amount ->
+                        amount > 0
+            )
+
+
+isBalancedTransaction : SpendingTransaction -> Bool
+isBalancedTransaction transaction =
+    case transaction.amount of
+        Amount amount ->
+            String.trim transaction.group
+                /= ""
+                && amount
+                > 0
+
+
+totalAmount : Dict String (Amount a) -> Int
+totalAmount =
+    Dict.values
+        >> List.foldl (\(Amount amount) total -> total + amount) 0
+
+
+toSpendingTransaction : TransactionId -> Transaction -> SpendingTransaction
+toSpendingTransaction transactionId transaction =
+    { year = transactionId.year
+    , month = transactionId.month
+    , day = transactionId.day
+    , secondaryDescription = transaction.secondaryDescription
+    , group = transaction.group
+    , amount = transaction.amount
+    , side = transaction.side
+    }
+
+
+pendingTransactionsForSpending : SpendingId -> SpendingMetadata -> SpendingTransaction -> PendingTransaction
+pendingTransactionsForSpending spendingId metadata transaction =
+    { spendingId = spendingId
+    , year = transaction.year
+    , month = transaction.month
+    , day = transaction.day
+    , secondaryDescription = transaction.secondaryDescription
+    , group = transaction.group
+    , amount = transaction.amount
+    , side = transaction.side
+    , groupMembersKey = metadata.groupMembersKey
+    , groupMembers = metadata.groupMembers
+    , status = Active
+    }
+
+
+storedTransaction : PendingTransaction -> Transaction
+storedTransaction pending =
+    { spendingId = pending.spendingId
+    , secondaryDescription = pending.secondaryDescription
+    , group = pending.group
+    , amount = pending.amount
+    , side = pending.side
+    , groupMembersKey = pending.groupMembersKey
+    , groupMembers = pending.groupMembers
+    , status = pending.status
+    }
+
+
+assignTransactionIds : Model -> List PendingTransaction -> List TransactionId
+assignTransactionIds model pendingTransactions =
+    pendingTransactions
+        |> List.foldl
+            (\pending ( nextIndexes, transactionIds ) ->
+                let
+                    dateKey =
+                        ( pending.year, pending.month, pending.day )
+
+                    nextIndex =
+                        Dict.get dateKey nextIndexes
+                            |> Maybe.withDefault (dayTransactionCount pending.year pending.month pending.day model)
+                in
+                ( Dict.insert dateKey (nextIndex + 1) nextIndexes
+                , { year = pending.year
+                  , month = pending.month
+                  , day = pending.day
+                  , index = nextIndex
+                  }
+                    :: transactionIds
+                )
+            )
+            ( Dict.empty, [] )
+        |> (\( _, transactionIds ) -> List.reverse transactionIds)
+
+
+createSpendingInModel : String -> Amount Credit -> List SpendingTransaction -> Model -> Model
+createSpendingInModel description total spendingTransactions model =
+    let
+        spendingId =
+            Array.length model.spendings
+
+        spendingMetadata =
+            buildSpendingMetadata model spendingTransactions
+
+        pendingTransactions =
+            spendingTransactions
+                |> List.map (pendingTransactionsForSpending spendingId spendingMetadata)
+
+        transactionIds =
+            assignTransactionIds model pendingTransactions
+
+        updatedModel =
+            { model
+                | spendings =
+                    Array.push
+                        { description = description
+                        , total = total
+                        , transactionIds = transactionIds
+                        , status = Active
+                        }
+                        model.spendings
+            }
+    in
+    List.foldl addTransactionToModel updatedModel pendingTransactions
+
+
+setSpendingStatus : SpendingId -> TransactionStatus -> Model -> Model
+setSpendingStatus spendingId status model =
+    { model
+        | spendings =
+            case Array.get spendingId model.spendings of
+                Nothing ->
+                    model.spendings
+
+                Just spending ->
+                    Array.set spendingId { spending | status = status } model.spendings
+    }
+
+
+setTransactionStatuses : SpendingId -> TransactionStatus -> Model -> Model
+setTransactionStatuses spendingId status model =
+    Array.get spendingId model.spendings
+        |> Maybe.map
+            (.transactionIds
+                >> List.foldl
+                    (\transactionId updatedModel ->
+                        { updatedModel
+                            | years =
+                                Dict.update transactionId.year
+                                    (Maybe.map
+                                        (\year ->
+                                            { year
+                                                | months =
+                                                    Dict.update transactionId.month
+                                                        (Maybe.map
+                                                            (\month ->
+                                                                { month
+                                                                    | days =
+                                                                        Dict.update transactionId.day
+                                                                            (Maybe.map
+                                                                                (\day ->
+                                                                                    { day
+                                                                                        | transactions =
+                                                                                            case Array.get transactionId.index day.transactions of
+                                                                                                Nothing ->
+                                                                                                    day.transactions
+
+                                                                                                Just transaction ->
+                                                                                                    if transaction.status == Active then
+                                                                                                        Array.set transactionId.index { transaction | status = status } day.transactions
+
+                                                                                                    else
+                                                                                                        day.transactions
+                                                                                    }
+                                                                                )
+                                                                            )
+                                                                            month.days
+                                                                }
+                                                            )
+                                                        )
+                                                        year.months
+                                            }
+                                        )
+                                    )
+                                    updatedModel.years
+                        }
+                    )
+                    model
+            )
+        |> Maybe.withDefault model
+
+
+type alias TransactionKey =
+    ( Int, Int, ( Int, String ) )
+
+
+type alias NormalizedTransactionKey =
+    ( TransactionKey, String, String )
+
+
+transactionKey : { a | year : Int, month : Int, day : Int, secondaryDescription : String } -> TransactionKey
+transactionKey transaction =
+    ( transaction.year, transaction.month, ( transaction.day, transaction.secondaryDescription ) )
+
+
+normalizedTransactionKey : SpendingTransaction -> NormalizedTransactionKey
+normalizedTransactionKey transaction =
+    ( transactionKey transaction
+    , transaction.group
+    , case transaction.side of
+        CreditTransaction ->
+            "credit"
+
+        DebitTransaction ->
+            "debit"
+    )
+
+
+type alias SpendingTransactionTotals =
+    { credits : Int
+    , debits : Int
+    }
+
+
+spendingTransactionTotals : List SpendingTransaction -> SpendingTransactionTotals
+spendingTransactionTotals transactions =
+    transactions
+        |> List.foldl
+            (\transaction totals ->
+                case transaction.amount of
+                    Amount amount ->
+                        case transaction.side of
+                            CreditTransaction ->
+                                { totals | credits = totals.credits + amount }
+
+                            DebitTransaction ->
+                                { totals | debits = totals.debits + amount }
+            )
+            { credits = 0
+            , debits = 0
+            }
+
+
+type alias SpendingMetadata =
+    { groupMembersKey : String
+    , groupMembers : Set String
+    }
+
+
+buildSpendingMetadata : Model -> List SpendingTransaction -> SpendingMetadata
+buildSpendingMetadata model transactions =
+    let
+        groups =
+            transactions
+                |> List.map .group
+
+        ( groupMembersKey, groupMembers ) =
+            getGroupMembersKey groups model
+    in
+    { groupMembersKey = groupMembersKey
+    , groupMembers = groupMembers
+    }
+
+
+groupCreditsForTransaction :
+    { a | group : String, amount : Amount (), side : TransactionSide }
+    -> Dict String (Amount Credit)
+groupCreditsForTransaction transaction =
+    case ( transaction.side, transaction.amount ) of
+        ( CreditTransaction, Amount amount ) ->
+            Dict.singleton transaction.group (Amount amount)
+
+        ( DebitTransaction, Amount amount ) ->
+            Dict.singleton transaction.group (Amount -amount)
+
+
+{-| Add a transaction to the model, updating all totals and person belongsTo sets
+-}
+addTransactionToModel : PendingTransaction -> Model -> Model
+addTransactionToModel transaction model =
+    let
         groupCredits =
-            spending.debits
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                |> addAmounts spending.credits
+            groupCreditsForTransaction transaction
     in
     { model
         | years =
             model.years
-                |> Dict.update year (addSpendingToYear month day groupMembersKey groupCredits spending >> Just)
+                |> Dict.update transaction.year (addTransactionToYear transaction groupCredits >> Just)
         , totalGroupCredits =
             model.totalGroupCredits
-                |> addToTotalGroupCredits groupMembersKey groupCredits
+                |> addToTotalGroupCredits transaction.groupMembersKey groupCredits
         , persons =
             Dict.map
                 (\name person ->
-                    if Set.member name groupMembers then
+                    if Set.member name transaction.groupMembers then
                         { person
                             | belongsTo =
-                                Set.insert groupMembersKey person.belongsTo
+                                Set.insert transaction.groupMembersKey person.belongsTo
                         }
 
                     else
@@ -753,26 +931,143 @@ addSpendingToModel year month day spending model =
     }
 
 
-{-| Remove a spending from the model totals (but keep the spending record marked as deleted)
+{-| Remove a transaction from the model totals (but keep the transaction record marked as deleted)
 -}
-removeSpendingFromModel : TransactionId -> Spending -> Model -> Model
-removeSpendingFromModel transactionId spending model =
+removeTransactionFromModel : ( TransactionId, Transaction ) -> Model -> Model
+removeTransactionFromModel ( transactionId, transaction ) model =
     let
-        ( groupMembersKey, groupMembers ) =
-            getGroupMembersKeyForSpending spending model
-
         -- Convert debits to negative credits for aggregation and negate the whole
         groupCredits =
-            spending.debits
-                |> Dict.map (\_ (Amount amount) -> Amount -amount)
-                |> addAmounts spending.credits
+            groupCreditsForTransaction transaction
                 |> Dict.map (\_ (Amount amount) -> Amount -amount)
     in
     { model
         | years =
             model.years
-                |> Dict.update transactionId.year (removeSpendingFromYear transactionId.month transactionId.day groupMembersKey groupCredits)
+                |> Dict.update transactionId.year (removeTransactionFromYear transactionId transaction groupCredits)
         , totalGroupCredits =
             model.totalGroupCredits
-                |> addToTotalGroupCredits groupMembersKey groupCredits
+                |> addToTotalGroupCredits transaction.groupMembersKey groupCredits
     }
+
+
+getSpendingTransactionsWithIds : SpendingId -> Model -> List ( TransactionId, Transaction )
+getSpendingTransactionsWithIds spendingId model =
+    Array.get spendingId model.spendings
+        |> Maybe.map
+            (.transactionIds
+                >> List.filterMap
+                    (\transactionId ->
+                        findTransaction transactionId model
+                            |> Maybe.andThen
+                                (\transaction ->
+                                    if transaction.spendingId == spendingId then
+                                        -- this conditional should always be true if the model is correctly maintained
+                                        Just ( transactionId, transaction )
+
+                                    else
+                                        -- ideally we should raise an alert in this case
+                                        Nothing
+                                )
+                    )
+            )
+        |> Maybe.withDefault []
+
+
+spendingTransactionsForDetails : SpendingId -> Model -> List SpendingTransaction
+spendingTransactionsForDetails spendingId model =
+    getSpendingTransactionsWithIds spendingId model
+        |> List.filter (\( _, transaction ) -> transaction.status == Active)
+        |> List.sortBy (\( transactionId, _ ) -> ( transactionId.year, transactionId.month, ( transactionId.day, transactionId.index ) ))
+        |> List.map (\( transactionId, transaction ) -> toSpendingTransaction transactionId transaction)
+
+
+transactionDescription : Spending -> Transaction -> String
+transactionDescription spending transaction =
+    if String.trim transaction.secondaryDescription == "" then
+        spending.description
+
+    else
+        spending.description ++ " — " ++ transaction.secondaryDescription
+
+
+groupTransactionForList :
+    Model
+    -> String
+    -> ( TransactionId, Transaction )
+    ->
+        Maybe
+            { transactionId : TransactionId
+            , spendingId : SpendingId
+            , description : String
+            , year : Int
+            , month : Int
+            , day : Int
+            , total : Amount Debit
+            , share : Amount Debit
+            }
+groupTransactionForList model group ( transactionId, transaction ) =
+    if transaction.status /= Active then
+        Nothing
+
+    else
+        Array.get transaction.spendingId model.spendings
+            |> Maybe.andThen
+                (\spending ->
+                    if spending.status /= Active then
+                        Nothing
+
+                    else if transaction.group /= group then
+                        Nothing
+
+                    else
+                        Just
+                            { transactionId = transactionId
+                            , spendingId = transaction.spendingId
+                            , description = transactionDescription spending transaction
+                            , year = transactionId.year
+                            , month = transactionId.month
+                            , day = transactionId.day
+                            , total = spending.total |> (\(Amount amount) -> Amount amount)
+                            , share =
+                                case ( transaction.side, transaction.amount ) of
+                                    ( CreditTransaction, Amount amount ) ->
+                                        toDebit (Amount amount)
+
+                                    ( DebitTransaction, Amount amount ) ->
+                                        Amount amount
+                            }
+                )
+
+
+allTransactionsWithIds : Model -> List ( TransactionId, Transaction )
+allTransactionsWithIds model =
+    Dict.foldr
+        (\year yearRecord accYears ->
+            Dict.foldr
+                (\month monthRecord accMonths ->
+                    Dict.foldr
+                        (\day dayRecord accDays ->
+                            (dayRecord.transactions
+                                |> Array.toIndexedList
+                                |> List.map
+                                    (\( index, transaction ) ->
+                                        ( { year = year
+                                          , month = month
+                                          , day = day
+                                          , index = index
+                                          }
+                                        , transaction
+                                        )
+                                    )
+                            )
+                                ++ accDays
+                        )
+                        accMonths
+                        monthRecord.days
+                )
+                accYears
+                yearRecord.months
+        )
+        []
+        model.years

@@ -1,0 +1,73 @@
+{
+  "assignments": [
+    {
+      "assignment_id": "2026-04-19-accounting-initial-roster",
+      "created_at": "2026-04-19T16:32:57.375Z",
+      "universe": "Alien",
+      "members": [
+        {
+          "persistent_name": "ripley",
+          "display_name": "Ripley",
+          "role": "Lead"
+        },
+        {
+          "persistent_name": "hicks",
+          "display_name": "Hicks",
+          "role": "Frontend Dev"
+        },
+        {
+          "persistent_name": "bishop",
+          "display_name": "Bishop",
+          "role": "Backend Dev"
+        },
+        {
+          "persistent_name": "vasquez",
+          "display_name": "Vasquez",
+          "role": "Tester"
+        }
+      ]
+    },
+    {
+      "assignment_id": "2026-04-20-accounting-add-newt",
+      "created_at": "2026-04-20T16:34:20.680Z",
+      "universe": "Alien",
+      "members": [
+        {
+          "persistent_name": "ripley",
+          "display_name": "Ripley",
+          "role": "Lead"
+        },
+        {
+          "persistent_name": "hicks",
+          "display_name": "Hicks",
+          "role": "Frontend Dev"
+        },
+        {
+          "persistent_name": "bishop",
+          "display_name": "Bishop",
+          "role": "Backend Dev"
+        },
+        {
+          "persistent_name": "newt",
+          "display_name": "Newt",
+          "role": "Full-Stack Dev"
+        },
+        {
+          "persistent_name": "hudson",
+          "display_name": "Hudson",
+          "role": "Full-Stack Dev"
+        },
+        {
+          "persistent_name": "dallas",
+          "display_name": "Dallas",
+          "role": "Full-Stack Dev"
+        },
+        {
+          "persistent_name": "vasquez",
+          "display_name": "Vasquez",
+          "role": "Tester"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "assignment_universe": "Alien",
+  "members": [
+    {
+      "persistent_name": "ripley",
+      "display_name": "Ripley",
+      "role": "Lead",
+      "universe": "Alien",
+      "created_at": "2026-04-19T16:32:57.375Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "hicks",
+      "display_name": "Hicks",
+      "role": "Frontend Dev",
+      "universe": "Alien",
+      "created_at": "2026-04-19T16:32:57.375Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "bishop",
+      "display_name": "Bishop",
+      "role": "Backend Dev",
+      "universe": "Alien",
+      "created_at": "2026-04-19T16:32:57.375Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "newt",
+      "display_name": "Newt",
+      "role": "Full-Stack Dev",
+      "universe": "Alien",
+      "created_at": "2026-04-20T16:34:20.680Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "hudson",
+      "display_name": "Hudson",
+      "role": "Full-Stack Dev",
+      "universe": "Alien",
+      "created_at": "2026-04-20T16:34:20.680Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "dallas",
+      "display_name": "Dallas",
+      "role": "Full-Stack Dev",
+      "universe": "Alien",
+      "created_at": "2026-04-20T17:23:14.479Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "vasquez",
+      "display_name": "Vasquez",
+      "role": "Tester",
+      "universe": "Alien",
+      "created_at": "2026-04-19T16:32:57.375Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "scribe",
+      "display_name": "Scribe",
+      "role": "Session Logger",
+      "universe": "exempt",
+      "created_at": "2026-04-19T16:32:57.375Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "ralph",
+      "display_name": "Ralph",
+      "role": "Work Monitor",
+      "universe": "exempt",
+      "created_at": "2026-04-19T16:32:57.375Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  ]
+}

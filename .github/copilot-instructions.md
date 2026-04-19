@@ -9,6 +9,8 @@ This is a full-stack web application for managing group expenses and accounting,
 ### Initial Setup and Dependencies
 - **Check first**: Run `lamdera --version` to see if Lamdera is already installed before attempting any installation. Lamdera may be available via Nix or another package manager, not necessarily Node.js.
 - If Lamdera is not available: Node.js 20 or later must be installed, then install Lamdera CLI globally: `npm install -g lamdera`
+- Install project-local npm dependencies with `npm ci` so the local `elm-test` runner is available
+- If Elm tests need initialization or repair, run `elm-test init --compiler "$(which lamdera)"` from the repo root instead of editing `elm.json` by hand
 - Install Elm tooling: `npm install -g elm-format elm-review` (optional but recommended)
 - **No additional build steps or package installation required** - Lamdera handles all Elm dependencies
 
@@ -31,13 +33,15 @@ This is a full-stack web application for managing group expenses and accounting,
   - Press Ctrl+C to stop the server
 
 ### Code Formatting and Linting
-- **Format code**: `elm-format src/ --yes`
+- **Format code**: `elm-format src/ tests/ --yes`
   - **Time**: <1 second
-  - **Validates formatting**: `elm-format --validate src/`
+  - **Validates formatting**: `elm-format --validate src/ tests/`
 - **Lint code**: `elm-review` (from project root)
   - **Time**: <5 seconds when working
   - **Note**: May fail with network connectivity issues during dependency resolution
   - **Alternative**: Skip elm-review if network issues persist - the CI will catch linting issues
+- **Run tests**: `npm test`
+  - Uses `elm-test` with Lamdera as the compiler
 
 ## Validation
 
@@ -52,15 +56,17 @@ After making any code changes, you **MUST** validate the application works by ru
    - Group management features
    - Expense tracking functionality
    - Data import/export features
+5. **Run the Elm test suite**: `npm test`
 
 ### Pre-commit Validation
 Before completing any changes:
-1. **Format code**: `elm-format src/ --yes`
+1. **Format code**: `elm-format src/ tests/ --yes`
 2. **Compile both modules**: 
    - `lamdera make src/Frontend.elm --output=/dev/null`
    - `lamdera make src/Backend.elm --output=/dev/null`
-3. **Test development server**: `lamdera live` and verify it serves correctly
-4. **Manual testing**: Run through at least one end-to-end user scenario
+3. **Run the Elm test suite**: `npm test`
+4. **Test development server**: `lamdera live` and verify it serves correctly
+5. **Manual testing**: Run through at least one end-to-end user scenario
 
 ## Project Structure
 
@@ -118,8 +124,10 @@ Before completing any changes:
 The `.github/workflows/build.yml` automatically:
 - Sets up Node.js 20
 - Installs Lamdera globally
+- Installs project-local npm dependencies
 - Caches Lamdera dependencies
 - Compiles both Frontend and Backend modules
+- Runs `npm test`
 - **Build time in CI**: ~1-2 minutes including setup
 
 ## Expected Command Outputs

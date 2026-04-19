@@ -43,8 +43,9 @@ if [ "${1:-}" = "--regenerate" ]; then
     exit 0
 fi
 
-# CI check mode: generate into a temp file and compare
-BACKUP=$(mktemp)
+# CI check mode: generate into a repo-local scratch file and compare
+BACKUP=".check-codecs.backup"
+rm -f "$BACKUP"
 cp "$TARGET" "$BACKUP"
 
 generate > /dev/null 2>&1

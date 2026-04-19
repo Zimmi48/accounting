@@ -2,55 +2,43 @@
 name: "project-conventions"
 description: "Core conventions and patterns for this codebase"
 domain: "project-conventions"
-confidence: "medium"
-source: "template"
+confidence: "high"
+source: "repo-observed"
 ---
 
 ## Context
 
-> **This is a starter template.** Replace the placeholder patterns below with your actual project conventions. Skills train agents on codebase-specific practices — accurate documentation here improves agent output quality.
+Lamdera changes in this repo usually flow through `src/Types.elm`, `src/Backend.elm`, `src/Codecs.elm(.stub)`, and a generated Evergreen version under `src/Evergreen/`.
 
 ## Patterns
 
-### [Pattern Name]
+### Lamdera model migrations
 
-Describe a key convention or practice used in this codebase. Be specific about what to do and why.
+- Treat backend storage changes as migration work, not just type edits.
+- After changing shared types, run `lamdera check --force` to generate the new Evergreen version, then replace generated `Unimplemented` placeholders with explicit migrations.
+- Prefer rebuilding new backend storage from old persisted data rather than trying to preserve fragile positional identifiers.
 
-### Error Handling
+### Spending and transaction persistence
 
-<!-- Example: How does your project handle errors? -->
-<!-- - Use try/catch with specific error types? -->
-<!-- - Log to a specific service? -->
-<!-- - Return error objects vs throwing? -->
+- Spendings are the editable root record; dated transactions are the listed unit.
+- Keep `SpendingId` append-only via `Array.length model.spendings`.
+- Keep `Transaction.spendingId` as the canonical persisted membership link.
+- Derive `TransactionId` positionally from append-only day storage when exact row addressing is needed; do not persist redundant transaction-id fields in backend records.
+- Treat collection choice (`List` vs `Array`) as a performance detail, not an identity model. If records need durable cross-record references, define a canonical relation explicitly rather than relying on container position.
+- When editing, follow the existing append-only pattern: mark old records `Replaced`, remove their aggregate effects, then create fresh active records.
+- When the UI is still single-bucket, adapt it through a singleton default transaction and reject edits for multi-transaction spendings rather than silently collapsing data.
+- When the dialog still edits credits and debits as lists, fan them out into one-sided transaction records before persistence and rebuild bucket-level totals or member metadata in the backend from the dated transaction key.
 
-### Testing
+### Code generation and validation
 
-<!-- Example: What test framework? Where do tests live? How to run them? -->
-<!-- - Test framework: Jest/Vitest/node:test/etc. -->
-<!-- - Test location: test/, __tests__/, *.test.ts, etc. -->
-<!-- - Run command: npm test, etc. -->
-
-### Code Style
-
-<!-- Example: Linting, formatting, naming conventions -->
-<!-- - Linter: ESLint config? -->
-<!-- - Formatter: Prettier? -->
-<!-- - Naming: camelCase, snake_case, etc.? -->
-
-### File Structure
-
-<!-- Example: How is the project organized? -->
-<!-- - src/ — Source code -->
-<!-- - test/ — Tests -->
-<!-- - docs/ — Documentation -->
-
-## Examples
-
-```
-// Add code examples that demonstrate your conventions
-```
+- Regenerate codecs with `./check-codecs.sh --regenerate` after backend model changes.
+- Treat `./check-codecs.sh` as a hard review gate: Lamdera can still compile while `src/Codecs.elm` is stale relative to the generated output.
+- Do not hand-edit `elm.json` when adding tests; install `elm-test` with npm and initialize it via `elm-test init --compiler "$(which lamdera)"`.
+- Keep pure regression tests under `tests/` and run them with `npm test`, which uses Lamdera as the compiler.
+- After any change, run `elm-format src/ tests/ --yes`, `lamdera make src/Frontend.elm --output=/dev/null`, `lamdera make src/Backend.elm --output=/dev/null`, and `npm test`.
 
 ## Anti-Patterns
 
-<!-- List things to avoid in this codebase -->
-- **[Anti-pattern]** — Explanation of what not to do and why.
+- Do not hand-edit `src/Evergreen/V*/Types.elm`; generate it through Lamdera.
+- Do not persist day-list positions separately from the append-only list they come from.
+- **Do not generate Evergreen migrations without explicit user approval.** If schema changes are necessary, document the change in decisions.md and wait for user directive before running `lamdera check --force` or creating migration files.

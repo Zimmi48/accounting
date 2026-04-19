@@ -1,6 +1,7 @@
-
 elm-stuff
 elm
+node_modules/
+*.log
 # Squad: ignore runtime state (logs, inbox, sessions)
 .squad/orchestration-log/
 .squad/log/

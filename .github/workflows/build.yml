@@ -18,17 +18,21 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
+        cache: 'npm'
     
     - name: Install Lamdera
       run: npm install -g lamdera
-        
+
+    - name: Install project dependencies
+      run: npm ci
+         
     - name: Cache lamdera dependencies
       uses: actions/cache@v4
       with:
         path: |
           ~/.lamdera
           **/elm-stuff
-        key: ${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json') }}
+        key: ${{ runner.os }}-lamdera-${{ hashFiles('**/elm.json', 'package-lock.json') }}
         restore-keys: |
           ${{ runner.os }}-lamdera-
     
@@ -43,3 +47,6 @@ jobs:
 
     - name: Compile Backend
       run: lamdera make src/Backend.elm --output=/dev/null
+
+    - name: Run Elm tests
+      run: npm test
