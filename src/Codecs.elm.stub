@@ -1,0 +1,61 @@
+module Codecs exposing (decodeString, encodeToString)
+
+{-| Codecs for serializing and deserializing the backend model.
+
+These codecs are auto-generated using
+[gampleman/elm-review-derive](https://github.com/gampleman/elm-review-derive).
+
+To regenerate after changing types in Types.elm, run:
+
+    ./check-codecs.sh --regenerate
+
+There is a CI check that verifies these codecs match the auto-generated output.
+If it fails, regenerate using the command above.
+
+-}
+
+import Codec exposing (Codec)
+import Dict
+import Set
+import Types
+    exposing
+        ( Amount(..)
+        , BackendModel
+        , Day
+        , Month
+        , Person
+        , Share(..)
+        , Spending
+        , TransactionStatus(..)
+        , Year
+        )
+
+
+encodeToString : BackendModel -> String
+encodeToString model =
+    Codec.encodeToString 0 backendCodec model
+
+
+decodeString : String -> Result Codec.Error BackendModel
+decodeString s =
+    Codec.decodeString backendCodec s
+
+
+backendCodec : Codec BackendModel
+backendCodec =
+    Debug.todo ""
+
+
+{-| amountCodec is manually maintained because Amount has a phantom type
+parameter that elm-review-derive cannot handle automatically.
+-}
+amountCodec : Codec (Amount a)
+amountCodec =
+    Codec.custom
+        (\amountEncoder value ->
+            case value of
+                Amount arg0 ->
+                    amountEncoder arg0
+        )
+        |> Codec.variant1 "Amount" Amount Codec.int
+        |> Codec.buildCustom

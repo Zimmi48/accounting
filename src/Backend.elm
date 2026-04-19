@@ -1,6 +1,7 @@
 module Backend exposing (..)
 
 import Basics.Extra exposing (flip)
+import Codecs
 import Dict exposing (Dict)
 import Env
 import Html
@@ -418,13 +419,13 @@ updateFromFrontend sessionId clientId msg model =
         ( True, RequestAllTransactions ) ->
             ( model
             , model
-                |> encodeToString
+                |> Codecs.encodeToString
                 |> JsonExport
                 |> Lamdera.sendToFrontend clientId
             )
 
         ( True, ImportJson json ) ->
-            case decodeString json of
+            case Codecs.decodeString json of
                 Ok newModel ->
                     ( newModel
                     , Lamdera.sendToFrontend clientId OperationSuccessful

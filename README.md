@@ -17,6 +17,7 @@ This project is built [Lamdera](https://lamdera.com/), a platform for building f
 
 - [Lamdera](https://lamdera.com/)
 - elm-format to keep the code properly formatted at each commit
+- elm-review for regenerating codecs (see below)
 
 ### Building
 
@@ -25,6 +26,22 @@ To build and test the project locally:
 ```bash
 lamdera live
 ```
+
+### Auto-Generated Codecs
+
+The codecs in `src/Codecs.elm` are auto-generated from the types in `src/Types.elm` using [elm-review-derive](https://github.com/gampleman/elm-review-derive). The stub file `src/Codecs.elm.stub` contains type signatures with `Debug.todo ""` placeholders that elm-review-derive fills in.
+
+Two codecs require manual maintenance:
+- **`amountCodec`**: `Amount` has a phantom type parameter that elm-review-derive can't handle; provided in the stub
+- **`sessionIdCodec`**: `Lamdera.SessionId` is opaque; the script automatically replaces it with `Codec.string`
+
+To regenerate after changing types:
+
+```bash
+./check-codecs.sh --regenerate
+```
+
+CI automatically verifies the codecs match the auto-generated output.
 
 ## Isolated DevContainer (Lamdera + Squad)
 

@@ -32,6 +32,12 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-lamdera-
     
+    - name: Install elm-review and elm-format
+      run: npm install -g elm-review elm-format
+
+    - name: Check codecs are up to date
+      run: ./check-codecs.sh
+
     - name: Compile Frontend
       run: lamdera make src/Frontend.elm --output=/dev/null
 
