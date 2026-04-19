@@ -1,0 +1,29 @@
+{
+  "name": "accounting-lamdera-squad",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "remoteUser": "node",
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": {
+      "label": "Lamdera Live"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "elm-land.elm-land",
+        "GitHub.copilot-chat"
+      ]
+    }
+  }
+}

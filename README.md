@@ -26,6 +26,41 @@ To build and test the project locally:
 lamdera live
 ```
 
+## Isolated DevContainer (Lamdera + Squad)
+
+This repository includes a Dev Container at `.devcontainer/` so you can run Copilot/Squad in an isolated environment instead of directly on your host.
+
+### What it installs
+
+- Node.js 20 (base image)
+- `lamdera`
+- `elm-format`
+- `elm-review`
+- `@bradygaster/squad-cli`
+- GitHub CLI (`gh`) and attempts to install `github/gh-copilot` extension
+
+### How to use
+
+1. In VS Code, run **Dev Containers: Reopen in Container**.
+2. Wait for the post-create setup to finish.
+3. Authenticate inside the container:
+	```bash
+	gh auth login
+	gh auth status
+	```
+4. Verify tools:
+	```bash
+	lamdera --version
+	squad --help
+	gh copilot --help
+	```
+5. Run this app in-container:
+	```bash
+	lamdera live
+	```
+
+For Squad + Copilot usage, run commands from the container terminal. If your Copilot binary exposes `copilot` directly, use that; otherwise use `gh copilot`.
+
 ## Continuous Integration
 
 The project uses GitHub Actions for continuous integration. The workflow automatically:
