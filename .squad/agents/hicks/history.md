@@ -47,3 +47,9 @@
 
 - 2026-04-24T17:26:51Z: Diff review: found noisy reorderings (UpdatePassword, UpdateJson, ViewportChanged, ToggleTheme) in src/Frontend.elm. Recommendation: keep Msg case ordering stable; group viewport/config messages together.
 - 20260424T173935Z: Restored canonical Msg ordering in src/Frontend.elm: moved ToggleTheme adjacent to viewport/config messages to reduce noisy diffs.
+
+- 2026-04-26: Short fixes applied to spending editor dialog:
+  - Keep per-line .date as Nothing until the user explicitly changes it; dateText still reflects the dialog default so the UI shows a sensible date.
+  - When the spending date changes, update only line.dateText/datePickerModel for lines that didn't have an explicit date rather than setting line.date — this avoids silently overriding explicit user choices.
+  - Increased detail-date compact column width where needed (confirmed at 200px).
+  (Frontend-only changes in `src/Frontend.elm` by Hicks)
