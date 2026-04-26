@@ -1,5 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm
-
+FROM mcr.microsoft.com/devcontainers/javascript-node:24
 RUN sudo apt-get update \
     && sudo apt-get install -y --no-install-recommends \
         ca-certificates \

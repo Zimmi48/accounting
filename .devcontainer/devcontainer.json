@@ -21,8 +21,7 @@
         "terminal.integrated.defaultProfile.linux": "bash"
       },
       "extensions": [
-        "elm-land.elm-land",
-        "GitHub.copilot-chat"
+        "elm-land.elm-land"
       ]
     }
   }

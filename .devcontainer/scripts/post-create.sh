@@ -11,7 +11,7 @@ else
 fi
 
 echo "[devcontainer] Installing Elm tooling and Squad CLI..."
-npm install -g elm-format elm-review @bradygaster/squad-cli
+npm install -g elm-format elm-review @github/copilot @bradygaster/squad-cli
 
 if command -v gh >/dev/null 2>&1; then
   if gh extension list 2>/dev/null | grep -q "github/gh-copilot"; then
