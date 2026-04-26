@@ -2352,7 +2352,7 @@ transactionLineFlexibleFieldWidth windowWidth =
 
 transactionLineCompactFieldWidth windowWidth =
     if windowWidth > 650 then
-        px 150
+        px 200
 
     else
         fillPortion 1
