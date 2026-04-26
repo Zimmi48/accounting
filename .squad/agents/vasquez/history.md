@@ -8,6 +8,8 @@
 
 ## Learnings
 
+- 2026-04-26: Widened the compact per-line field to 200px to ensure full ISO date visibility in transaction details (branch: squad/review/vasquez-fix-date-width).
+
 - Initial roster assignment: Tester and reviewer for risky cross-cutting changes.
 - 2026-04-22: Final UI review for PR #39 / commit `ae26ce6` confirmed the fix belongs in `normalizeSpendingDialogLines` in `src/Frontend.elm`: passive row normalization must not seed opposite-side amounts, while compact row alignment needs width constraints on the outer labeled blocks, not just the inner controls.
 - 2026-04-21: Hicks's spending editor follow-up polish in `src/Frontend.elm` keeps the approved contract intact while restoring labeled group fields (`Debitor 1` / `Creditor 1`), using inline SVG icon controls, and rendering revealed per-line details as Description before Date.
