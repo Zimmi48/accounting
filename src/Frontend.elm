@@ -919,7 +919,10 @@ setSpendingDateValue date dialogModel =
 
 
 defaultTransactionLine maybeDate amount =
-    { date = maybeDate
+    { -- do NOT set the explicit .date here so that lines remain "unspecified"
+      -- until the user manually changes them. dateText still reflects the
+      -- dialog-level default for display.
+      date = Nothing
     , dateText = maybeDate |> Maybe.map Date.toIsoString |> Maybe.withDefault ""
     , datePickerModel =
         maybeDate
@@ -992,11 +995,13 @@ defaultTransactionLineAmount total lines =
         remainingAmount total lines
 
 
-transactionLineIsComplete line =
+transactionLineIsComplete maybeSpendingDate line =
     String.trim line.group
         /= ""
         && (line.amount |> parseAmountValue |> Maybe.isJust)
-        && Maybe.isJust line.date
+        -- a line is considered complete if it either has an explicit date or
+        -- the dialog has a spending-level date that can be used implicitly
+        && (Maybe.isJust line.date || Maybe.isJust maybeSpendingDate)
 
 
 transactionLineIsBlank spendingDate line =
@@ -1013,7 +1018,7 @@ normalizeTransactionLines maybeDate total lines =
             lines
                 |> List.filter (transactionLineIsBlank maybeDate >> not)
     in
-    if List.last nonBlankLines |> Maybe.map transactionLineIsComplete |> Maybe.withDefault True then
+    if List.last nonBlankLines |> Maybe.map (transactionLineIsComplete maybeDate) |> Maybe.withDefault True then
         nonBlankLines ++ [ defaultTransactionLine maybeDate (defaultTransactionLineAmount total nonBlankLines) ]
 
     else
@@ -1026,7 +1031,7 @@ normalizeTransactionLinesWithoutAutofill maybeDate lines =
             lines
                 |> List.filter (transactionLineIsBlank maybeDate >> not)
     in
-    if List.last nonBlankLines |> Maybe.map transactionLineIsComplete |> Maybe.withDefault True then
+    if List.last nonBlankLines |> Maybe.map (transactionLineIsComplete maybeDate) |> Maybe.withDefault True then
         nonBlankLines ++ [ defaultTransactionLine maybeDate "" ]
 
     else
@@ -1040,15 +1045,12 @@ normalizeSpendingDialogLines dialogModel =
     }
 
 
-lineUsesDefaultDate previousSpendingDate line =
-    case ( previousSpendingDate, line.date ) of
-        ( _, Nothing ) ->
+lineUsesDefaultDate _ line =
+    case line.date of
+        Nothing ->
             True
 
-        ( Just previousDate, Just lineDate ) ->
-            lineDate == previousDate
-
-        ( Nothing, Just _ ) ->
+        Just _ ->
             False
 
 
@@ -1063,11 +1065,19 @@ setTransactionLineDate date line =
 applySpendingDateDefault previousSpendingDate newDate =
     List.map
         (\line ->
-            if lineUsesDefaultDate previousSpendingDate line then
-                setTransactionLineDate newDate line
+            case line.date of
+                -- keep the explicit .date empty for lines that haven't been
+                -- manually adjusted; update only the displayed text and the
+                -- picker seed so the UI reflects the new default without
+                -- mutating the explicit value.
+                Nothing ->
+                    { line
+                        | dateText = Date.toIsoString newDate
+                        , datePickerModel = DatePicker.initWithToday newDate
+                    }
 
-            else
-                line
+                Just _ ->
+                    line
         )
 
 
