@@ -8,6 +8,7 @@
 
 ## Learnings
 
+- 2026-04-28: Regression coverage in `tests/BackendTests.elm` now replays active transactions to compare exact stored `totalGroupCredits` snapshots against recomputation at global/year/month/day scope; current failures show `src/Backend.elm` edit/delete flows leave zero-valued group entries and empty period buckets behind after `removeTransactionFromModel`, while `groupTransactionForList` and `spendingTransactionsForDetails` still correctly expose only the active replacement rows.
 - 2026-04-27: Review of the backend cleanup + group-ordering pass confirmed `src/Backend.elm` still needs `PendingTransaction` because it carries staging-only `year`/`month`/`day` fields into `assignTransactionIds` and the year/month/day storage buckets, while stored `Transaction` records no longer persist those fields; `getSpendingTransactions` is gone, but `src/Frontend.elm` now reverses a backend `RequestGroupTransactions` list that is already produced newest-first via nested `Dict.foldr`, and the added frontend test only proves a synthetic `List.reverse` helper instead of the real backend/frontend ordering seam.
 
 - 2026-04-27: Dallas's follow-up revision restores `Spending.transactionIds` in `src/Types.elm` and `src/Codecs.elm`, and `src/Backend.elm` now recovers a spending's transactions through that stored id list plus `findTransaction` instead of `allTransactionsWithIds model |> List.filter`; validation passed with codec check, both Lamdera builds, `npm test`, and an HTTP 200 probe on the already-running local server.
@@ -309,3 +310,12 @@ Updated `tests/FrontendTests.elm` to require stale-ID safety patterns:
 - Per-group ordering matches real seam (backend traversal → bucket → frontend newest-first)
 
 **Key learning:** Migration safety evidence must include user-facing seams, not just storage parity. Export diff now covers both logical spendings + group-list rendering semantics.
+
+## 2026-04-28: Total Replay Regression Test Coverage Added
+
+- Implemented 3 comprehensive regression test cases in `tests/BackendTests.elm`
+- All fail on current codebase (2 of 30 tests fail)
+- Tests confirm exact aggregate replay as required invariant
+- Isolated defect to `removeTransactionFromModel` (active-row filtering layer works correctly)
+- Decision merged into `.squad/decisions.md` with Ripley's root cause analysis
+- Test failures now provide specification for backend remediation

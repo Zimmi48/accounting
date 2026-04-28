@@ -48,6 +48,29 @@ The script normalizes both exports before diffing them. It ignores storage-only 
 
 The active-transaction section follows the app's group transaction view semantics: for each group, it replays the active rows that would appear in `RequestGroupTransactions`, applies the frontend's newest-first ordering, and compares the rendered listing fields (date text, composed description, total, and signed share where credits are negative and debits positive).
 
+### Validating stored totals from an export
+
+To validate the derived totals stored in an export against the actual persisted spendings/transactions:
+
+```bash
+python3 scripts/validate_totals.py export.json
+```
+
+The script expects a full backend export produced by the app's `/json` route. It checks:
+
+- each spending's active credit/debit lines against its stored total
+- root, yearly, monthly, and daily `totalGroupCredits`
+- each person's derived `belongsTo` set
+- spending-to-transaction linkage consistency
+
+If it reports only derived-field mismatches and you want a safe fix-up file instead of mutating the source export:
+
+```bash
+python3 scripts/validate_totals.py export.json --write-fixed fixed-export.json
+```
+
+That writes a corrected copy that only rewrites derived fields (`totalGroupCredits` at every level plus `persons.*.belongsTo`). Review the generated file, then import it through `/import` if appropriate.
+
 ### Auto-Generated Codecs
 
 The codecs in `src/Codecs.elm` are auto-generated from the types in `src/Types.elm` using [elm-review-derive](https://github.com/gampleman/elm-review-derive). The stub file `src/Codecs.elm.stub` contains type signatures with `Debug.todo ""` placeholders that elm-review-derive fills in.

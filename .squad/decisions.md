@@ -2,6 +2,50 @@
 
 ## Active Decisions
 
+### Lifecycle Total Invariants (Newt, 2026-04-29)
+
+**Status:** Approved and implemented.
+
+**Decision:** Revise disputed lifecycle tests in `tests/BackendTests.elm` to validate total-computation behavior without pinning internal cleanup state.
+
+Keep three layers of coverage:
+1. Exact `recomputedTotalsSnapshot` expectations for active rows after add/edit/delete
+2. Stored aggregate numeric invariants proving active amounts land in the right scope
+3. Stale stored amounts after replacement/deletion must be missing or zero (not necessarily structurally pruned)
+
+**Why:** Preserves meaningful total-computation validation while acknowledging that backend cleanup residue (zero-valued leaves, lingering metadata) is low-priority and separate from user-facing correctness.
+
+**Operational consequence:** Tests now pass with current backend state; cleanup leak is tracked as a non-priority follow-up per user directive.
+
+**Validation:**
+- `npm test` passed all lifecycle tests
+- No new Evergreen migrations generated
+
+### Export Validator Fix Scope (Bishop, 2026-04-29)
+
+**Status:** Approved and implemented.
+
+**Decision:** The export validator (`scripts/validate_totals.py`) only rewrites derived fields:
+- `totalGroupCredits` at root/year/month/day scope
+- `persons.*.belongsTo`
+
+**Why:** Those values are recomputable from persisted active transactions and active spendings. Changing spendings, transactionIds, statuses, or transaction payloads would risk hiding unrelated corruption instead of surfacing it for review.
+
+**Operational consequence:** The script may report non-fixable linkage or spending-total issues after writing corrected copy; that is intentional and should trigger manual investigation instead of silent mutation.
+
+**Validation:**
+- Script completes without errors
+- README updated with usage documentation
+- `--write-fixed` flag enables correction write
+
+### User Directive: Cleanup Bug Tracking (2026-04-29)
+
+**Status:** Captured for team memory.
+
+**Directive:** Track the backend cleanup bug (lingering zero-valued leaves after delete) as a non-priority follow-up. Remove disputed failing tests for now while preserving as much validation coverage of total computations as possible.
+
+**Rationale:** User request (Théo Zimmermann via Copilot). The bug is real but not blocking. Newt's revised tests preserve coverage without pinning the leak as contract.
+
 ### Model-Only Spending/Transaction Split (2026-04-20)
 
 **Status:** Approved for user review.
@@ -1272,3 +1316,120 @@ The export diff now includes two complementary checks:
 **Scope:** `scripts/compare_exports.py`, `README.md`
 
 **Validation:** Repo validation passed. Code inspection against `scripts/compare_exports.py`, `src/Backend.elm`, and `src/Frontend.elm`. Targeted Python assertions for active filtering, sign rendering, description composition, and per-group ordering.
+
+---
+
+## 2026-04-28: Backend Total Recomputation Defects — Ripley & Vasquez Investigation
+
+**Status:** Bug confirmed via regression test suite
+
+**Decision Owner:** Ripley (root cause analysis), Vasquez (test validation)
+
+**Decision:** Document and schedule remediation for `totalGroupCredits` aggregate cleanup defects in backend edit/delete lifecycle.
+
+### Context
+
+Spending add→edit→delete operations trigger `removeTransactionFromModel` to clean up old totals before applying new ones. Current implementation leaves zero-valued group entries in period buckets, violating consistency invariants.
+
+### Findings
+
+**Ripley's Root Cause Analysis:**
+- `getGroupMembersKey` constructs string keys like "1,2,3" from group member person IDs
+- When transactions reference groups with unregistered person names, the key becomes "" (empty string)
+- All totals for that spending store under "" instead of the intended key
+- Subsequent edit/delete operations fail to find and remove these orphaned entries
+
+**Invariants Currently Violated:**
+1. ✗ `model.totalGroupCredits` should reflect sum of all active transactions
+2. ✗ `model.years[YEAR].totalGroupCredits` should match year's day totals
+3. ✗ `model.years[YEAR].months[MONTH].totalGroupCredits` should match month's day totals
+4. ✗ `model.years[YEAR].months[MONTH].days[DAY].totalGroupCredits` should match day's active transactions
+
+**Vasquez's Test Evidence:**
+- Added 3 regression test cases to `tests/BackendTests.elm`
+- All fail on current codebase (2 of 30 tests)
+- Tests specify exact aggregate replay as required invariant: stored totals must match fresh recomputation from active transactions with no zero-only residue
+- `groupTransactionForList` and `spendingTransactionsForDetails` correctly expose only active replacement rows, isolating defect to aggregation layer
+
+### Key Files
+
+- `src/Backend.elm` — `removeTransactionFromModel`, `getGroupMembersKey`
+- `tests/BackendTests.elm` — regression test suite
+
+### Remediation Contract
+
+After fix, stored `totalGroupCredits` at all scopes (global, year, month, day) must match fresh recomputation from active transactions at those scopes with no zero-only residue or stale empty buckets.
+
+### Validation
+
+- `npm test` must pass all 30+ tests
+- Regression tests must pass
+- Manual spot checks of edit→delete workflows
+- Backend compilation and codec parity checks
+
+---
+
+
+## Under Review (Split Decision)
+
+### Lifecycle Totals Tests: Split Verdict (2026-04-28)
+
+**Status:** Awaiting orchestration decision. **Split outcome from parallel review.**
+
+**Ripley's Finding (Test Review):**
+- **Verdict:** Tests are flawed and over-constrained.
+- **Issue:** Assertion requires `storedTotalsSnapshot == recomputedTotalsSnapshot` at every lifecycle stage.
+- **Reality:** Stored totals accumulate all contributions (including zeroed reversals); recomputed totals filter to active-only keys.
+- **Both are correct independently:** Stored acts as a full ledger; recomputed acts as an active-only projection.
+- **Recommendation:** Reframe assertion to filter stored-totals before comparing, or assert stored-bucket correctness for active transactions only (see Options A–C in review).
+
+**Bishop's Finding (Backend Validation):**
+- **Verdict:** The backend bug is real.
+- **Bug:** `removeTransactionFromModel` correctly negates amounts but leaves zero-valued entries in `totalGroupCredits` dicts instead of removing them.
+- **Scope of leakage:**
+  - Global `BackendModel.totalGroupCredits`
+  - Per-year, per-month, per-day `totalGroupCredits`
+  - `Person.belongsTo` set (group keys persist even at zero)
+- **User visibility:** Hidden by accident. `RequestUserGroups` handler (Backend.elm:266–267) filters by `credit < 0` and `credit > 0`, masking phantom groups. Fragile; proper fix requires source cleanup.
+- **Reproduction:** Create spending → delete it → inspect backend state for zero-valued entries in totals dicts and lingering group keys in `Person.belongsTo`.
+
+**Decision Required:**
+Choose one of three paths:
+1. **Test-only fix:** Adjust test assertions to filter stored-totals before comparing. No backend code changes; tests pass as-is.
+2. **Backend-only fix:** Purge zero entries in `addAmount`/`addToTotalGroupCredits` and clean up `Person.belongsTo`. Tests still fail unless reframed; comprehensive test revisions needed.
+3. **Split path:** Fix tests to filter (immediate); queue backend cleanup as hygiene task for next cycle.
+
+**Constraint:** Do not commit either artifact until orchestration reviews and establishes remediation strategy.
+
+**Artifacts:**
+- Ripley: `.squad/decisions/inbox/ripley-lifecycle-totals-review.md` (full test analysis)
+- Bishop: `.squad/decisions/inbox/bishop-test-validation-lifecycle-totals.md` (full bug report)
+
+# Decision: Backend Cleanup Leak Issue #48
+
+**Timestamp:** 2026-04-29
+
+**Status:** Complete
+
+## Decision
+
+Opened GitHub issue #48 to document the backend cleanup leak (zero-valued entries in totalGroupCredits and lingering membership metadata after edit/delete operations) as a formal low-priority follow-up.
+
+## Rationale
+
+- The cleanup leak was identified during test lifecycle work and confirmed as non-blocking
+- Documenting it as a tracked issue ensures team memory and future consideration
+- Labeled as `type:chore` (maintenance) and `priority:p2` (next sprint) to reflect its low urgency
+- Issue preserves the decision to treat cleanup residue as a separate concern from user-facing functionality
+
+## Issue Details
+
+- **Number:** #48
+- **Title:** Backend cleanup leak: zero-valued aggregate entries and lingering metadata
+- **URL:** https://github.com/Zimmi48/accounting/issues/48
+- **Labels:** type:chore, priority:p2
+
+## Reference
+
+Related to: newt-lifecycle-total-invariants.md (test cleanup decision)
+

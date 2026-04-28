@@ -127,3 +127,62 @@
 **Assessment:** Code is correct as-is. `setSpendingStatus` is already called once. The architectural concern is the redundant traversal in `setTransactionStatuses` + `removeTransactionFromModel` loop, not multiple calls to `setSpendingStatus`.
 
 **Safe optimization candidate:** Inline transaction-status update into the `removeTransactionFromModel` foldl to eliminate the separate `setTransactionStatuses` call entirely. Current cost is acceptable for typical <100 transaction spendings; only worth pursuing if profiling shows measurable impact.
+
+## 2026-04-28T14:15:00Z: Spending Lifecycle Totals Test Review
+
+- **Request:** Investigate failing lifecycle-total tests to determine if they reflect user-visible bugs or internal inconsistencies.
+- **Tests:** Two failing tests in `BackendTests.elm` (lines 126-169):
+  1. "same-day add/edit/delete keeps exact stored totals aligned with active transactions"
+  2. "cross-period edits and deletion keep year, month, and day totals aligned"
+- **Finding:** Both tests are **correct and reveal a real backend bug**.
+
+**Root Cause:** When `removeTransactionFromModel` removes a transaction:
+  1. It negates the transaction's amounts: `Dict.map (\_ (Amount x) -> Amount -x) groupCredits`
+  2. Passes negated amounts to `addToTotalGroupCredits` to zero them out
+  3. `addAmounts` correctly produces `Amount 0` when the amounts cancel
+  4. **Bug:** Zero-valued entries are never removed from `totalGroupCredits` dicts at any level (global, yearly, monthly, daily)
+  5. These "ghost" entries persist indefinitely in the model
+
+**Data Integrity Impact:**
+- Global, yearly, monthly, and daily `totalGroupCredits` dicts accumulate zero entries that should be absent
+- `Person.belongsTo` set is also never cleaned up—group keys remain even after all that person's amounts in that group are zero
+
+**User Visibility:** Partially hidden by UI filtering:
+- `RequestUserGroups` (line 266) filters creditors with `credit > 0`
+- `RequestUserGroups` (line 266) filters debitors with `credit < 0`
+- Zero amounts are naturally excluded from these lists, so users don't see phantom groups
+- **However:** This is fragile—proper fix requires cleaning up at the source, not relying on UI filters
+
+**Precise Manual Reproduction (if UI filters weren't present):**
+1. Create group "Trip" with Alice and Bob as members
+2. Record expense: "Dinner", total 1200, Alice pays (credit 1200), Trip owes (debit 1200, split 50/50)
+3. Delete the "Dinner" expense
+4. **Expected:** Backend totals dicts should be empty for Trip at all levels
+5. **Actual:** Stored totals contain `Trip → {Alice: 0, Bob: 0}` and similar zero entries at year/month/day levels
+6. Alice's `belongsTo` still includes the Trip key
+
+**Verdict:** Internal data corruption bug (model not cleaned on delete), partially masked by UI filters but represents accumulating garbage in stored state.
+
+## 2026-04-29T06:59:52Z: Lifecycle Totals Bug Validation
+
+- **Session:** Orchestrated split review with Ripley
+- **Task:** Validate whether failing tests expose real backend bugs or false positives
+- **Finding:** Backend has real internal data corruption bug:
+  - `removeTransactionFromModel` negates amounts correctly but leaves zero-valued entries in totals dicts
+  - Leakage sites: global/yearly/monthly/daily `totalGroupCredits` + `Person.belongsTo` set
+  - Root cause: No cleanup when entries hit zero
+- **User Impact:** Partially hidden by UI filters (RequestUserGroups filters non-zero amounts). Fragile; needs source cleanup.
+- **Fix Requirements:** (1) Remove dict entries when they hit zero, (2) Clean up `Person.belongsTo`, (3) Audit model queries for zero-entry assumptions
+- **Orchestration status:** Under review; awaiting decision on cleanup strategy and scope
+- **Artifact:** `.squad/decisions/inbox/bishop-test-validation-lifecycle-totals.md` (archived to decisions.md)
+- 2026-04-29: Export repair tooling now lives in `scripts/validate_totals.py`. It targets the current `/json` export shape from `src/Types.elm` / `src/Codecs.elm`, replays active transactions via `Transaction.spendingId`, validates spending totals plus root/year/month/day `totalGroupCredits` and `Person.belongsTo`, and writes fixes to a separate JSON file instead of mutating source exports in place.
+
+## 2026-04-29T07:25:19Z: Export Validator Implementation (Background)
+
+- **Task:** Add export validator and fixer script with associated documentation
+- **Deliverables:** `scripts/validate_totals.py`, README usage section
+- **Scope Decision:** Only rewrite derived fields (`totalGroupCredits` at all scopes, `persons.*.belongsTo`)
+- **Rationale:** Only recomputable fields are safe to mutate; spendings, transactions, statuses must be surfaced as errors for manual review
+- **Flag:** `--write-fixed` enables corrected export copy; errors in non-fixable fields preserved intentionally
+- **Decision merged:** Export Validator Fix Scope (2026-04-29)
+- **Status:** Completed; ready for merge review

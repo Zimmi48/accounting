@@ -8,6 +8,7 @@
 
 ## Learnings
 
+- 2026-04-29: The spending lifecycle seam in `tests/BackendTests.elm` should validate `recomputedTotalsSnapshot` exactly for active rows, but stored redundant totals after edit/delete may only guarantee that stale amounts are missing-or-zero rather than structurally equal; pair those numeric invariants with the existing list/details visibility test and keep validation on `elm-format src/ tests/ --yes`, both `lamdera make` targets, `npm test`, and `lamdera live --port=8123` returning HTTP 200.
 - Joined to own full-stack recovery and compile-first revisions after prior authors were locked out on the spending/transaction split artifact.
 - User directive: do not generate the Evergreen migration before Théo reviews the model changes.
 - Compile-first split shape: `BackendModel` now keeps `spendings : Dict SpendingId Spending` plus dated `Day.transactions`, with `Spending.transactionIds` and `Transaction.spendingId` as the cross-reference seam.
@@ -103,3 +104,15 @@
 **Current Status:** Locked out for this artifact in current revision cycle.
 
 **Reassignment:** Dallas assigned to next backend/model revision with data-migration constraints.
+
+## 2026-04-29T07:25:19Z: Lifecycle Invariants Revision (Background)
+
+- **Task:** Revise disputed lifecycle tests per user directive (Théo: keep validation but don't pin cleanup leak)
+- **Context:** User requested removing disputed tests while preserving total-computation validation coverage
+- **Solution:** Narrowed assertions to three layers:
+  1. Exact `recomputedTotalsSnapshot` for active rows (what users see)
+  2. Stored aggregate numeric invariants (active amounts land in right scope)
+  3. Stale amounts must be zero or missing (structure not required)
+- **Validation:** `npm test` passed; no Evergreen migrations
+- **Decision merged:** Lifecycle Total Invariants (2026-04-29)
+- **Status:** Completed; ready for merge review
