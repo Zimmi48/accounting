@@ -14,6 +14,7 @@ Use this when Lamdera changes where durable data lives, such as moving records f
 - Rebuild old storage and new storage together in one deterministic traversal so newly assigned ids and newly assigned array slots stay aligned.
 - Preserve persisted facts exactly when the old backend model contains enough information; rebuild derived metadata instead of defaulting it away.
 - If old frontend state or in-flight messages lack the context needed to recover a new durable identifier, reset that UI seam to a safe no-op rather than inventing ids.
+- Prove storage-reshape safety with regression fixtures on both seams: backend tests should follow every migrated stored id back to the rebuilt row, and frontend tests should assert legacy transaction-addressed dialogs/messages are cleared or no-op'd.
 - Finish with `lamdera check --force` plus the normal format/build/test/live validations.
 
 ## Examples

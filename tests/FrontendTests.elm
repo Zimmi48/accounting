@@ -6,7 +6,11 @@ depends on.
 -}
 
 import Date
+import DatePicker
 import Dict
+import Evergreen.Migrate.V26 as MigrateV26
+import Evergreen.V24.Types as V24
+import Evergreen.V26.Types as V26
 import Expect
 import Frontend
 import Test exposing (..)
@@ -135,6 +139,62 @@ suite =
                             [ ( "Alice paid", Dict.fromList [ ( "Alice", Share 1 ) ], Amount 1000 ) ]
                         )
             ]
+        , describe "V24 to V26 frontend migration safety"
+            [ test "frontend dialog migration preserves create drafts but strips edit identity" <|
+                \_ ->
+                    case MigrateV26.migrateFrontendDialog (Just (V24.AddSpendingDialog legacyCreateDialog)) of
+                        Just (V26.AddSpendingDialog dialog) ->
+                            Expect.equal
+                                { spendingId = Nothing
+                                , description = legacyCreateDialog.description
+                                , total = legacyCreateDialog.total
+                                , credits = [ "Alice" ]
+                                , debits = [ "Trip" ]
+                                }
+                                { spendingId = dialog.spendingId
+                                , description = dialog.description
+                                , total = dialog.total
+                                , credits = List.map .group dialog.credits
+                                , debits = List.map .group dialog.debits
+                                }
+
+                        other ->
+                            Expect.fail ("Expected create dialog to survive migration, got: " ++ Debug.toString other)
+            , test "frontend dialog and message migration no-op legacy transaction-bound edit/delete flows" <|
+                \_ ->
+                    Expect.equal
+                        ( Nothing
+                        , V26.NoOpFrontendMsg
+                        , V26.NoOpFrontendMsg
+                        )
+                        ( MigrateV26.migrateFrontendDialog (Just (V24.AddSpendingDialog legacyEditDialog))
+                        , MigrateV26.migrateFrontendMsg (V24.ShowAddSpendingDialog (Just legacyTransactionId))
+                        , MigrateV26.migrateFrontendMsg (V24.ShowConfirmDeleteDialog legacyTransactionId)
+                        )
+            , test "backend/frontend payload migration resets legacy transaction references instead of reusing them" <|
+                \_ ->
+                    Expect.equal
+                        { edit = V26.NoOpToBackend
+                        , detailsRequest = V26.NoOpToBackend
+                        , detailsResponse = V26.SpendingError "Please reopen the spending editor after the update."
+                        , groupTransactions =
+                            V26.ListGroupTransactions
+                                { group = "Trip"
+                                , transactions = []
+                                }
+                        }
+                        { edit = MigrateV26.migrateToBackend (V24.EditTransaction legacyEditPayload)
+                        , detailsRequest = MigrateV26.migrateToBackend (V24.RequestTransactionDetails legacyTransactionId)
+                        , detailsResponse = MigrateV26.migrateToFrontend (V24.TransactionDetails legacyTransactionDetails)
+                        , groupTransactions =
+                            MigrateV26.migrateToFrontend
+                                (V24.ListGroupTransactions
+                                    { group = "Trip"
+                                    , transactions = [ legacyListedTransaction ]
+                                    }
+                                )
+                        }
+            ]
         ]
 
 
@@ -196,4 +256,88 @@ listedTransaction index year month day =
     , day = day
     , total = Amount 1000
     , share = Amount 500
+    }
+
+
+legacyTransactionId : V24.TransactionId
+legacyTransactionId =
+    { year = 2025
+    , month = 4
+    , day = 18
+    , index = 2
+    }
+
+
+legacyCreateDialog : V24.AddSpendingDialogModel
+legacyCreateDialog =
+    { transactionId = Nothing
+    , description = "Dinner"
+    , date = Just sampleDate
+    , dateText = "2025-04-18"
+    , datePickerModel = DatePicker.init
+    , total = "10.00"
+    , credits = [ ( "Alice", "10.00", V24.Complete ) ]
+    , debits = [ ( "Trip", "10.00", V24.Complete ) ]
+    , submitted = False
+    }
+
+
+legacyEditDialog : V24.AddSpendingDialogModel
+legacyEditDialog =
+    { legacyCreateDialog | transactionId = Just legacyTransactionId }
+
+
+legacyEditPayload :
+    { transactionId : V24.TransactionId
+    , description : String
+    , year : Int
+    , month : Int
+    , day : Int
+    , total : V24.Amount V24.Credit
+    , credits : Dict.Dict String (V24.Amount V24.Credit)
+    , debits : Dict.Dict String (V24.Amount V24.Debit)
+    }
+legacyEditPayload =
+    { transactionId = legacyTransactionId
+    , description = "Dinner"
+    , year = 2025
+    , month = 4
+    , day = 18
+    , total = V24.Amount 1000
+    , credits = Dict.fromList [ ( "Alice", V24.Amount 1000 ) ]
+    , debits = Dict.fromList [ ( "Trip", V24.Amount 1000 ) ]
+    }
+
+
+legacyTransactionDetails :
+    { transactionId : V24.TransactionId
+    , description : String
+    , year : Int
+    , month : Int
+    , day : Int
+    , total : V24.Amount V24.Credit
+    , credits : Dict.Dict String (V24.Amount V24.Credit)
+    , debits : Dict.Dict String (V24.Amount V24.Debit)
+    }
+legacyTransactionDetails =
+    legacyEditPayload
+
+
+legacyListedTransaction :
+    { transactionId : V24.TransactionId
+    , description : String
+    , year : Int
+    , month : Int
+    , day : Int
+    , total : V24.Amount V24.Debit
+    , share : V24.Amount V24.Debit
+    }
+legacyListedTransaction =
+    { transactionId = legacyTransactionId
+    , description = "Dinner"
+    , year = 2025
+    , month = 4
+    , day = 18
+    , total = V24.Amount 1000
+    , share = V24.Amount 500
     }

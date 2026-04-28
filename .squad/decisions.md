@@ -1164,3 +1164,52 @@ Reject immediately if:
 - Historical `Deleted` / `Replaced` rows disappear or are rewritten as fresh active data
 - Validation stops at compile/test success without post-edit `lamdera check --force`
 
+
+### User Directive: Migration Test Coverage (2026-04-28)
+
+**Status:** Captured for team memory.
+
+**Directive:** For migration test work, the backend model migration must be extensively tested, and the frontend migration must primarily avoid confusing invalid spending IDs with different transactions; it is acceptable for the frontend migration to simplify by resetting some state to initial values.
+
+**Source:** Théo Zimmermann (via Copilot)
+
+**Why:** Establish clear scope and safety expectations for migration test expansion.
+
+### Frontend Migration Safety: Keep Reset Behavior, Add Proof (2026-04-28)
+
+**Status:** Decision approved; no product code changes required.
+
+**Decision Owner:** Dallas
+
+**Decision:** Do not change product code in the V24 → V26 frontend migration.
+
+The existing migration already chooses the safe behavior for stale transaction-addressed UI state:
+- Drop legacy edit/delete dialogs
+- Neutralize legacy edit/delete/detail messages and requests
+- Clear migrated group transaction payloads
+- Surface a reopen prompt instead of trying to reinterpret stale transaction details
+
+**Rationale:** Legacy `TransactionId` values cannot be trusted to identify the same logical spending after the backend storage reshape. Preserving them would risk silently pointing the UI at a different transaction.
+
+**Follow-up:** Add regression tests that prove the backend migration rebuilds correct spending/transaction links and that the frontend migration prefers reset/no-op behavior over stale-id reuse.
+
+**Validation:** Repo validation passed.
+
+### Migration Test Contract: Transaction-Addressed UI State (2026-04-28)
+
+**Status:** Test expectations approved.
+
+**Decision Owner:** Vasquez
+
+**Decision:** For the V24 → V26 frontend migration seam, tests should treat transaction-addressed UI state as unsafe to preserve. The approved expectation is to no-op or reset any legacy edit/delete/detail references whose old `TransactionId` could otherwise be reinterpreted against the new spending/transaction model.
+
+**Rationale:** Backend migration can reconstruct durable storage because the old backend model still contains the business facts. Frontend cached references do not have a trustworthy ID mapping once spendings become top-level records and transaction identity is re-derived, so preserving them risks opening or deleting the wrong spending.
+
+**Test Contract:**
+- `migrateFrontendDialog` may keep create drafts, but must drop legacy edit dialogs tied to a stored transaction id
+- `migrateFrontendMsg`, `migrateToBackend`, and `migrateToFrontend` must convert legacy transaction-addressed flows into safe no-ops or explicit reopen errors
+- Backend migration tests must assert spendings, transaction membership, statuses, and copied totals remain aligned after reconstruction
+
+**Implementation:** Backend migration test suite added; frontend tests updated to require stale-ID safety patterns.
+
+**Validation:** Repo validation passed.

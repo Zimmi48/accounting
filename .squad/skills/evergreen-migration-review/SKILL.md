@@ -15,6 +15,7 @@ Use this when Lamdera persistence changes are finally authorized and `lamdera ch
 - Count and eliminate every `Unimplemented` placeholder in `src/Evergreen/Migrate/*.elm`; no placeholder is harmless.
 - When storage moves from nested records to top-level arrays (or the reverse), verify that old persisted data is reconstructed, not defaulted away.
 - Preserve durable cross-record references (`Spending.transactionIds`, append-only slot ids, status flags) and check that migrated references still point at the migrated records.
+- When frontend state contains opaque runtime-only fields (for example `Browser.Navigation.Key`), prove migration safety through exposed dialog/message migration helpers and explicit reset/no-op expectations instead of forcing full-model fixtures.
 - Require a final `lamdera check --force` after manual edits, in addition to normal tests/builds, so the Evergreen set is internally coherent.
 
 ## Examples

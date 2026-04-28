@@ -252,3 +252,38 @@ Reviewed and validated Evergreen migration artifacts. Confirmed:
 - ✅ Post-edit `lamdera check --force` confirmed Evergreen coherence
 
 **Outcome:** Migration approved for production. All rejection criteria satisfied. Ready for deploy.
+
+- 2026-04-28: Migration regression coverage now lives in `tests/MigrationTests.elm` plus `tests/FrontendTests.elm`: backend fixtures should assert reconstructed `BackendModel.spendings`, per-day `Day.transactions`, `Spending.transactionIds`, transaction statuses, and copied credit totals from `src/Evergreen/Migrate/V26.elm`; frontend safety is best proven at exposed dialog/message migration boundaries (`migrateFrontendDialog`, `migrateFrontendMsg`, `migrateToBackend`, `migrateToFrontend`) because old `FrontendModel` contains an opaque navigation key that is awkward to construct in pure tests.
+
+## 2026-04-28T09:40:39Z: Migration Test Coverage Expansion — Backend + Frontend Safety
+
+**Event:** Assigned as tester for extensive migration coverage; Dallas confirmed frontend safety.
+
+**Context:** User directive requires backend migration extensively tested and frontend migration to avoid confusing stale IDs; acceptable to reset state.
+
+**Execution:**
+
+### Backend Migration Tests
+Added comprehensive `tests/MigrationTests.elm` coverage for V24→V26:
+- Spendings reconstruction from V24 per-day storage to V26 top-level array
+- Transaction membership: per-day `Day.transactions` array construction
+- Membership links: `Spending.transactionIds` list alignment with migrated transactions
+- Status propagation: Historical `Deleted`/`Replaced` statuses survive migration
+- Metadata preservation: Transaction line dates, descriptions, amounts
+- Totals correctness: Spending total and per-line credits/debits preserved
+
+### Frontend Test Assertions  
+Updated `tests/FrontendTests.elm` to require stale-ID safety patterns:
+- `migrateFrontendDialog`: Legacy edit dialogs must drop (not preserve)
+- `migrateFrontendMsg`: Legacy edit/delete/detail messages convert to no-ops
+- `migrateToBackend`/`migrateToFrontend`: Stale references handled safely
+
+**Decision:** Test contract locked: transaction-addressed UI state unsafe to preserve; must reset or no-op.
+
+**Outcome:**
+- ✅ Backend migration tests: Comprehensive coverage for all data structures
+- ✅ Frontend tests: Stale-ID safety assertions in place
+- ✅ Decision doc: Test contract for future migration work
+- ✅ Validation: Repo passing (tests, codecs, Frontend, Backend)
+
+**Status:** Complete. Ready for code review. Migration test infrastructure established for future releases.

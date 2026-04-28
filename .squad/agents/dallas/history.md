@@ -123,3 +123,30 @@
 **Consequence:** Dallas remains locked from this cycle per standing policy. No action required. Next ordering revision assigned to Hicks.
 
 **Status:** Cleanup phase complete; standby for next phase.
+
+## Learnings
+
+- 2026-04-28: `src/Evergreen/Migrate/V26.elm` already treats legacy transaction-addressed frontend state as unsafe: edit/delete dialogs are dropped, legacy edit/delete/detail messages become no-ops, `ListGroupTransactions` is cleared, and stale `TransactionDetails` responses become a reopen prompt instead of being remapped.
+- 2026-04-28: Migration regression coverage now lives primarily in `tests/MigrationTests.elm`, with supporting assertions in `tests/BackendTests.elm` and `tests/FrontendTests.elm`; the critical backend seam is “stored `Spending.transactionIds` must resolve back to the intended migrated `Day.transactions` rows”.
+
+## 2026-04-28T09:40:39Z: Frontend Migration Safety Review Complete
+
+**Event:** Assigned to full-stack migration seam review for V24→V26 frontend safety.
+
+**Task:** Validate frontend migration handling of stale transaction-addressed UI state; confirm no product changes needed.
+
+**Finding:** The existing migration already chooses the safe behavior:
+- Drops legacy edit/delete dialogs
+- Neutralizes legacy edit/delete/detail messages and requests
+- Clears migrated group transaction payloads
+- Surfaces a reopen prompt instead of reinterpreting stale transaction details
+
+**Decision:** Do not change product code. Legacy `TransactionId` values cannot be trusted to identify the same logical spending after the backend storage reshape.
+
+**Outcome:** 
+- ✅ Frontend migration safety confirmed
+- ✅ Regression test charter captured for Vasquez follow-up
+- ✅ Decision doc stored in team memory
+- ✅ Repo validation passed
+
+**Status:** Complete; coordinate with Vasquez on migration test expansion.
