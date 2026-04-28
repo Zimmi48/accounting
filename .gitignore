@@ -1,6 +1,7 @@
 elm-stuff
 elm
 node_modules/
+__pycache__/
 *.log
 # Squad: ignore runtime state (logs, inbox, sessions)
 .squad/orchestration-log/

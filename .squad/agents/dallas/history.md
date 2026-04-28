@@ -126,6 +126,7 @@
 
 ## Learnings
 
+- 2026-04-28: `scripts/compare_exports.py` should mirror the actual group-list seam, not just storage facts: replay backend `RequestGroupTransactions` filtering, then frontend `groupTransactionsFromBackend` newest-first ordering and `viewAmount`/description rendering so migration diffs catch row-order, sign, and composed-description regressions.
 - 2026-04-28: `src/Evergreen/Migrate/V26.elm` already treats legacy transaction-addressed frontend state as unsafe: edit/delete dialogs are dropped, legacy edit/delete/detail messages become no-ops, `ListGroupTransactions` is cleared, and stale `TransactionDetails` responses become a reopen prompt instead of being remapped.
 - 2026-04-28: Migration regression coverage now lives primarily in `tests/MigrationTests.elm`, with supporting assertions in `tests/BackendTests.elm` and `tests/FrontendTests.elm`; the critical backend seam is “stored `Spending.transactionIds` must resolve back to the intended migrated `Day.transactions` rows”.
 
@@ -150,3 +151,20 @@
 - ✅ Repo validation passed
 
 **Status:** Complete; coordinate with Vasquez on migration test expansion.
+
+## 2026-04-28: Group Transaction Diff - Revision Implementation
+
+**Event:** Revised scripts/compare_exports.py after Hudson's rejection by Vasquez.
+
+**Task:** Reimplement per-group active-transaction comparison to replay the real `RequestGroupTransactions` seam instead of stopping at storage parity.
+
+**Implementation:** 
+- Legacy exports: Derive group rows from active legacy spendings in newest-first order
+- Current exports: Derive group rows using backend's active-spending/active-transaction filter
+- Compare ordered rendered rows (date, composed description, rendered share, rendered total)
+
+**Validation:** Approved by Vasquez after code inspection and targeted Python seam assertions.
+
+**Result:** Export diff tool now covers complete group-listing seam. Ready for merge/deployment.
+
+**Key learning:** When implementing export/diff tools, must replay the exact backend/frontend paths that determine what users see, not just logical business invariants.

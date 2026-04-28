@@ -1213,3 +1213,62 @@ The existing migration already chooses the safe behavior for stale transaction-a
 **Implementation:** Backend migration test suite added; frontend tests updated to require stale-ID safety patterns.
 
 **Validation:** Repo validation passed.
+
+### Export diff normalization for migration review (2026-04-28)
+
+**Status:** Approved
+
+**Decision Owner:** Hudson
+
+**Decision:** Use a standalone Python script (`scripts/compare_exports.py`) to compare pre-migration and post-migration JSON exports semantically instead of structurally.
+
+**Rationale:** The migration changes how spendings are stored, so a raw JSON diff is noisy and hides the real question: did persisted meaning change? The comparison normalizes both legacy exports (`Day.spendings`) and current exports (`BackendModel.spendings` + `Day.transactions`) into logical spendings with dated transaction lines, semantic `totalGroupCredits`, groups, person-name sets, and `nextPersonId`.
+
+The report intentionally ignores storage-only churn such as `loggedInSessions`, raw `transactionIds`, spendings array positions, and opaque `groupMembersKey` strings. For totals, `groupMembersKey` is translated back to person-name sets so person-id churn does not create false positives.
+
+**Scope:** `scripts/compare_exports.py`, `README.md`
+
+**Validation:** Repo validation passed.
+
+### Group Transaction Diff Tool: Per-Seam Coverage (2026-04-28)
+
+**Status:** Approved
+
+**Decision Owner:** Hudson (initial), Vasquez (reviewer), Dallas (implementer)
+
+**Decision:** Extend `scripts/compare_exports.py` with a per-group active-transaction comparison that replays the real `RequestGroupTransactions` seam instead of stopping at storage-level parity.
+
+**Rationale:** 
+
+The initial export diff compared storage-level facts (spendings, totals, identities) and would catch bulk regressions. However, a migration can preserve stored facts while still changing which active rows appear in a group's transaction list and how they render. The true user-facing seam is the backend's `groupTransactionForList` logic, which:
+- Filters transactions to those whose status is `Active` AND whose owning spending is also `Active`
+- Transforms credit rows into negative shares (debits stay positive)
+- Composes row descriptions from spending description + optional secondaryDescription
+- Orders rows newest-first with same-day index preservation (later indexes sort ahead of earlier ones)
+
+**Review Cycle:**
+
+1. **Hudson (first revision):** Implemented initial comparison logic, but reviewer rejected because the script did not replay the actual listing seam.
+
+2. **Vasquez (first review):** Rejected Hudson's approach for missing backend filtering and frontend rendering semantics. Required follow-up: add direct per-group active transaction multiset comparison with active-only filtering, description composition, sign rendering, and ordering.
+
+3. **Dallas (revised implementation):** Replayed the real seam:
+   - Legacy exports: Derive group rows from active legacy spendings in newest-first order
+   - Current exports: Derive group rows using the same active-spending/active-transaction filter as `groupTransactionForList`
+   - Compare ordered rendered rows (date text, composed description, rendered share, rendered total)
+
+4. **Vasquez (re-review):** Approved Dallas's revision. Validated:
+   - Active filtering matches `src/Backend.elm` `groupTransactionForList`
+   - Credit/debit sign rendering matches app listing contract
+   - Description composition matches `transactionDescription` logic
+   - Per-group listing order matches real app seam (backend traversal → per-group bucket → frontend newest-first reversal)
+
+**Rule:**
+
+The export diff now includes two complementary checks:
+1. **Storage parity** (from prior decision): logical spendings, totals, identities, integrity
+2. **Listing seam parity** (new): per-group active transaction multiset with active filtering, rendered descriptions, signed shares, and newest-first ordering
+
+**Scope:** `scripts/compare_exports.py`, `README.md`
+
+**Validation:** Repo validation passed. Code inspection against `scripts/compare_exports.py`, `src/Backend.elm`, and `src/Frontend.elm`. Targeted Python assertions for active filtering, sign rendering, description composition, and per-group ordering.

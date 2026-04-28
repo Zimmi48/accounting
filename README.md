@@ -30,6 +30,24 @@ npm test
 lamdera live
 ```
 
+### Comparing exports before and after a migration
+
+To compare a JSON export from the version currently on `main`/production with a JSON export from this branch after the migration:
+
+```bash
+python3 scripts/compare_exports.py before.json after.json
+```
+
+Typical workflow:
+
+1. Export JSON from production or `main` before deploying the migration and save it as `before.json`.
+2. Deploy or run the migrated version, export again, and save it as `after.json`.
+3. Run the script above and inspect the report.
+
+The script normalizes both exports before diffing them. It ignores storage-only churn such as `loggedInSessions`, spending-array indexes, raw `transactionIds`, and opaque `groupMembersKey` values, and instead compares person names, groups, logical spendings, per-group active transaction lists, and aggregated totals. Exit code `0` means no semantic differences were found; exit code `1` means the report found differences.
+
+The active-transaction section follows the app's group transaction view semantics: for each group, it replays the active rows that would appear in `RequestGroupTransactions`, applies the frontend's newest-first ordering, and compares the rendered listing fields (date text, composed description, total, and signed share where credits are negative and debits positive).
+
 ### Auto-Generated Codecs
 
 The codecs in `src/Codecs.elm` are auto-generated from the types in `src/Types.elm` using [elm-review-derive](https://github.com/gampleman/elm-review-derive). The stub file `src/Codecs.elm.stub` contains type signatures with `Debug.todo ""` placeholders that elm-review-derive fills in.

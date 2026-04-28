@@ -30,6 +30,8 @@
 
 - 2026-04-28: Current validation baseline is green before any manual migration edits: `lamdera --version` = `0.19.1`, `npm test` passes (15 tests), `./check-codecs.sh` passes, and both `lamdera make src/Frontend.elm --output=/dev/null` and `lamdera make src/Backend.elm --output=/dev/null` succeed. Key reviewer file paths for this migration window are `src/Evergreen/Migrate/V26.elm`, `src/Evergreen/V24/Types.elm`, `src/Evergreen/V26/Types.elm`, `src/Types.elm`, `src/Backend.elm`, and `tests/{BackendTests,CodecsTests,FrontendTests}.elm`.
  
+- 2026-04-28: Hudson's `scripts/compare_exports.py` proves storage-level parity (`logical_spendings`, totals, integrity warnings), but it does **not** reconstruct the production `RequestGroupTransactions` seam in `src/Backend.elm`; reviewer coverage for group listings still needs a direct per-group active-transaction derivation or endpoint-level regression because `groupTransactionForList` owns active filtering, credit/debit share sign, and description stitching. Validation on this review pass: `lamdera --version` = `0.19.1`, both `lamdera make` targets succeed, and `npm test` passes (27 tests).
+
 ## Core Context
 
 **Spending/Transaction Model (Phase 2 Contract):**
@@ -287,3 +289,23 @@ Updated `tests/FrontendTests.elm` to require stale-ID safety patterns:
 - ✅ Validation: Repo passing (tests, codecs, Frontend, Backend)
 
 **Status:** Complete. Ready for code review. Migration test infrastructure established for future releases.
+
+- 2026-04-28: Re-review of Dallas's `scripts/compare_exports.py` revision approves the group-listing seam coverage. The script now mirrors `src/Backend.elm` `groupTransactionForList` plus `src/Frontend.elm` `groupTransactionsFromBackend`: it filters to active transactions with active spendings, composes descriptions with trimmed secondary descriptions, renders credit shares negative / debit shares positive via the same amount formatting, and reverses each per-group list to newest-first (including same-day index order). Key review files: `scripts/compare_exports.py`, `src/Backend.elm`, `src/Frontend.elm`, `README.md`.
+
+## 2026-04-28: Group Transaction Diff Review - Migration Safety Gate
+
+**Event:** Reviewed group transaction diff export tool for migration-safety seams.
+
+**Cycle 1 - First Review (Hudson):**
+- Rejected: Script compared storage-level facts but did not replay `RequestGroupTransactions` seam
+- Missing backend active filtering, frontend rendering, and ordering semantics
+- Established requirement: direct per-group active transaction multiset comparison
+
+**Cycle 2 - Re-Review (Dallas):**
+- Approved: Revised implementation replays real seam
+- Active filtering matches `src/Backend.elm` `groupTransactionForList`
+- Credit/debit sign rendering matches app listing contract
+- Description composition matches `transactionDescription` logic
+- Per-group ordering matches real seam (backend traversal → bucket → frontend newest-first)
+
+**Key learning:** Migration safety evidence must include user-facing seams, not just storage parity. Export diff now covers both logical spendings + group-list rendering semantics.

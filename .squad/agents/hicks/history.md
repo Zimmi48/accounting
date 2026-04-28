@@ -6,6 +6,29 @@
 - **Description:** Group expense and accounting app with Elm frontend and shared domain types.
 - **Created:** 2026-04-19
 
+## Core Context
+
+**Most Recent:** Transaction ordering fix (2026-04-27) — Frontend now correctly reverses backend's oldest-first listing to newest-first display.
+
+**Frontend responsibilities:**
+- Spending editor UI (src/Frontend.elm): debitors before creditors, auto-growing rows, no prominent Add button, row normalization with blank pruning
+- Row width contract: outer `el` owns width assignments, inner controls use `width fill` for breakpoint consistency
+- Transaction listing: consumes backend's `RequestGroupTransactions` (oldest-first via nested Dict.foldr), reverses to newest-first with same-day index ordering (later indexes sort ahead)
+- Ordering semantics: Backend order is ascending keys → frontend reversal maintains UI newest-first invariant
+
+**Key learnings:**
+- Backend `allTransactionsWithIds` emits oldest-first (ascending key order from Dict.foldr)
+- Frontend consumer seam (`groupTransactionsFromBackend`) applies List.reverse to store newest-first
+- Test coverage requires realistic backend response (ascending), not synthetic data
+- Row normalization must not auto-fill opposite-side amounts during editor edits
+- Detail-date column needs 200px minimum width for full ISO date visibility
+
+**Approval chain:**
+- UI Editor Polish (2026-04-21): ✅ Approved
+- Final UI Seam Fixes (2026-04-22, PR #39): ✅ Approved  
+- Virtual Transaction Line Alignment (2026-04-27): ✅ Approved
+- Transaction Ordering Revision (2026-04-27): ✅ Approved by Vasquez
+
 ## Learnings
 
 - 2026-04-24: Stabilized update-case ordering in src/Frontend.elm: moved UpdatePassword, UpdateJson, ViewportChanged to canonical position matching Types.elm to reduce noisy diffs.

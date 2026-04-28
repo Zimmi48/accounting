@@ -8,6 +8,8 @@
 
 ## Learnings
 
+- 2026-04-28: `scripts/compare_exports.py` now also compares each group's active transaction list using the same semantics as `RequestGroupTransactions` in `src/Backend.elm`: only active transactions whose owning spending is also active, normalized to date, rendered description (`description` + optional secondary description), spending total, and signed share. Key paths: `scripts/compare_exports.py`, `README.md`, `src/Backend.elm`.
+- 2026-04-28: Added `scripts/compare_exports.py` as a standalone migration-review tool for export diffs. It normalizes legacy day-scoped `spendings` exports and current split `spendings`+`transactions` exports into logical spendings, semantic `totalGroupCredits`, groups, and person-name sets; it intentionally ignores storage churn like raw `transactionIds`, `loggedInSessions`, and opaque `groupMembersKey` strings. Usage is documented in `README.md`.
 - 2026-04-27: `RequestGroupTransactions` in `src/Backend.elm` already emits newest-first rows through nested `Dict.foldr`, so the frontend seam in `src/Frontend.elm` must preserve backend order instead of reversing it. Regression coverage belongs on the `ListGroupTransactions` consumer path (now `groupTransactionsFromBackend`) with realistic backend-ordered fixtures, not on a standalone reversal helper. Validation for this frontend-only fix passed with `elm-format src/ tests/ --yes`, both `lamdera make` targets, `npm test` (15/15), and `lamdera live --port=8124` returning HTTP 200; no codec regeneration was needed.
 - Joined to own the post-model-review cleanup pass after prior authors were locked out on the spending/transaction split artifact.
 - User directive: do not generate the Evergreen migration before Théo reviews the model changes.
@@ -129,3 +131,33 @@
 **Decision Recorded to .squad/decisions.md**
 
 **Status:** Locked; awaiting Hicks's revision.
+
+---
+
+## Session: Export Diff Tool Completion (2026-04-28T14:46:16Z)
+
+**Topic:** Export diff tool for pre/post migration JSON comparison
+
+**Status:** ✅ Complete
+
+**Deliverables:**
+- `scripts/compare_exports.py` — semantic comparison script
+- README.md — documentation updates
+
+**Decision:** "Export diff normalization for migration review" approved and merged to decisions.md
+
+**Validation:** Repo validation passed. Tool normalizes logical spendings, groups, person-name sets, and totals while ignoring storage-only churn.
+
+**Outcome:** Addresses core challenge of noisy JSON diffs by enabling semantic comparison between legacy and current export formats.
+
+## 2026-04-28: Group Transaction Diff Tool - Export Seam Coverage
+
+**Event:** Initial implementation of per-group active-transaction comparison for export diff.
+
+**Assignment:** Implement scripts/compare_exports.py with per-group comparison to catch regressions in group transaction listings (user-facing seam).
+
+**Outcome:** First revision rejected by Vasquez for not replaying real `RequestGroupTransactions` seam semantics. Locked out and reassigned to Dallas for revision.
+
+**Key finding:** Storage-level parity alone is not sufficient; must include active filtering, description composition, sign rendering, and ordering from real backend/frontend paths.
+
+**Impact:** Established that export diff tool must compare the complete group-listing seam, not just aggregate storage facts.
