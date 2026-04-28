@@ -171,3 +171,25 @@
 - **Safe reset boundary:** Old frontend state and in-flight messages that only know a legacy `TransactionId` cannot recover a correct new `SpendingId` without backend context. In `src/Evergreen/Migrate/V26.elm`, preserve backend history exactly, but reset unverifiable frontend/UI seams (`groupTransactions`, edit/delete dialogs, legacy edit/delete/request messages) to safe no-ops rather than inventing ids.
 - **Legacy-to-new transaction bridge:** Old single-day credit/debit dictionaries migrate cleanly into new `SpendingTransaction` or stored `Transaction` rows by fanning out credits and debits on the legacy day, with empty `secondaryDescription` and group-members metadata rebuilt from `BackendModel.groups` + `BackendModel.persons`.
 - **Validation seam:** For this repo, migration work is not done until `lamdera check --force`, `elm-format src/ tests/ --yes`, `lamdera make src/Frontend.elm --output=/dev/null`, `lamdera make src/Backend.elm --output=/dev/null`, `npm test`, and `lamdera live` with an HTTP 200 probe all pass. Key files: `src/Evergreen/Migrate/V26.elm`, `src/Evergreen/V24/Types.elm`, `src/Evergreen/V26/Types.elm`, `src/Types.elm`, `src/Backend.elm`, `src/Frontend.elm`.
+
+## 2026-04-28: Evergreen V24→V26 migration completed
+
+**Session:** Evergreen migration preparation
+**Partner Agent:** Vasquez (review + validation coverage)
+
+Successfully executed two-commit Evergreen workflow:
+1. Commit ea069a6: Auto-generated files from `lamdera check --force`
+2. Commit fa185f07: Manual migration fills for all `Unimplemented` placeholders
+
+**Key strategy decisions:**
+- Preserve backend accounting history by rebuilding both new storage surfaces (top-level `spendings` array + per-day `transactions` array) in single chronological pass
+- Derive new IDs from append-only migration order to keep durable references coherent
+- Reconstruct `groupMembersKey` / `groupMembers` from legacy data during migration
+- Reset unverifiable frontend-only state to safe no-ops
+
+**Validation results:**
+- All repo checks green (tests, codecs, Frontend compilation, Backend compilation)
+- All `Unimplemented` placeholders resolved
+- Migration correctness confirmed by Vasquez (no data loss risks identified)
+
+**Outcome:** Ready for production deploy with confidence. Durable ID mapping ensures post-deploy consistency.

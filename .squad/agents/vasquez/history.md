@@ -24,6 +24,12 @@
 
 - 2026-04-28: Test failure investigation identified `getSpendingTransactionsWithIds` filtering out non-Active transactions. Filter removed to include all statuses. All 15 elm tests passing after fix.
 
+- 2026-04-28: Evergreen work is now explicitly authorized, and the workspace already contains untracked auto-generated `src/Evergreen/V26/` plus `src/Evergreen/Migrate/V26.elm` from a `lamdera check --force` pass. The migration surface is still the big V24 → V26 model jump (singleton transaction dialog/history to spending+transaction split), and `src/Evergreen/Migrate/V26.elm` currently carries 39 `Unimplemented` placeholders, so review must treat the first commit as pure generated artifacts and the follow-up commit as all semantic migration logic.
+
+- 2026-04-28: Reviewer focus for Evergreen in this repo is the persistence seam, not compile success: `src/Evergreen/V24/Types.elm` still stores per-day `Day.spendings : List Spending`, transaction-addressed dialogs/messages, and no top-level `BackendModel.spendings`, while `src/Evergreen/V26/Types.elm` / `src/Types.elm` expect append-only `BackendModel.spendings : Array Spending`, `Day.transactions : Array Transaction`, `Spending.transactionIds`, `SpendingReference`, and spending-scoped dialogs/messages.
+
+- 2026-04-28: Current validation baseline is green before any manual migration edits: `lamdera --version` = `0.19.1`, `npm test` passes (15 tests), `./check-codecs.sh` passes, and both `lamdera make src/Frontend.elm --output=/dev/null` and `lamdera make src/Backend.elm --output=/dev/null` succeed. Key reviewer file paths for this migration window are `src/Evergreen/Migrate/V26.elm`, `src/Evergreen/V24/Types.elm`, `src/Evergreen/V26/Types.elm`, `src/Types.elm`, `src/Backend.elm`, and `tests/{BackendTests,CodecsTests,FrontendTests}.elm`.
+ 
 ## Core Context
 
 **Spending/Transaction Model (Phase 2 Contract):**
@@ -224,3 +230,25 @@ Status: Ready for next phase.
 - ✅ lamdera make (both Frontend and Backend): Success
 
 **Impact:** Spending edit/delete workflows now properly track historical transaction slots via status markers, enabling audit trails and protecting against accidental reuse of old slots.
+
+## 2026-04-28: Evergreen V24→V26 migration review completed
+
+**Session:** Evergreen migration preparation
+**Partner Agent:** Ripley (strategy + execution)
+
+Reviewed and validated Evergreen migration artifacts. Confirmed:
+
+**Regression risk assessment:**
+1. ✅ Backend accounting history preserved (no empty arrays)
+2. ✅ Spending-transaction membership reconstructed correctly
+3. ✅ Historical status/audit data retained (append-only discipline)
+4. ✅ Frontend state safely reset where ID mapping cannot be reconstructed
+5. ✅ Two-commit workflow maintained (generated + manual separation)
+
+**Validation checklist passed:**
+- ✅ No `Unimplemented` placeholders remain
+- ✅ Commit boundaries clean (no mixing of generated + manual)
+- ✅ All repo checks green (tests, codecs, Frontend, Backend)
+- ✅ Post-edit `lamdera check --force` confirmed Evergreen coherence
+
+**Outcome:** Migration approved for production. All rejection criteria satisfied. Ready for deploy.

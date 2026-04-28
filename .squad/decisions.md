@@ -1054,3 +1054,113 @@ This would eliminate the separate `setTransactionStatuses` call and reduce from 
 **Risk:** Deep Dict manipulation in nested foldl is error-prone. Current separation keeps logic clear and maintainable.
 
 **Recommendation:** Profile first. Current performance is acceptable for typical spendings (<100 transactions). Only refactor if profiling shows measurable impact on user experience.
+
+---
+
+## 2026-04-28: User directive — Evergreen migration workflow
+
+**By:** Théo Zimmermann (via Copilot)
+**Date:** 2026-04-28T08:36:05Z
+
+For Evergreen migration work, use a two-commit workflow:
+1. First commit: run `lamdera check --force` and commit only the auto-generated files
+2. Second commit: adjust the generated files by filling in required migration logic
+
+This discipline separates generated artifacts from handwritten logic, making review clearer about the source of any regressions.
+
+---
+
+## 2026-04-28: Evergreen V26 migration boundary
+
+**By:** Ripley
+**Date:** 2026-04-28
+
+### Context
+The authorized `v24 -> v26` Lamdera migration changes persisted backend storage:
+- **Old:** `Day.spendings : List Spending`
+- **New:** Top-level `BackendModel.spendings : Array Spending` + per-day `Day.transactions : Array Transaction`
+
+Legacy frontend dialogs and in-flight messages identify records with old `TransactionId` values, but the new runtime contract requires `SpendingId` for edit/delete/detail flows.
+
+### Decision
+1. Preserve backend accounting history exactly by rebuilding both new storage surfaces from old day-local spendings in one chronological pass
+2. Derive new `SpendingId`s from append-only migration order and `transactionIds` from per-day append-only slot order to keep durable references coherent
+3. Rebuild `groupMembersKey` / `groupMembers` from legacy groups and persons during migration instead of defaulting them away
+4. Reset unverifiable frontend-only state and legacy edit/delete/detail messages to safe no-ops rather than fabricate `SpendingId`s that could target the wrong spending
+
+### Why
+Backend has enough persisted information to reconstruct the new model without data loss. Frontend migration surface does not: a bare legacy `TransactionId` does not encode the global array position needed for new `SpendingId`, so guessing would risk silent destructive edits.
+
+### Key files
+- `src/Evergreen/Migrate/V26.elm`
+- `src/Evergreen/V24/Types.elm`
+- `src/Evergreen/V26/Types.elm`
+- `src/Backend.elm`
+- `src/Frontend.elm`
+
+---
+
+## 2026-04-28: Vasquez review guidance — Evergreen migration window
+
+**By:** Vasquez
+**Date:** 2026-04-28
+
+### Main regression risks
+
+1. **Dropping persisted spendings during backend migration**
+   - V24 has no top-level `BackendModel.spendings`; spendings live inside each `Day.spendings`
+   - V26 expects top-level `BackendModel.spendings : Array Spending` plus `Day.transactions : Array Transaction`
+   - Any migration defaulting to empty arrays will silently erase real accounting history
+
+2. **Breaking spending-to-transaction membership**
+   - V26 persists `Spending.transactionIds : List TransactionId`
+   - If those ids are not reconstructed to match migrated `Day.transactions` slots, edit/delete/detail flows will target the wrong rows
+
+3. **Losing historical status/audit data**
+   - Current runtime depends on append-only records plus `TransactionStatus` (`Active`, `Deleted`, `Replaced`)
+   - Migration must preserve historical rows and statuses, not collapse to only active/current values
+
+4. **Incorrect mapping of old UI/session state**
+   - V24 frontend state is transaction-scoped; V26 is spending-scoped
+   - Unsafe defaults can strand users in broken dialogs or mis-target pending actions after deploy
+
+5. **Generated-vs-manual commit contamination**
+   - First commit must be raw `lamdera check --force` output only
+   - Manual migration logic belongs in separate follow-up commit
+
+### Validation checklist
+
+**Commit discipline:**
+- Commit 1: only auto-generated Evergreen artifacts from `lamdera check --force`
+- Commit 2: only manual edits that fill migration gaps
+
+**Migration correctness:**
+- No `Unimplemented` cases remain in `src/Evergreen/Migrate/V26.elm`
+- No removed-field placeholder lines remain
+- New constructor fallback cases resolved
+- Old V24 `Day.spendings` data actually transformed into V26 `BackendModel.spendings` + `Day.transactions`, not discarded
+- Reconstructed `Spending.transactionIds` match migrated day-bucket transactions
+- Transaction/spending statuses survive migration
+
+**Repo validations:**
+- `npm test`
+- `./check-codecs.sh`
+- `lamdera make src/Frontend.elm --output=/dev/null`
+- `lamdera make src/Backend.elm --output=/dev/null`
+- `lamdera check --force` after manual edits to confirm Evergreen set is coherent
+
+**Manual spot checks:**
+- Old transaction detail/edit/delete state has defined migration path or explicit safe reset
+- Group transaction lists preserve correct ordering and same-day slot identity
+- Deleted/replaced historical spending decodes with history intact
+
+### Rejection criteria
+
+Reject immediately if:
+- `src/Evergreen/Migrate/V26.elm` still contains `Unimplemented`
+- First "generated files" commit includes handwritten migration logic
+- Migration uses empty/default values where real persisted accounting data should be reconstructed
+- `Spending.transactionIds` no longer line up with migrated `Day.transactions`
+- Historical `Deleted` / `Replaced` rows disappear or are rewritten as fresh active data
+- Validation stops at compile/test success without post-edit `lamdera check --force`
+
