@@ -303,3 +303,74 @@ Both are logically correct; the test conflates them.
 - **Status:** Dual analysis now archived in decisions.md; Bishop's recommendation pending team review
 - **Next step:** Team decision on whether to proceed with per-group years refactor or defer due to drawbacks
 
+## Learnings (2026-05-02): Grouped-Years Refactor Invariant Review
+
+- **Session:** Read-only architecture review pass for grouped-years refactor. No product code edited.
+- **Refactor scope:** Move `BackendModel.years` inside each `Group`; add numeric group IDs from shared ID space with persons; expand `TransactionId` to include `groupId : Int`.
+- **5 blockers identified:**
+  1. `TransactionId` codec change: breaking change per Théo's directive — allowed, but production deployment requires Evergreen migration step (deferred by user).
+  2. `findTransaction` must route via `transactionId.groupId` — missing this causes completely silent failures in edit/delete (returns `Nothing`, wrapped in `Maybe.withDefault []`, so rollback never fires).
+  3. `setTransactionStatuses` and `removeTransactionFromModel` must route each transaction to its own group's years via `transactionId.groupId` — multi-group spendings require separate routing per transaction ID, not per spending.
+  4. `assignTransactionIds` must be (groupId, year, month, day) scoped — two groups on same date have independent slot namespaces; also requires adding `groupId` to `PendingTransaction`.
+  5. Shared numeric ID allocation — `CreateGroup` must increment the same counter as `CreatePerson`; recommend renaming `nextPersonId` to `nextEntityId` to make the shared nature explicit.
+- **Tests that must be updated by Bishop:** `BackendTests.dayStatuses`, `BackendTests.storedTotalsSnapshot` — both walk `model.years` directly. MigrationTests must NOT be updated (they test V24→V26, frozen at V26 shape).
+- **Reviewer gate:** Ripley requires all 9 items in `.squad/decisions/inbox/ripley-group-id-review.md` before merge, and no Evergreen files touched.
+- **Key architectural insight:** `groupMembersKey` (comma-separated person IDs) is an implementation artifact of global-years storage. With per-group years, `totalGroupCredits` at every level simplifies from `Dict String (Dict String (Amount Credit))` to `Dict String (Amount Credit)`. `groupMembersKey` on `Transaction` may become removable — but that is a separate decision to flag explicitly, not fold silently into this refactor.
+
+
+## 2026-05-02: Group-Owned Years Refactor — Invariant Review
+
+**Session:** 2026-05-02T14:09:09Z  
+**Task:** Review invariants for group-owned years, shared entity IDs, and TransactionId.groupId routing  
+**Mode:** Background, read-only pass (no code changes)  
+**Status:** COMPLETE
+
+### Invariant Review Output
+
+Completed comprehensive invariant review identifying 5 critical blockers and supporting surface audits:
+
+1. **`TransactionId` codec shape change is a migration-time contract** — Adding `groupId : Int` breaks codec. Per Théo's directive, update without shim. Note deployment dependency on Evergreen migration step.
+
+2. **`findTransaction` must route via `groupId`** — After refactor `model.years` removed. Function must use `transactionId.groupId` to locate owning group. Silent failure risk: all calls would return nothing, causing edit/delete no-ops while returning success.
+
+3. **`setTransactionStatuses` and `removeTransactionFromModel` must handle multi-group spendings** — Both iterate `Spending.transactionIds` (may span groups). Must use `transactionId.groupId` as primary routing key. Missing this causes silent stale accumulation (same corruption class as `getGroupMembersKey` bug).
+
+4. **`assignTransactionIds` must be scoped per (groupId, year, month, day)** — `dayTransactionCount` must read from correct group's years. Indices restart independently per group-date slot. Requires `groupId : Int` added to `PendingTransaction` (construction-phase type, not persisted).
+
+5. **Shared numeric ID allocation: one counter, two entity types** — `nextPersonId` renamed to `nextEntityId`, incremented in both `CreatePerson` and `CreateGroup`. Prevents ID collisions; without this, group IDs collide with person IDs (silent data-model inconsistency).
+
+### Hidden Invariants (Surfaces Currently Clean)
+
+Documented audit requirements for:
+- `allTransactionsWithIds`: must walk each `group.years` for all groups, preserve per-group traversal order
+- `groupTransactionForList`: can scope to target group's years directly (efficiency win)
+- `RequestUserGroups`: `person.belongsTo` stores group names; each group carries `totalGroupCredits` directly (eliminates two-hop indirection)
+- `Transaction.groupMembersKey` / `Transaction.groupMembers`: persisted fields, removal is separate decision from refactor
+
+### Tests to Update (per Bishop)
+
+| Test | What changes |
+|---|---|
+| `BackendTests.dayStatuses` | Route through `model.groups[group].years` instead of `model.years` |
+| `BackendTests.storedTotalsSnapshot` | Restructure around per-group years |
+| `BackendTests.singleBucketTotalsSnapshot` | Update if `TotalsSnapshot` type changes |
+
+**MigrationTests** frozen at V26 contract — no updates needed.  
+**CodecsTests** will catch codec shape drift automatically.
+
+### Reviewer Gate Checklist (for Bishop)
+
+Before merge, require:
+1. New `TransactionId` with `groupId : Int` shown
+2. Updated `findTransaction`, `dayTransactionCount`, `addTransactionToYear/Month/Day` using `groupId` routing
+3. Updated `setTransactionStatuses` and `removeTransactionFromModel` routing via `transactionId.groupId`
+4. Updated `assignTransactionIds` with group-scoped slot counting
+5. Updated shared ID allocation (`nextEntityId` or equivalent) incremented on both `CreatePerson` and `CreateGroup`
+6. Updated `allTransactionsWithIds` traversing per-group years
+7. Codec updated to new shapes (no compat layer)
+8. `BackendTests.dayStatuses` and `BackendTests.storedTotalsSnapshot` updated
+9. `npm test` passing
+10. **NO** `lamdera check --force` or `src/Evergreen/` file edits until Ripley signs off
+
+### Decision Merged
+Full review gates and invariant documentation merged to `.squad/decisions.md` under "Group-Owned Years Refactor: Review Gates".

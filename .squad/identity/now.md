@@ -1,10 +1,12 @@
 ---
-updated_at: 2026-04-21T17:31:32Z
-focus_area: Refining approved spending editor UI
+updated_at: 2026-05-02T14:09:09Z
+focus_area: Refactoring group-scoped transaction storage and stable IDs
 active_issues:
-  - Lighten the spending editor UI while preserving the approved spending/transaction contract
+  - Move transaction years and aggregate credits under groups instead of a single global years dictionary
+  - Introduce numeric group IDs from the same ID space as persons and include group ID in TransactionId
+  - Hold Evergreen migration work until the user reviews and validates the code changes
 ---
 
 # What We're Focused On
 
-Phase 2 contract correction is approved. Current work is a frontend refinement pass: lighter layout, hidden line-level date/secondary description by default, and debitors first again, without changing the approved data contract or generating Evergreen migrations.
+Current work has shifted to a backend/shared-model refactor: transactions and aggregate credits should be stored per group, group IDs should become numeric stable identifiers in the same ID space as persons, and TransactionId should expand to include the owning group ID. Do not generate or write the Evergreen migration yet; wait for user review and validation of the code changes first.

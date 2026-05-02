@@ -2,6 +2,76 @@
 
 ## Active Decisions
 
+### Group-Owned Years Refactor: Review Gates (Ripley, 2026-05-02)
+
+**Status:** Review complete, blocking gates documented for Bishop implementation.
+
+**Decision:** Five critical blockers identified and narrowest-safe paths documented:
+
+1. **`TransactionId` codec shape change is a migration-time contract** — Adding `groupId : Int` is a breaking codec change. Per Théo's codec-compat directive, update codec without shim. Note deployment dependency on Evergreen migration.
+
+2. **`findTransaction` must route via `groupId`** — After refactor, `model.years` no longer exists. Function must use `transactionId.groupId` to locate owning group, else all calls silently return nothing.
+
+3. **`setTransactionStatuses` and `removeTransactionFromModel` must handle multi-group spendings** — Both functions iterate `Spending.transactionIds` (may span groups). Must use `transactionId.groupId` as primary routing key, else stale amounts silently accumulate.
+
+4. **`assignTransactionIds` must be scoped per (groupId, year, month, day)** — `dayTransactionCount` must read from correct group's years. Indices restart independently per group-date slot. Requires `groupId : Int` added to `PendingTransaction`.
+
+5. **Shared numeric ID allocation: one counter, two entity types** — `nextPersonId` renamed to `nextEntityId`, incremented in both `CreatePerson` and `CreateGroup`. Prevents collisions between person and group IDs.
+
+**Why:** These invariants are currently implicit in global-years storage. Per-group storage makes them explicit requirements. Missing any one produces silent data corruption (stale aggregates, wrong transaction routing).
+
+**Narrowest safe paths:** Detailed routing requirements for each function, test updates, and codec migration dependency documented for Bishop.
+
+**Validation:** 
+- Ripley's review gates must be signed off before Bishop merge
+- `npm test` passing with updated tests for per-group bucket behavior
+
+**Related outputs:** Ripley's review gates in `.squad/decisions/inbox/ripley-group-id-review.md` (merged)
+
+---
+
+### Group-Owned Years Refactor: Implementation Scope (Bishop, 2026-05-02)
+
+**Status:** In progress, Evergreen migration deferred per user directive.
+
+**Decision:** Implement model refactor in runtime code without touching Evergreen:
+- Move transaction storage and aggregate credits under each stored group
+- Introduce shared numeric IDs for persons and groups from one allocator
+- Expand `TransactionId` to `{ groupId, year, month, day, index }`
+- Keep groups keyed by name at API boundary, store backend group records as `StoredGroup`
+
+**Implementation notes:**
+- `src/Types.elm`: root `years`/`totalGroupCredits` removed; `StoredGroup` owns `years` + `totalCredit`; `nextPersonId` replaced by `nextId`
+- `src/Backend.elm`: `CreatePerson` creates singleton group, `CreateGroup` inserts new `StoredGroup`, user/group queries read per-group totals, transaction add/remove/status logic updates owning group bucket
+- `src/Codecs.elm`: backend codec serializes `StoredGroup`, `nextId`, per-group totals, widened `TransactionId`
+- Tests updated to assert per-group bucket behavior and shared-id semantics
+
+**Why:** Preserves existing semantics that each transaction row belongs to exactly one conceptual group. Per-group storage avoids cross-group duplication. Numeric `groupId` in `TransactionId` gives stable backend addressing for multi-group spendings.
+
+**Constraint:** No Evergreen files edited or generated. Migration work deferred until Théo reviews runtime/codec refactor.
+
+**Validation:** 
+- Must satisfy all of Ripley's 9-point review gates
+- `npm test` passing
+- No Evergreen generation triggered
+
+---
+
+### User Directive: Evergreen Migration Deferral (2026-05-02)
+
+**Status:** Captured for team memory, constraints implemented.
+
+**Directive:** Do not write the Evergreen migration for the group-scoped years / grouped transaction-id refactor until code changes reviewed and validated.
+
+**By:** Théo Zimmermann (via Copilot)  
+**Why:** User request — code review and runtime validation required before migration-time contract is locked in
+
+**Operational consequence:** 
+- Bishop implements runtime/codec changes without Evergreen
+- Ripley gates block Bishop merge until complete
+- Migration deployment step tracked separately
+- CI will not generate Evergreen automatically (safe state)
+
 ### Lifecycle Total Invariants (Newt, 2026-04-29)
 
 **Status:** Approved and implemented.

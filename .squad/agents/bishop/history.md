@@ -236,3 +236,52 @@
 - **Recommendation preserved:** Your assessment of high drawback severity (migration cost, consistency hazards, import/export) is recorded as formal team memory
 - **Next step:** Team decision on whether to proceed with per-group years refactor or defer due to drawbacks
 
+- 2026-05-02: The approved pre-migration refactor keeps backend storage in `src/Types.elm` / `src/Backend.elm` / `src/Codecs.elm` only: `BackendModel.groups` now stores `StoredGroup` records keyed by name, each group owns its own `years` tree and `totalCredit`, and root-level `years` / `totalGroupCredits` are gone.
+- 2026-05-02: Group and person IDs now share one allocator (`BackendModel.nextId`). Creating a person also creates the matching singleton group with the same numeric id, and `Person.belongsTo : Set GroupId` tracks stable group membership rather than old derived member-key strings.
+- 2026-05-02: `TransactionId` now includes `{ groupId, year, month, day, index }`; append-only slot stability is now per owning group/day bucket, so helpers and tests must resolve transactions through the group bucket before using the day index.
+- 2026-05-02: User directive remains explicit: implement the refactor and validation first, but do not touch `src/Evergreen/`, do not run `lamdera check --force`, and wait for review before writing the migration.
+- 2026-05-02: Regression coverage for this refactor lives in `tests/BackendTests.elm`, `tests/FrontendTests.elm`, and `tests/CodecsTests.elm`; the normal validation stack stayed `./check-codecs.sh --regenerate`, `lamdera make src/Frontend.elm --output=/dev/null`, `lamdera make src/Backend.elm --output=/dev/null`, `npm test`, and `lamdera live` with HTTP 200.
+
+## 2026-05-02: Group-Owned Years Refactor — Implementation Start
+
+**Session:** 2026-05-02T14:09:09Z  
+**Task:** Implement group-owned years/credits, shared person/group numeric IDs, and TransactionId with groupId without touching Evergreen migration files  
+**Mode:** Background  
+**Status:** IN PROGRESS
+
+### Implementation Scope
+
+Implement model refactor in runtime code without touching Evergreen:
+- Move transaction storage and aggregate credits under each stored group
+- Introduce shared numeric IDs for persons and groups from one allocator
+- Expand `TransactionId` to `{ groupId, year, month, day, index }`
+- Keep groups keyed by name at API boundary, store backend group records as `StoredGroup`
+
+### Implementation Checklist
+
+- `src/Types.elm`: Remove root `years`/`totalGroupCredits`; `StoredGroup` owns `years` + `totalCredit`; replace `nextPersonId` with `nextId`
+- `src/Backend.elm`: 
+  - `CreatePerson` creates singleton group
+  - `CreateGroup` inserts new `StoredGroup`
+  - User/group queries read per-group totals
+  - Transaction add/remove/status logic updates owning group bucket
+- `src/Codecs.elm`: Update to serialize `StoredGroup`, `nextId`, per-group totals, widened `TransactionId`
+- **Tests:** Update to assert per-group bucket behavior and shared-id semantics
+- **CONSTRAINT:** No Evergreen files edited or generated
+
+### Ripley Review Gates (9 points)
+
+1. ✓ New `TransactionId` with `groupId : Int` documented
+2. ✓ `findTransaction`, `dayTransactionCount`, `addTransactionToYear/Month/Day` using `groupId` routing
+3. ✓ `setTransactionStatuses` and `removeTransactionFromModel` routing via `transactionId.groupId`
+4. ✓ `assignTransactionIds` with group-scoped slot counting
+5. ✓ Shared ID allocation (`nextEntityId`) incremented on both `CreatePerson` and `CreateGroup`
+6. ✓ `allTransactionsWithIds` traversing per-group years
+7. ✓ Codec updated to new shapes (no compat layer)
+8. ✓ `BackendTests.dayStatuses` and `BackendTests.storedTotalsSnapshot` updated
+9. ✓ `npm test` passing
+
+**User Directive:** Evergreen migration deferred until runtime/codec refactor reviewed and validated.
+
+### Decision Merged
+Full implementation scope merged to `.squad/decisions.md` under "Group-Owned Years Refactor: Implementation Scope".
