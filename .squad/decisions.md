@@ -177,6 +177,45 @@ Keep three layers of coverage:
 
 **Constraint:** Frontend-only refinement. Virtual row remains model-free; creation via group-name-only argument with auto-filled amount; no changes to `SpendingTransaction`, backend behavior, or data model.
 
+### Per-Group Years Architecture: Dual Evaluation (2026-04-29)
+
+**Status:** Evaluated from two perspectives; recommendation pending implementation.
+
+**Dual analysis:** Ripley (benefits) and Bishop (drawbacks) on proposed change to move `BackendModel.years` and `BackendModel.totalGroupCredits` into per-group storage.
+
+**Ripley's analysis (8 benefits identified):**
+1. `RequestGroupTransactions` becomes O(group) instead of O(all transactions)
+2. `totalGroupCredits` type drops one dimension at all hierarchy levels
+3. Dashboard query eliminates `groupMembersKey` indirection
+4. `Transaction.groupMembersKey` and `.groupMembers` fields become removable
+5. Group becomes self-contained entity (members + history + balance)
+6. Edit/delete mutations scoped to one group (isolation + tractability)
+7. `allTransactionsWithIds` replaceable with per-group helper
+8. Year/Month/Day aggregate types cohere with their scope
+
+**Most operationally impactful benefit:** Query scoping (Benefit 1) — efficiency gain proportional to number of groups.
+
+**Bishop's analysis (6 drawback categories identified):**
+1. **Migration cost** — Complex Evergreen migration (100+ lines), codec breaking change, test/script rewrites
+2. **Data duplication** — Multi-group spendings require duplicate records or complex cross-refs; consistency risk
+3. **Consistency hazards** — Multi-group atomic updates unsupported in Elm; orphaned transactions if groups deleted
+4. **Query complexity** — User queries O(1)→O(G); nested Dict.update adds unreadable nesting
+5. **Import/Export implications** — Breaking codec change; validator rewrite; inspection degradation
+6. **Cross-cutting dependencies** — Multi-group spending lookup complex; `transactionId` may need group field
+
+**Severity assessment (Bishop):**
+- High: Migration cost, Consistency hazards, Import/Export
+- Medium-High: Data duplication
+- Medium: Query complexity
+
+**Bishop's recommendation:** Drawbacks outweigh benefits; current architecture already supports efficient per-group queries; change would optimize group queries at expense of user queries, cross-group operations, and code maintainability.
+
+**Decision pending:** Team review of trade-offs and operational risk vs. long-term maintainability gains.
+
+**Artifacts:**
+- `.squad/decisions/inbox/ripley-group-years-benefits.md` (175 lines, 8 benefits with examples)
+- `.squad/decisions/inbox/bishop-group-years-drawbacks.md` (210 lines, 6 categories with code references)
+
 ## Governance
 
 - All meaningful changes require team consensus

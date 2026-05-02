@@ -272,3 +272,25 @@ Both are logically correct; the test conflates them.
 - **Recommendation:** Reframe assertion to filter stored-totals before comparing (Options A–C in full review)
 - **Orchestration status:** Under review; awaiting decision on test remediation strategy
 - **Artifact:** `.squad/decisions/inbox/ripley-lifecycle-totals-review.md` (archived to decisions.md)
+
+## Learnings (2026-04-29): Per-Group Years/TotalGroupCredits Benefits Analysis
+
+- **Analysis commissioned by:** Théo Zimmermann (paired with Bishop's drawbacks analysis)
+- **Deliverable:** `.squad/decisions/inbox/ripley-group-years-benefits.md`
+- **Top benefit identified:** `RequestGroupTransactions` currently calls `allTransactionsWithIds(model)` — a full O(all_transactions) scan — then filters by group name. Per-group years makes this O(group_transactions) with direct dict lookup. Largest operational win in the codebase.
+- **Type simplification chain:** `totalGroupCredits` at every level (root, Year, Month, Day) drops from `Dict String (Dict String (Amount Credit))` to `Dict String (Amount Credit)` because group context is already known. If `groupMembersKey` is also eliminated, it collapses further to a scalar `Amount Credit` per group.
+- **groupMembersKey is an implementation artifact:** The two-hop indirection (person.belongsTo → groupMembersKey → group name → amount) exists because transactions are stored globally. With per-group storage, the dashboard query (`RequestUserGroups`) becomes one hop: person is a member of groups, each group has `totalCredits : Amount Credit`. The `groupMembersKey` indirection is eliminable.
+- **person.belongsTo would store readable names:** Currently stores opaque composition keys like `"1,2,3"`. With per-group years + per-group totalCredits, it would store actual group names. This is a readability and maintainability win.
+- **Transaction.groupMembersKey and .groupMembers fields become removable:** These fields exist solely to maintain aggregates during `addTransactionToModel`. With per-group storage, they are redundant and can be eliminated from the persisted Transaction type.
+- **Cleanup bug tractability:** The known zero-valued-leaf bug (after delete, entries linger in totalGroupCredits) becomes scoped: "recompute this group's balance" is a bounded local operation, not a global dict repair.
+- **Key architectural summary:** The current model uses date hierarchy as primary storage axis and groups as a filter. The proposed model inverts this: group is the primary entity axis, date hierarchy is its internal organization. This matches the domain model.
+
+## 2026-05-02T13:58:17Z: Scribe Orchestration — Dual Analysis Merged
+
+- **Orchestration event:** Scribe merged Ripley and Bishop evaluations into `.squad/decisions.md`
+- **Decision entry:** Per-Group Years Architecture: Dual Evaluation (2026-04-29)
+- **Routing logs created:** `.squad/orchestration-log/2026-05-02T13:50:07Z-ripley.md` (benefits summary)
+- **Session log:** `.squad/log/2026-05-02T13:58:17Z-group-years-evaluation.md`
+- **Status:** Dual analysis now archived in decisions.md; Bishop's recommendation pending team review
+- **Next step:** Team decision on whether to proceed with per-group years refactor or defer due to drawbacks
+

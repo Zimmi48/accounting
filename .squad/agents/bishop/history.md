@@ -186,3 +186,29 @@
 - **Flag:** `--write-fixed` enables corrected export copy; errors in non-fixable fields preserved intentionally
 - **Decision merged:** Export Validator Fix Scope (2026-04-29)
 - **Status:** Completed; ready for merge review
+
+## 2026-04-29: Group-Local Years Dictionary Drawbacks Analysis
+
+- **Request:** Evaluate drawbacks of moving from global `BackendModel.years` to per-group `Group.years` with per-group `totalGroupCredits`
+- **Scope:** Drawbacks only—migration cost, duplication, consistency hazards, query complexity, import/export implications, cross-cutting dependencies
+- **Key Findings:**
+  - **Migration Cost (High):** Complex Evergreen migration to redistribute transactions from global years into per-group hierarchies; codec breaking change requires user coordination; test suite and validation script rewrites
+  - **Data Duplication (Medium-High):** Multi-group spendings (credits to one group, debits to another) require duplicate transaction records or complex cross-references; consistency hazard if updates aren't atomic
+  - **Consistency Hazards (High):** Multi-group atomic updates without rollback mechanism; orphaned transactions if groups deleted; `Spending.transactionIds` lookup becomes ambiguous without group identifier
+  - **Query Complexity (Medium):** User balance queries change from O(1) to O(G) group scan; nested Dict.update adds fifth level of nesting; all-transactions export requires nested folds over groups
+  - **Import/Export Implications (High):** Breaking codec change forces JSON export migration; `scripts/validate_totals.py` requires ~200-300 line rewrite; human-readability degrades (transactions scattered across groups)
+  - **Cross-Cutting Dependencies (High):** Multi-group spending lookup requires searching multiple groups' years; `TransactionId` may need group field (another breaking change); `person.belongsTo` maintenance becomes more complex
+- **Assessment:** Global years dictionary serves as single source of truth for date-ordered transactions; fragmenting by group introduces significant technical debt, operational risk, and migration complexity without clear performance or modeling benefit
+- **Recommendation:** Current architecture already supports efficient per-group queries via filtering; per-group aggregates are precomputed. Proposed change optimizes group queries at expense of user queries, cross-group operations, and maintainability.
+- **Artifact:** `.squad/decisions/inbox/bishop-group-years-drawbacks.md` (detailed analysis with code references)
+
+## 2026-05-02T13:58:17Z: Scribe Orchestration — Dual Analysis Merged
+
+- **Orchestration event:** Scribe merged Ripley and Bishop evaluations into `.squad/decisions.md`
+- **Decision entry:** Per-Group Years Architecture: Dual Evaluation (2026-04-29)
+- **Routing logs created:** `.squad/orchestration-log/2026-05-02T13:50:07Z-bishop.md` (drawbacks summary)
+- **Session log:** `.squad/log/2026-05-02T13:58:17Z-group-years-evaluation.md`
+- **Status:** Dual analysis now archived in decisions.md; Ripley's benefits documented alongside
+- **Recommendation preserved:** Your assessment of high drawback severity (migration cost, consistency hazards, import/export) is recorded as formal team memory
+- **Next step:** Team decision on whether to proceed with per-group years refactor or defer due to drawbacks
+
