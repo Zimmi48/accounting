@@ -27,6 +27,15 @@
 - Removing stored fields: needs migration logic (e.g., group old transactions by bucket, sum to spending total)
 - Current constraint: Do not generate Evergreen migrations until user approves model changes
 
+### Early Session Work Summary (2026-04-20 to 2026-04-26)
+**Phase 2 Contract & ID Regression Cycles:**
+- Phase 2 spending-level invariants locked (credits = debits = total); per-line dates and descriptions owned by transactions; user-approved
+- Transaction ID regression identified: prepend/append mismatch in `addTransactionToDay` caused durable `Spending.transactionIds` to map to wrong list positions; fixed via append-only discipline
+- Backend ID architecture review: `Transaction.spendingId` (back-reference) is canonical; `Spending.transactionIds` (forward) is valid but redundant and drift-prone
+- Array vs List analysis: container choice does not solve membership identity; deferred as future optimization; preference for model clarity established
+- Squashed PR review completed on model refactor (Backend 836L, Frontend 1217L) validating contract compliance
+- Multiple orchestration cycles through 2026-04-27 with actor assignments/rejections; final state approved with Dallas implementation
+
 ## Legacy Learnings (2026-04-19 to 2026-04-20)
 
 ## Learnings (2026-04-20)

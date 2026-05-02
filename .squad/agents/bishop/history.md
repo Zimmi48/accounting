@@ -6,6 +6,30 @@
 - **Description:** Group expense and accounting app with Lamdera backend and evergreen migrations.
 - **Created:** 2026-04-19
 
+## Core Context
+
+### Transaction Model & ID Stability
+- Spending/transaction split (2026-04-19): `BackendModel.spendings : Dict SpendingId Spending` + dated `Day.transactions : List Transaction`
+- Transactions marked `Replaced`/`Deleted` on edit (append-only per-record lifecycle); totals aggregates updated
+- `TransactionId = { year, month, day, index }` derived from append-only day positions; stored `Transaction.id` must be stable
+- Backend ID instability bug fixed (2026-04-27): replaced day-list position lookup with stored `transaction.id` matching
+- `nextSpendingId` removed (2026-04-27); `SpendingId` allocation now uses `Array.length model.spendings`
+- Key decision: append-only day transactions with positional IDs is safer than persisting redundant day-array indices
+
+### Codec & Migration Discipline
+- Codec workflow: `./check-codecs.sh --regenerate` for elm-review-derive codecs; manual tweaks for phantom types
+- Evergreen V26: legacy day-spendings migrated to append-only transaction format; frontend edit state reset to safe defaults
+- Phase discipline: Cross-cutting changes (Types + Backend + Frontend + Codecs) must compile at every step
+- Migration constraint: do not generate Evergreen until user approves model changes
+
+### Early Session Work Summary (2026-04-19 to 2026-04-26)
+**Initial Model Split & Codec Parity:**
+- Spending/transaction split landed in Types, Backend, and Evergreen V26 with stable ID counters
+- Phase 2 contract approved (2026-04-21): spending-level invariants, per-line dates, singleton transaction wire format
+- Codec parity refresh (2026-04-21) via regeneration without model changes; all gates green
+- ID redundancy cleanup (2026-04-27): removed `nextSpendingId`, aligned codec, updated backend lookup to stored-ID matching
+- Array vs List analysis (2026-04-27): append-only day discipline is necessary; array container change is deferred optimization
+
 ## Learnings
 
 - Initial roster assignment: Backend, model changes, and Lamdera migration ownership.

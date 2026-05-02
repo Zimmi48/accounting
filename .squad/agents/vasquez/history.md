@@ -69,6 +69,14 @@
 - `src/Backend.elm`: validateSpendingTransactions (spending-level invariant only)
 - `src/Frontend.elm`: normalizeSpendingDialogLines, normalizeTransactionLinesWithoutAutofill, transactionLineDetailsVisible, addSpendingInputs, width layout contracts
 
+**Early Session Work Summary (2026-04-19 to 2026-04-26):**
+- Initial roster: Tester/reviewer for cross-cutting changes; test harness ownership
+- Phase 2 contract validation: spending-level invariants, per-line dates, spending-date as UI seed only
+- Test suite setup: `elm-test init --compiler "$(which lamdera)"` in CI; 13 regression tests covering transaction invariants, dialog logic, codec parity
+- UI review gates: finalizing PR #39 (width contract, amount autofill prevention); Vasquez approval chain for all UI refinements
+- Validator gate locked: `elm-format --validate` + `./check-codecs.sh` required as release gates alongside compile checks
+- No Evergreen migration generated pending user model approval
+
 ## Summarized Context (2026-04-22 through 2026-04-27T12:14)
 
 **UI Seam & Validation Evolution:**

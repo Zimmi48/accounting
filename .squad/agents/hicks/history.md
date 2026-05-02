@@ -29,6 +29,15 @@
 - Virtual Transaction Line Alignment (2026-04-27): ✅ Approved
 - Transaction Ordering Revision (2026-04-27): ✅ Approved by Vasquez
 
+**Early Session Work Summary (2026-04-19 to 2026-04-26):**
+- Spending/transaction split UI: flattened spendings to per-line dates and secondary descriptions
+- Editor refinement cycles: debitors-before-creditors, collapsible details, icon polish (inline SVG over agj/elm-simple-icons brand library)
+- Row width contract: desktop flexible + 150px, small screens even split; outer `el` owns width, inner controls use `width fill`
+- Amount normalization: never auto-fill opposite side; spending-total changes update parent only
+- Transaction listing: reverses backend's oldest-first to newest-first; same-day index ordering respected
+- Ordering semantics: Backend ascending keys → frontend List.reverse for UI newest-first
+- Canonical test pattern: realistic ascending backend response, not synthetic data
+
 ## Learnings
 
 - 2026-04-24: Stabilized update-case ordering in src/Frontend.elm: moved UpdatePassword, UpdateJson, ViewportChanged to canonical position matching Types.elm to reduce noisy diffs.
