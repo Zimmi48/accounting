@@ -1542,3 +1542,37 @@ Opened GitHub issue #48 to document the backend cleanup leak (zero-valued entrie
 
 Related to: newt-lifecycle-total-invariants.md (test cleanup decision)
 
+
+---
+
+# Decision: Commit Grouped-Years Refactor; Defer Evergreen Migration; Plan ID-Keyed Entities
+
+**Timestamp:** 2026-05-02T15:44:48Z
+
+**Status:** Active
+
+**By:** Théo Zimmermann (Copilot)
+
+## Decision
+
+1. **Commit grouped-years refactor now** — The refactor is complete and ready to merge to main.
+2. **Continue deferring Evergreen migration** — Do not begin Evergreen migration work at this time.
+3. **Next experiment: ID-keyed entities** — Begin planning to key groups and persons by numeric ID while storing their names inside the records (not as top-level keys).
+
+## Rationale
+
+- User directive to move forward with grouped-years work
+- Evergreen migration remains blocked pending further planning
+- ID-keyed entity indexing is the next architectural step
+
+## Implementation Notes
+
+- Bishop team: Proceed with grouped-years refactor commits
+- Scribe: Capture directive for team memory and cross-agent context
+- No Evergreen migration files or `src/Evergreen/Migrate/` work at this time
+- Next phase: Numeric ID allocation and entity key refactoring
+
+## Related Decisions
+
+- Group-Owned Years Refactor: Implementation Scope (Bishop, 2026-05-02)
+- Group-Owned Years Refactor: Review Gates (Ripley, 2026-05-02)
