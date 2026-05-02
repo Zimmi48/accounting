@@ -29,43 +29,53 @@ suite =
                 \_ ->
                     let
                         model =
-                            emptyModel
-                                |> Backend.createSpendingInModel "Breakfast" (Amount 1200) baseTransactions
-                                |> Backend.createSpendingInModel "Lunch" (Amount 800) revisedTransactions
+                            groupedModel
+                                |> createSpending "Breakfast" (Amount 1200) baseTransactions
+                                |> createSpending "Lunch" (Amount 800) revisedTransactions
                     in
                     Expect.equal
-                        ( [ 0, 1 ], [ 2, 3 ] )
-                        ( transactionIndexes 0 model, transactionIndexes 1 model )
+                        ( [ "0-2025-4-18-0", "3-2025-4-18-0" ]
+                        , [ "1-2025-4-18-0", "3-2025-4-18-1" ]
+                        )
+                        ( transactionIds 0 model, transactionIds 1 model )
             , test "editing a spending keeps the replaced slots stable and appends the replacement rows" <|
                 \_ ->
                     let
                         originalModel =
-                            Backend.createSpendingInModel "Dinner" (Amount 1200) baseTransactions emptyModel
+                            createSpending "Dinner" (Amount 1200) baseTransactions groupedModel
 
                         editedModel =
                             replaceSpending 0 "Dinner (edited)" (Amount 800) revisedTransactions originalModel
                     in
                     Expect.equal
-                        ( [ ( 0, Replaced ), ( 1, Replaced ) ]
-                        , [ ( 2, Active ), ( 3, Active ) ]
-                        , [ Replaced, Replaced, Active, Active ]
-                        )
-                        ( transactionSlots 0 editedModel
-                        , transactionSlots 1 editedModel
-                        , dayStatuses 2025 4 18 editedModel
-                        )
+                        { original = [ ( "0-2025-4-18-0", Replaced ), ( "3-2025-4-18-0", Replaced ) ]
+                        , replacement = [ ( "1-2025-4-18-0", Active ), ( "3-2025-4-18-1", Active ) ]
+                        , aliceDay = [ Replaced ]
+                        , bobDay = [ Active ]
+                        , tripDay = [ Replaced, Active ]
+                        }
+                        { original = transactionSlots 0 editedModel
+                        , replacement = transactionSlots 1 editedModel
+                        , aliceDay = dayStatuses "Alice" 2025 4 18 editedModel
+                        , bobDay = dayStatuses "Bob" 2025 4 18 editedModel
+                        , tripDay = dayStatuses "Trip" 2025 4 18 editedModel
+                        }
             , test "deleting a spending keeps its historical slots while hiding it from active detail views" <|
                 \_ ->
                     let
                         originalModel =
-                            Backend.createSpendingInModel "Dinner" (Amount 1200) baseTransactions emptyModel
+                            createSpending "Dinner" (Amount 1200) baseTransactions groupedModel
 
                         deletedModel =
                             deleteSpending 0 originalModel
                     in
                     Expect.equal
-                        ( [ ( 0, Deleted ), ( 1, Deleted ) ], [] )
+                        ( [ ( "0-2025-4-18-0", Deleted ), ( "3-2025-4-18-0", Deleted ) ]
+                        , [ Deleted ]
+                        , []
+                        )
                         ( transactionSlots 0 deletedModel
+                        , dayStatuses "Trip" 2025 4 18 deletedModel
                         , Backend.spendingTransactionsForDetails 0 deletedModel
                         )
             ]
@@ -118,9 +128,8 @@ suite =
                             ]
                         )
             ]
-        , {- Totals are stored redundantly at global/year/month/day scope. These
-             lifecycle checks keep validating the active-total math while only
-             asserting stable numeric invariants on stored aggregates.
+        , {- Totals now live inside each owning group. These checks keep the
+             stored per-group aggregates aligned with the active transaction set.
           -}
           describe "spending lifecycle totals"
             [ test "same-day add/edit/delete keeps active totals exact and clears stale amounts numerically" <|
@@ -128,91 +137,53 @@ suite =
                     let
                         afterAdd =
                             groupedModel
-                                |> Backend.createSpendingInModel "Dinner" (Amount 1200) groupedBaseTransactions
+                                |> createSpending "Dinner" (Amount 1200) groupedBaseTransactions
 
                         afterEdit =
                             replaceSpending 0 "Dinner (edited)" (Amount 800) groupedRevisedTransactions afterAdd
 
                         afterDelete =
                             deleteSpending 1 afterEdit
-
-                        storedAfterEdit =
-                            storedTotalsSnapshot afterEdit
-
-                        storedAfterDelete =
-                            storedTotalsSnapshot afterDelete
                     in
                     Expect.equal
                         { activeSnapshots =
                             [ ( "after add"
-                              , singleBucketTotalsSnapshot 2025
-                                    4
-                                    18
-                                    "1,2"
-                                    [ ( "Alice", 1200 ), ( "Trip", -1200 ) ]
+                              , Dict.fromList
+                                    [ ( "Alice", fullGroupTotalSummary 1200 )
+                                    , ( "Trip", fullGroupTotalSummary -1200 )
+                                    ]
                               )
                             , ( "after edit"
-                              , singleBucketTotalsSnapshot 2025
-                                    4
-                                    18
-                                    "1,2"
-                                    [ ( "Bob", 800 ), ( "Trip", -800 ) ]
+                              , Dict.fromList
+                                    [ ( "Bob", fullGroupTotalSummary 800 )
+                                    , ( "Trip", fullGroupTotalSummary -800 )
+                                    ]
                               )
-                            , ( "after delete", emptyTotalsSnapshot )
+                            , ( "after delete", Dict.empty )
                             ]
                         , storedAfterEdit =
-                            { bob =
-                                { global = lookupGroupAmount "1,2" "Bob" storedAfterEdit.global
-                                , yearly = lookupBucketAmount 2025 "1,2" "Bob" storedAfterEdit.yearly
-                                , monthly = lookupBucketAmount ( 2025, 4 ) "1,2" "Bob" storedAfterEdit.monthly
-                                , daily = lookupBucketAmount ( 2025, 4, 18 ) "1,2" "Bob" storedAfterEdit.daily
-                                }
-                            , trip =
-                                { global = lookupGroupAmount "1,2" "Trip" storedAfterEdit.global
-                                , yearly = lookupBucketAmount 2025 "1,2" "Trip" storedAfterEdit.yearly
-                                , monthly = lookupBucketAmount ( 2025, 4 ) "1,2" "Trip" storedAfterEdit.monthly
-                                , daily = lookupBucketAmount ( 2025, 4, 18 ) "1,2" "Trip" storedAfterEdit.daily
-                                }
-                            , aliceCleared =
-                                [ missingOrZero (lookupGroupAmount "1,2" "Alice" storedAfterEdit.global)
-                                , missingOrZero (lookupBucketAmount 2025 "1,2" "Alice" storedAfterEdit.yearly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4 ) "1,2" "Alice" storedAfterEdit.monthly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4, 18 ) "1,2" "Alice" storedAfterEdit.daily)
-                                ]
+                            { bob = storedGroupTotalSummary "Bob" 2025 4 18 afterEdit
+                            , trip = storedGroupTotalSummary "Trip" 2025 4 18 afterEdit
+                            , aliceCleared = groupTotalCleared (storedGroupTotalSummary "Alice" 2025 4 18 afterEdit)
                             }
                         , storedAfterDelete =
-                            { bobCleared =
-                                [ missingOrZero (lookupGroupAmount "1,2" "Bob" storedAfterDelete.global)
-                                , missingOrZero (lookupBucketAmount 2025 "1,2" "Bob" storedAfterDelete.yearly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4 ) "1,2" "Bob" storedAfterDelete.monthly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4, 18 ) "1,2" "Bob" storedAfterDelete.daily)
-                                ]
-                            , tripCleared =
-                                [ missingOrZero (lookupGroupAmount "1,2" "Trip" storedAfterDelete.global)
-                                , missingOrZero (lookupBucketAmount 2025 "1,2" "Trip" storedAfterDelete.yearly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4 ) "1,2" "Trip" storedAfterDelete.monthly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4, 18 ) "1,2" "Trip" storedAfterDelete.daily)
-                                ]
+                            { bobCleared = groupTotalCleared (storedGroupTotalSummary "Bob" 2025 4 18 afterDelete)
+                            , tripCleared = groupTotalCleared (storedGroupTotalSummary "Trip" 2025 4 18 afterDelete)
                             }
                         }
                         { activeSnapshots =
-                            [ ( "after add", recomputedTotalsSnapshot afterAdd )
-                            , ( "after edit", recomputedTotalsSnapshot afterEdit )
-                            , ( "after delete", recomputedTotalsSnapshot afterDelete )
+                            [ ( "after add", recomputedGroupTotalsSummary 2025 4 18 [ "Alice", "Trip" ] afterAdd )
+                            , ( "after edit", recomputedGroupTotalsSummary 2025 4 18 [ "Bob", "Trip" ] afterEdit )
+                            , ( "after delete", recomputedGroupTotalsSummary 2025 4 18 [ "Bob", "Trip" ] afterDelete )
                             ]
                         , storedAfterEdit =
-                            { bob =
-                                { global = Just 800, yearly = Just 800, monthly = Just 800, daily = Just 800 }
-                            , trip =
-                                { global = Just -800, yearly = Just -800, monthly = Just -800, daily = Just -800 }
-                            , aliceCleared =
-                                [ True, True, True, True ]
+                            { bob = fullGroupTotalSummary 800
+                            , trip = fullGroupTotalSummary -800
+                            , aliceCleared = True
                             }
                         , storedAfterDelete =
-                            { bobCleared =
-                                [ True, True, True, True ]
-                            , tripCleared =
-                                [ True, True, True, True ]
+                            { bobCleared = True
+                            , tripCleared = True
                             }
                         }
             , test "cross-period edits and deletion move active totals without stale non-zero leftovers" <|
@@ -220,95 +191,56 @@ suite =
                     let
                         afterAdd =
                             groupedModel
-                                |> Backend.createSpendingInModel "Road trip" (Amount 900) crossPeriodTransactions
+                                |> createSpending "Road trip" (Amount 900) crossPeriodTransactions
 
                         afterEdit =
                             replaceSpending 0 "Road trip (moved)" (Amount 900) crossPeriodRevisedTransactions afterAdd
 
                         afterDelete =
                             deleteSpending 1 afterEdit
-
-                        storedAfterEdit =
-                            storedTotalsSnapshot afterEdit
-
-                        storedAfterDelete =
-                            storedTotalsSnapshot afterDelete
                     in
                     Expect.equal
                         { activeSnapshots =
                             [ ( "after add"
-                              , singleBucketTotalsSnapshot 2025
-                                    4
-                                    30
-                                    "1,2,3"
-                                    [ ( "Alice", 900 ), ( "House", -900 ) ]
+                              , Dict.fromList
+                                    [ ( "Alice", fullGroupTotalSummary 900 )
+                                    , ( "House", fullGroupTotalSummary -900 )
+                                    ]
                               )
                             , ( "after edit"
-                              , singleBucketTotalsSnapshot 2026
-                                    1
-                                    2
-                                    "1,2,3"
-                                    [ ( "Carol", 900 ), ( "Trip", -900 ) ]
+                              , Dict.fromList
+                                    [ ( "Carol", fullGroupTotalSummary 900 )
+                                    , ( "Trip", fullGroupTotalSummary -900 )
+                                    ]
                               )
-                            , ( "after delete", emptyTotalsSnapshot )
+                            , ( "after delete", Dict.empty )
                             ]
                         , storedAfterEdit =
-                            { carol =
-                                { global = lookupGroupAmount "1,2,3" "Carol" storedAfterEdit.global
-                                , yearly = lookupBucketAmount 2026 "1,2,3" "Carol" storedAfterEdit.yearly
-                                , monthly = lookupBucketAmount ( 2026, 1 ) "1,2,3" "Carol" storedAfterEdit.monthly
-                                , daily = lookupBucketAmount ( 2026, 1, 2 ) "1,2,3" "Carol" storedAfterEdit.daily
-                                }
-                            , trip =
-                                { global = lookupGroupAmount "1,2,3" "Trip" storedAfterEdit.global
-                                , yearly = lookupBucketAmount 2026 "1,2,3" "Trip" storedAfterEdit.yearly
-                                , monthly = lookupBucketAmount ( 2026, 1 ) "1,2,3" "Trip" storedAfterEdit.monthly
-                                , daily = lookupBucketAmount ( 2026, 1, 2 ) "1,2,3" "Trip" storedAfterEdit.daily
-                                }
+                            { carol = storedGroupTotalSummary "Carol" 2026 1 2 afterEdit
+                            , trip = storedGroupTotalSummary "Trip" 2026 1 2 afterEdit
                             , oldPeriodCleared =
-                                [ missingOrZero (lookupGroupAmount "1,2,3" "Alice" storedAfterEdit.global)
-                                , missingOrZero (lookupGroupAmount "1,2,3" "House" storedAfterEdit.global)
-                                , missingOrZero (lookupBucketAmount 2025 "1,2,3" "Alice" storedAfterEdit.yearly)
-                                , missingOrZero (lookupBucketAmount 2025 "1,2,3" "House" storedAfterEdit.yearly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4 ) "1,2,3" "Alice" storedAfterEdit.monthly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4 ) "1,2,3" "House" storedAfterEdit.monthly)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4, 30 ) "1,2,3" "Alice" storedAfterEdit.daily)
-                                , missingOrZero (lookupBucketAmount ( 2025, 4, 30 ) "1,2,3" "House" storedAfterEdit.daily)
+                                [ groupTotalCleared (storedGroupTotalSummary "Alice" 2025 4 30 afterEdit)
+                                , groupTotalCleared (storedGroupTotalSummary "House" 2025 4 30 afterEdit)
                                 ]
                             }
                         , storedAfterDelete =
-                            { carolCleared =
-                                [ missingOrZero (lookupGroupAmount "1,2,3" "Carol" storedAfterDelete.global)
-                                , missingOrZero (lookupBucketAmount 2026 "1,2,3" "Carol" storedAfterDelete.yearly)
-                                , missingOrZero (lookupBucketAmount ( 2026, 1 ) "1,2,3" "Carol" storedAfterDelete.monthly)
-                                , missingOrZero (lookupBucketAmount ( 2026, 1, 2 ) "1,2,3" "Carol" storedAfterDelete.daily)
-                                ]
-                            , tripCleared =
-                                [ missingOrZero (lookupGroupAmount "1,2,3" "Trip" storedAfterDelete.global)
-                                , missingOrZero (lookupBucketAmount 2026 "1,2,3" "Trip" storedAfterDelete.yearly)
-                                , missingOrZero (lookupBucketAmount ( 2026, 1 ) "1,2,3" "Trip" storedAfterDelete.monthly)
-                                , missingOrZero (lookupBucketAmount ( 2026, 1, 2 ) "1,2,3" "Trip" storedAfterDelete.daily)
-                                ]
+                            { carolCleared = groupTotalCleared (storedGroupTotalSummary "Carol" 2026 1 2 afterDelete)
+                            , tripCleared = groupTotalCleared (storedGroupTotalSummary "Trip" 2026 1 2 afterDelete)
                             }
                         }
                         { activeSnapshots =
-                            [ ( "after add", recomputedTotalsSnapshot afterAdd )
-                            , ( "after edit", recomputedTotalsSnapshot afterEdit )
-                            , ( "after delete", recomputedTotalsSnapshot afterDelete )
+                            [ ( "after add", recomputedGroupTotalsSummary 2025 4 30 [ "Alice", "House" ] afterAdd )
+                            , ( "after edit", recomputedGroupTotalsSummary 2026 1 2 [ "Carol", "Trip" ] afterEdit )
+                            , ( "after delete", recomputedGroupTotalsSummary 2026 1 2 [ "Carol", "Trip" ] afterDelete )
                             ]
                         , storedAfterEdit =
-                            { carol =
-                                { global = Just 900, yearly = Just 900, monthly = Just 900, daily = Just 900 }
-                            , trip =
-                                { global = Just -900, yearly = Just -900, monthly = Just -900, daily = Just -900 }
-                            , oldPeriodCleared =
-                                [ True, True, True, True, True, True, True, True ]
+                            { carol = fullGroupTotalSummary 900
+                            , trip = fullGroupTotalSummary -900
+                            , oldPeriodCleared = [ True, True ]
                             }
                         , storedAfterDelete =
-                            { carolCleared =
-                                [ True, True, True, True ]
-                            , tripCleared =
-                                [ True, True, True, True ]
+                            { carolCleared = True
+                            , tripCleared = True
                             }
                         }
             , test "group listings and spending details only expose the current active replacement rows" <|
@@ -316,7 +248,7 @@ suite =
                     let
                         afterAdd =
                             groupedModel
-                                |> Backend.createSpendingInModel "Dinner" (Amount 1200) groupedBaseTransactions
+                                |> createSpending "Dinner" (Amount 1200) groupedBaseTransactions
 
                         afterEdit =
                             replaceSpending 0 "Dinner (edited)" (Amount 800) groupedRevisedTransactions afterAdd
@@ -435,7 +367,7 @@ suite =
                                     ( spendingId
                                     , spending.description
                                     , spending.transactionIds
-                                        |> List.map transactionIdToString
+                                        |> List.map v26TransactionIdToString
                                     )
                                 )
                         )
@@ -548,7 +480,7 @@ replaceSpending spendingId description total transactions model =
                 )
                 activeTransactions
     in
-    Backend.createSpendingInModel description total transactions cleanedModel
+    createSpending description total transactions cleanedModel
 
 
 deleteSpending : SpendingId -> Backend.Model -> Backend.Model
@@ -572,14 +504,23 @@ groupedModel =
     { emptyModel
         | groups =
             Dict.fromList
-                [ ( "Trip"
-                  , Dict.fromList
+                [ ( "Alice"
+                  , storedGroup 0 [ ( "Alice", Share 1 ) ]
+                  )
+                , ( "Bob"
+                  , storedGroup 1 [ ( "Bob", Share 1 ) ]
+                  )
+                , ( "Carol"
+                  , storedGroup 2 [ ( "Carol", Share 1 ) ]
+                  )
+                , ( "Trip"
+                  , storedGroup 3
                         [ ( "Alice", Share 1 )
                         , ( "Bob", Share 1 )
                         ]
                   )
                 , ( "House"
-                  , Dict.fromList
+                  , storedGroup 4
                         [ ( "Bob", Share 1 )
                         , ( "Carol", Share 1 )
                         ]
@@ -587,30 +528,51 @@ groupedModel =
                 ]
         , persons =
             Dict.fromList
-                [ ( "Alice", { id = 1, belongsTo = Set.empty } )
-                , ( "Bob", { id = 2, belongsTo = Set.empty } )
-                , ( "Carol", { id = 3, belongsTo = Set.empty } )
+                [ ( "Alice", { id = 0, belongsTo = Set.fromList [ 0, 3 ] } )
+                , ( "Bob", { id = 1, belongsTo = Set.fromList [ 1, 3, 4 ] } )
+                , ( "Carol", { id = 2, belongsTo = Set.fromList [ 2, 4 ] } )
                 ]
-        , nextPersonId = 4
+        , nextId = 5
     }
 
 
-transactionIndexes : SpendingId -> Backend.Model -> List Int
-transactionIndexes spendingId model =
+storedGroup : GroupId -> List ( String, Share ) -> StoredGroup
+storedGroup id members =
+    { id = id
+    , members = Dict.fromList members
+    , years = Dict.empty
+    , totalCredit = Amount 0
+    }
+
+
+createSpending : String -> Amount Credit -> List SpendingTransaction -> Backend.Model -> Backend.Model
+createSpending description total transactions model =
+    case Backend.createSpendingInModel description total transactions model of
+        Ok updatedModel ->
+            updatedModel
+
+        Err errorMessage ->
+            Debug.todo errorMessage
+
+
+transactionIds : SpendingId -> Backend.Model -> List String
+transactionIds spendingId model =
     Backend.getSpendingTransactionsWithIds spendingId model
-        |> List.map (\( transactionId, _ ) -> transactionId.index)
+        |> List.map (\( transactionId, _ ) -> currentTransactionIdToString transactionId)
 
 
-transactionSlots : SpendingId -> Backend.Model -> List ( Int, TransactionStatus )
+transactionSlots : SpendingId -> Backend.Model -> List ( String, TransactionStatus )
 transactionSlots spendingId model =
     Backend.getSpendingTransactionsWithIds spendingId model
-        |> List.map (\( transactionId, transaction ) -> ( transactionId.index, transaction.status ))
+        |> List.map (\( transactionId, transaction ) -> ( currentTransactionIdToString transactionId, transaction.status ))
 
 
-dayStatuses : Int -> Int -> Int -> Backend.Model -> List TransactionStatus
-dayStatuses year month day model =
-    model.years
-        |> Dict.get year
+dayStatuses : String -> Int -> Int -> Int -> Backend.Model -> List TransactionStatus
+dayStatuses group year month day model =
+    model.groups
+        |> Dict.get group
+        |> Maybe.map .years
+        |> Maybe.andThen (Dict.get year)
         |> Maybe.andThen (.months >> Dict.get month)
         |> Maybe.andThen (.days >> Dict.get day)
         |> Maybe.map (.transactions >> Array.toList >> List.map .status)
@@ -625,79 +587,52 @@ findAmount group side transactions =
         |> Maybe.map .amount
 
 
-type alias TotalsSnapshot =
-    { global : Dict.Dict String (Dict.Dict String (Amount Credit))
-    , yearly : Dict.Dict Int (Dict.Dict String (Dict.Dict String (Amount Credit)))
-    , monthly : Dict.Dict ( Int, Int ) (Dict.Dict String (Dict.Dict String (Amount Credit)))
-    , daily : Dict.Dict ( Int, Int, Int ) (Dict.Dict String (Dict.Dict String (Amount Credit)))
+type alias GroupTotalSummary =
+    { total : Maybe Int
+    , yearly : Maybe Int
+    , monthly : Maybe Int
+    , daily : Maybe Int
     }
 
 
-emptyTotalsSnapshot : TotalsSnapshot
-emptyTotalsSnapshot =
-    { global = Dict.empty
-    , yearly = Dict.empty
-    , monthly = Dict.empty
-    , daily = Dict.empty
+fullGroupTotalSummary : Int -> GroupTotalSummary
+fullGroupTotalSummary amount =
+    { total = Just amount
+    , yearly = Just amount
+    , monthly = Just amount
+    , daily = Just amount
     }
 
 
-singleBucketTotalsSnapshot : Int -> Int -> Int -> String -> List ( String, Int ) -> TotalsSnapshot
-singleBucketTotalsSnapshot year month day groupMembersKey amounts =
-    let
-        groupCredits =
-            Dict.fromList (List.map (\( group, amount ) -> ( group, Amount amount )) amounts)
-
-        totals =
-            Dict.singleton groupMembersKey groupCredits
-    in
-    { global = totals
-    , yearly = Dict.singleton year totals
-    , monthly = Dict.singleton ( year, month ) totals
-    , daily = Dict.singleton ( year, month, day ) totals
-    }
-
-
-storedTotalsSnapshot : Backend.Model -> TotalsSnapshot
-storedTotalsSnapshot model =
-    { global = model.totalGroupCredits
+storedGroupTotalSummary : String -> Int -> Int -> Int -> Backend.Model -> GroupTotalSummary
+storedGroupTotalSummary groupName year month day model =
+    { total =
+        model.groups
+            |> Dict.get groupName
+            |> Maybe.map (.totalCredit >> amountValue)
     , yearly =
-        model.years
-            |> Dict.map (\_ year -> year.totalGroupCredits)
+        model.groups
+            |> Dict.get groupName
+            |> Maybe.andThen (.years >> Dict.get year)
+            |> Maybe.map (.totalCredit >> amountValue)
     , monthly =
-        model.years
-            |> Dict.foldl
-                (\year yearRecord monthly ->
-                    yearRecord.months
-                        |> Dict.foldl
-                            (\month monthRecord ->
-                                Dict.insert ( year, month ) monthRecord.totalGroupCredits
-                            )
-                            monthly
-                )
-                Dict.empty
+        model.groups
+            |> Dict.get groupName
+            |> Maybe.andThen (.years >> Dict.get year)
+            |> Maybe.andThen (.months >> Dict.get month)
+            |> Maybe.map (.totalCredit >> amountValue)
     , daily =
-        model.years
-            |> Dict.foldl
-                (\year yearRecord daily ->
-                    yearRecord.months
-                        |> Dict.foldl
-                            (\month monthRecord dailyAcc ->
-                                monthRecord.days
-                                    |> Dict.foldl
-                                        (\day dayRecord ->
-                                            Dict.insert ( year, month, day ) dayRecord.totalGroupCredits
-                                        )
-                                        dailyAcc
-                            )
-                            daily
-                )
-                Dict.empty
+        model.groups
+            |> Dict.get groupName
+            |> Maybe.andThen (.years >> Dict.get year)
+            |> Maybe.andThen (.months >> Dict.get month)
+            |> Maybe.andThen (.days >> Dict.get day)
+            |> Maybe.map (.totalCredit >> amountValue)
     }
 
 
-recomputedTotalsSnapshot : Backend.Model -> TotalsSnapshot
-recomputedTotalsSnapshot model =
+recomputedGroupTotals : Backend.Model -> Dict.Dict String GroupTotalSummary
+recomputedGroupTotals model =
     Backend.allTransactionsWithIds model
         |> List.filter
             (\( _, transaction ) ->
@@ -709,78 +644,83 @@ recomputedTotalsSnapshot model =
                        )
             )
         |> List.foldl
-            (\( transactionId, transaction ) snapshot ->
+            (\( transactionId, transaction ) ->
                 let
-                    groupCredits =
-                        Backend.groupCreditsForTransaction transaction
+                    groupCredit =
+                        Backend.groupCreditForTransaction transaction
                 in
-                { global =
-                    snapshot.global
-                        |> Backend.addToTotalGroupCredits transaction.groupMembersKey groupCredits
-                , yearly =
-                    snapshot.yearly
-                        |> addBucket transaction.groupMembersKey groupCredits transactionId.year
-                , monthly =
-                    snapshot.monthly
-                        |> addBucket transaction.groupMembersKey groupCredits ( transactionId.year, transactionId.month )
-                , daily =
-                    snapshot.daily
-                        |> addBucket transaction.groupMembersKey groupCredits ( transactionId.year, transactionId.month, transactionId.day )
-                }
+                Dict.update transaction.group
+                    (\maybeSummary ->
+                        let
+                            updatedSummary =
+                                maybeSummary
+                                    |> Maybe.withDefault (fullGroupTotalSummary 0)
+                                    |> addGroupCredit groupCredit
+                        in
+                        Just updatedSummary
+                    )
             )
-            emptyTotalsSnapshot
+            Dict.empty
 
 
-addBucket :
-    String
-    -> Dict.Dict String (Amount Credit)
-    -> comparable
-    -> Dict.Dict comparable (Dict.Dict String (Dict.Dict String (Amount Credit)))
-    -> Dict.Dict comparable (Dict.Dict String (Dict.Dict String (Amount Credit)))
-addBucket groupMembersKey groupCredits key =
-    Dict.update key
-        (\maybeCredits ->
-            Just
-                (maybeCredits
-                    |> Maybe.withDefault Dict.empty
-                    |> Backend.addToTotalGroupCredits groupMembersKey groupCredits
-                )
-        )
+addGroupCredit : Amount Credit -> GroupTotalSummary -> GroupTotalSummary
+addGroupCredit (Amount amount) summary =
+    { total = summary.total |> Maybe.withDefault 0 |> (+) amount |> Just
+    , yearly = summary.yearly |> Maybe.withDefault 0 |> (+) amount |> Just
+    , monthly = summary.monthly |> Maybe.withDefault 0 |> (+) amount |> Just
+    , daily = summary.daily |> Maybe.withDefault 0 |> (+) amount |> Just
+    }
 
 
-lookupGroupAmount :
-    String
-    -> String
-    -> Dict.Dict String (Dict.Dict String (Amount Credit))
-    -> Maybe Int
-lookupGroupAmount groupMembersKey member =
-    Dict.get groupMembersKey
-        >> Maybe.andThen (Dict.get member)
-        >> Maybe.map (\(Amount amount) -> amount)
+recomputedGroupTotalsSummary : Int -> Int -> Int -> List String -> Backend.Model -> Dict.Dict String GroupTotalSummary
+recomputedGroupTotalsSummary year month day names model =
+    let
+        allSummaries =
+            recomputedGroupTotals model
+    in
+    names
+        |> List.filterMap
+            (\name ->
+                Dict.get name allSummaries
+                    |> Maybe.andThen
+                        (\summary ->
+                            if summary.total == Just 0 then
+                                Nothing
+
+                            else
+                                Just
+                                    ( name
+                                    , { total = summary.total
+                                      , yearly = summary.yearly
+                                      , monthly = summary.monthly
+                                      , daily = summary.daily
+                                      }
+                                    )
+                        )
+            )
+        |> Dict.fromList
 
 
-lookupBucketAmount :
-    comparable
-    -> String
-    -> String
-    -> Dict.Dict comparable (Dict.Dict String (Dict.Dict String (Amount Credit)))
-    -> Maybe Int
-lookupBucketAmount bucketKey groupMembersKey member =
-    Dict.get bucketKey
-        >> Maybe.andThen (lookupGroupAmount groupMembersKey member)
+groupTotalCleared : GroupTotalSummary -> Bool
+groupTotalCleared summary =
+    [ summary.total, summary.yearly, summary.monthly, summary.daily ]
+        |> List.all
+            (\maybeAmount ->
+                case maybeAmount of
+                    Nothing ->
+                        True
+
+                    Just 0 ->
+                        True
+
+                    Just _ ->
+                        False
+            )
 
 
-missingOrZero : Maybe Int -> Bool
-missingOrZero maybeAmount =
-    case maybeAmount of
-        Nothing ->
-            True
-
-        Just 0 ->
-            True
-
-        Just _ ->
-            False
+amountValue : Amount a -> Int
+amountValue (Amount amount) =
+    amount
 
 
 listedTransactions :
@@ -797,7 +737,14 @@ listedTransactions :
             }
 listedTransactions group model =
     Backend.allTransactionsWithIds model
-        |> List.filterMap (Backend.groupTransactionForList model group)
+        |> List.filterMap
+            (\( transactionId, transaction ) ->
+                if transaction.group == group then
+                    Backend.groupTransactionForList model ( transactionId, transaction )
+
+                else
+                    Nothing
+            )
         |> List.map
             (\transaction ->
                 { description = transaction.description
@@ -912,8 +859,21 @@ v26DayTransactions year month day model =
         |> Maybe.withDefault []
 
 
-transactionIdToString : V26.TransactionId -> String
-transactionIdToString transactionId =
+currentTransactionIdToString : TransactionId -> String
+currentTransactionIdToString transactionId =
+    String.fromInt transactionId.groupId
+        ++ "-"
+        ++ String.fromInt transactionId.year
+        ++ "-"
+        ++ String.fromInt transactionId.month
+        ++ "-"
+        ++ String.fromInt transactionId.day
+        ++ "-"
+        ++ String.fromInt transactionId.index
+
+
+v26TransactionIdToString : V26.TransactionId -> String
+v26TransactionIdToString transactionId =
     String.fromInt transactionId.year
         ++ "-"
         ++ String.fromInt transactionId.month

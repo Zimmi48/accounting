@@ -1,12 +1,12 @@
 ---
-updated_at: 2026-05-02T14:09:09Z
-focus_area: Refactoring group-scoped transaction storage and stable IDs
+updated_at: 2026-05-02T15:44:48Z
+focus_area: Committing grouped-years refactor and preparing ID-keyed entity experiment
 active_issues:
-  - Move transaction years and aggregate credits under groups instead of a single global years dictionary
-  - Introduce numeric group IDs from the same ID space as persons and include group ID in TransactionId
-  - Hold Evergreen migration work until the user reviews and validates the code changes
+  - Commit the completed group-owned years / grouped TransactionId refactor
+  - Continue delaying Evergreen migration work
+  - Next experiment: key groups and persons by numeric ID and store names inside records
 ---
 
 # What We're Focused On
 
-Current work has shifted to a backend/shared-model refactor: transactions and aggregate credits should be stored per group, group IDs should become numeric stable identifiers in the same ID space as persons, and TransactionId should expand to include the owning group ID. Do not generate or write the Evergreen migration yet; wait for user review and validation of the code changes first.
+The grouped-years refactor is complete and ready to commit. Evergreen migration work remains intentionally delayed, and the next planned experiment is to index groups and persons by numeric ID while storing their names inside the corresponding records.

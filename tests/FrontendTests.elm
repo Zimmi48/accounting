@@ -91,30 +91,30 @@ suite =
                 \_ ->
                     let
                         backendTransactions =
-                            [ listedTransaction 0 2025 4 16
-                            , listedTransaction 0 2025 4 17
-                            , listedTransaction 1 2025 4 18
-                            , listedTransaction 2 2025 4 18
+                            [ listedTransaction 1 0 2025 4 16
+                            , listedTransaction 1 0 2025 4 17
+                            , listedTransaction 1 1 2025 4 18
+                            , listedTransaction 1 2 2025 4 18
                             ]
                     in
                     Expect.equal
-                        [ listedTransaction 2 2025 4 18
-                        , listedTransaction 1 2025 4 18
-                        , listedTransaction 0 2025 4 17
-                        , listedTransaction 0 2025 4 16
+                        [ listedTransaction 1 2 2025 4 18
+                        , listedTransaction 1 1 2025 4 18
+                        , listedTransaction 1 0 2025 4 17
+                        , listedTransaction 1 0 2025 4 16
                         ]
                         (Frontend.groupTransactionsFromBackend
                             "Trip"
                             "Trip"
                             backendTransactions
-                            [ listedTransaction 9 2025 4 1 ]
+                            [ listedTransaction 1 9 2025 4 1 ]
                         )
             , test "ListGroupTransactions ignores responses for another group" <|
                 \_ ->
                     let
                         existingTransactions =
-                            [ listedTransaction 2 2025 4 18
-                            , listedTransaction 0 2025 4 16
+                            [ listedTransaction 1 2 2025 4 18
+                            , listedTransaction 1 0 2025 4 16
                             ]
                     in
                     Expect.equal
@@ -122,7 +122,7 @@ suite =
                         (Frontend.groupTransactionsFromBackend
                             "Trip"
                             "Other group"
-                            [ listedTransaction 0 2025 4 16 ]
+                            [ listedTransaction 1 0 2025 4 16 ]
                             existingTransactions
                         )
             ]
@@ -232,6 +232,7 @@ listedTransaction :
     -> Int
     -> Int
     -> Int
+    -> Int
     ->
         { transactionId : TransactionId
         , spendingId : SpendingId
@@ -242,9 +243,10 @@ listedTransaction :
         , total : Amount Debit
         , share : Amount Debit
         }
-listedTransaction index year month day =
+listedTransaction groupId index year month day =
     { transactionId =
-        { year = year
+        { groupId = groupId
+        , year = year
         , month = month
         , day = day
         , index = index

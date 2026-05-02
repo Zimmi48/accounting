@@ -36,38 +36,66 @@ roundTripModel =
                         { model
                             | persons =
                                 Dict.fromList
-                                    [ ( "Alice", { id = 0, belongsTo = Set.empty } )
-                                    , ( "Bob", { id = 1, belongsTo = Set.empty } )
+                                    [ ( "Alice", { id = 0, belongsTo = Set.singleton 0 } )
+                                    , ( "Bob", { id = 1, belongsTo = Set.singleton 1 } )
                                     ]
-                            , nextPersonId = 2
+                            , nextId = 3
                             , groups =
                                 Dict.fromList
-                                    [ ( "Trip", Dict.fromList [ ( "Alice", Share 1 ), ( "Bob", Share 1 ) ] ) ]
+                                    [ ( "Alice"
+                                      , { id = 0
+                                        , members = Dict.fromList [ ( "Alice", Share 1 ) ]
+                                        , years = Dict.empty
+                                        , totalCredit = Amount 0
+                                        }
+                                      )
+                                    , ( "Bob"
+                                      , { id = 1
+                                        , members = Dict.fromList [ ( "Bob", Share 1 ) ]
+                                        , years = Dict.empty
+                                        , totalCredit = Amount 0
+                                        }
+                                      )
+                                    , ( "Trip"
+                                      , { id = 2
+                                        , members = Dict.fromList [ ( "Alice", Share 1 ), ( "Bob", Share 1 ) ]
+                                        , years = Dict.empty
+                                        , totalCredit = Amount 0
+                                        }
+                                      )
+                                    ]
                         }
                    )
 
         createdModel =
-            Backend.createSpendingInModel
-                "Dinner"
-                (Amount 1000)
-                [ { year = 2025
-                  , month = 4
-                  , day = 18
-                  , secondaryDescription = "Paid upfront"
-                  , group = "Alice"
-                  , amount = Amount 1000
-                  , side = CreditTransaction
-                  }
-                , { year = 2025
-                  , month = 4
-                  , day = 18
-                  , secondaryDescription = "Shared meal"
-                  , group = "Trip"
-                  , amount = Amount 1000
-                  , side = DebitTransaction
-                  }
-                ]
-                seededModel
+            case
+                Backend.createSpendingInModel
+                    "Dinner"
+                    (Amount 1000)
+                    [ { year = 2025
+                      , month = 4
+                      , day = 18
+                      , secondaryDescription = "Paid upfront"
+                      , group = "Alice"
+                      , amount = Amount 1000
+                      , side = CreditTransaction
+                      }
+                    , { year = 2025
+                      , month = 4
+                      , day = 18
+                      , secondaryDescription = "Shared meal"
+                      , group = "Trip"
+                      , amount = Amount 1000
+                      , side = DebitTransaction
+                      }
+                    ]
+                    seededModel
+            of
+                Ok model ->
+                    model
+
+                Err errorMessage ->
+                    Debug.todo errorMessage
     in
     deleteSpending 0 createdModel
 

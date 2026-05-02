@@ -48,74 +48,33 @@ decodeString s =
 backendCodec : Codec BackendModel
 backendCodec =
     Codec.object BackendModel
-        |> Codec.field
-            "years"
-            .years
-            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int yearCodec)))
         |> Codec.field "spendings" .spendings (Codec.array spendingCodec)
-        |> Codec.field "groups" .groups (Codec.dict (Codec.dict shareCodec))
-        |> Codec.field "totalGroupCredits" .totalGroupCredits (Codec.dict (Codec.dict amountCodec))
+        |> Codec.field "groups" .groups (Codec.dict storedGroupCodec)
         |> Codec.field "persons" .persons (Codec.dict personCodec)
-        |> Codec.field "nextPersonId" .nextPersonId Codec.int
+        |> Codec.field "nextId" .nextId Codec.int
         |> Codec.field "loggedInSessions" .loggedInSessions (Codec.set Codec.string)
         |> Codec.buildObject
 
 
-yearCodec : Codec Year
-yearCodec =
-    Codec.object Year
-        |> Codec.field
-            "months"
-            .months
-            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int monthCodec)))
-        |> Codec.field "totalGroupCredits" .totalGroupCredits (Codec.dict (Codec.dict amountCodec))
-        |> Codec.buildObject
-
-
-monthCodec : Codec Month
-monthCodec =
-    Codec.object Month
-        |> Codec.field "days" .days (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int dayCodec)))
-        |> Codec.field "totalGroupCredits" .totalGroupCredits (Codec.dict (Codec.dict amountCodec))
-        |> Codec.buildObject
-
-
-dayCodec : Codec Day
-dayCodec =
-    Codec.object Day
-        |> Codec.field "transactions" .transactions (Codec.array transactionCodec)
-        |> Codec.field "totalGroupCredits" .totalGroupCredits (Codec.dict (Codec.dict amountCodec))
-        |> Codec.buildObject
-
-
-transactionCodec : Codec Transaction
-transactionCodec =
-    Codec.object Transaction
-        |> Codec.field "spendingId" .spendingId Codec.int
-        |> Codec.field "secondaryDescription" .secondaryDescription Codec.string
-        |> Codec.field "group" .group Codec.string
-        |> Codec.field "amount" .amount amountCodec
-        |> Codec.field "side" .side transactionSideCodec
-        |> Codec.field "groupMembersKey" .groupMembersKey Codec.string
-        |> Codec.field "groupMembers" .groupMembers (Codec.set Codec.string)
+spendingCodec : Codec Spending
+spendingCodec =
+    Codec.object Spending
+        |> Codec.field "description" .description Codec.string
+        |> Codec.field "total" .total amountCodec
+        |> Codec.field "transactionIds" .transactionIds (Codec.list transactionIdCodec)
         |> Codec.field "status" .status transactionStatusCodec
         |> Codec.buildObject
 
 
-transactionSideCodec : Codec TransactionSide
-transactionSideCodec =
-    Codec.custom
-        (\creditTransactionEncoder debitTransactionEncoder value ->
-            case value of
-                Types.CreditTransaction ->
-                    creditTransactionEncoder
-
-                Types.DebitTransaction ->
-                    debitTransactionEncoder
-        )
-        |> Codec.variant0 "CreditTransaction" Types.CreditTransaction
-        |> Codec.variant0 "DebitTransaction" Types.DebitTransaction
-        |> Codec.buildCustom
+transactionIdCodec : Codec TransactionId
+transactionIdCodec =
+    Codec.object TransactionId
+        |> Codec.field "groupId" .groupId Codec.int
+        |> Codec.field "year" .year Codec.int
+        |> Codec.field "month" .month Codec.int
+        |> Codec.field "day" .day Codec.int
+        |> Codec.field "index" .index Codec.int
+        |> Codec.buildObject
 
 
 transactionStatusCodec : Codec TransactionStatus
@@ -138,23 +97,16 @@ transactionStatusCodec =
         |> Codec.buildCustom
 
 
-spendingCodec : Codec Spending
-spendingCodec =
-    Codec.object Spending
-        |> Codec.field "description" .description Codec.string
-        |> Codec.field "total" .total amountCodec
-        |> Codec.field "transactionIds" .transactionIds (Codec.list transactionIdCodec)
-        |> Codec.field "status" .status transactionStatusCodec
-        |> Codec.buildObject
-
-
-transactionIdCodec : Codec TransactionId
-transactionIdCodec =
-    Codec.object TransactionId
-        |> Codec.field "year" .year Codec.int
-        |> Codec.field "month" .month Codec.int
-        |> Codec.field "day" .day Codec.int
-        |> Codec.field "index" .index Codec.int
+storedGroupCodec : Codec Types.StoredGroup
+storedGroupCodec =
+    Codec.object Types.StoredGroup
+        |> Codec.field "id" .id Codec.int
+        |> Codec.field "members" .members (Codec.dict shareCodec)
+        |> Codec.field
+            "years"
+            .years
+            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int yearCodec)))
+        |> Codec.field "totalCredit" .totalCredit amountCodec
         |> Codec.buildObject
 
 
@@ -170,11 +122,66 @@ shareCodec =
         |> Codec.buildCustom
 
 
+yearCodec : Codec Year
+yearCodec =
+    Codec.object Year
+        |> Codec.field
+            "months"
+            .months
+            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int monthCodec)))
+        |> Codec.field "totalCredit" .totalCredit amountCodec
+        |> Codec.buildObject
+
+
+monthCodec : Codec Month
+monthCodec =
+    Codec.object Month
+        |> Codec.field "days" .days (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int dayCodec)))
+        |> Codec.field "totalCredit" .totalCredit amountCodec
+        |> Codec.buildObject
+
+
+dayCodec : Codec Day
+dayCodec =
+    Codec.object Day
+        |> Codec.field "transactions" .transactions (Codec.array transactionCodec)
+        |> Codec.field "totalCredit" .totalCredit amountCodec
+        |> Codec.buildObject
+
+
+transactionCodec : Codec Transaction
+transactionCodec =
+    Codec.object Transaction
+        |> Codec.field "spendingId" .spendingId Codec.int
+        |> Codec.field "secondaryDescription" .secondaryDescription Codec.string
+        |> Codec.field "group" .group Codec.string
+        |> Codec.field "amount" .amount amountCodec
+        |> Codec.field "side" .side transactionSideCodec
+        |> Codec.field "status" .status transactionStatusCodec
+        |> Codec.buildObject
+
+
+transactionSideCodec : Codec TransactionSide
+transactionSideCodec =
+    Codec.custom
+        (\creditTransactionEncoder debitTransactionEncoder value ->
+            case value of
+                Types.CreditTransaction ->
+                    creditTransactionEncoder
+
+                Types.DebitTransaction ->
+                    debitTransactionEncoder
+        )
+        |> Codec.variant0 "CreditTransaction" Types.CreditTransaction
+        |> Codec.variant0 "DebitTransaction" Types.DebitTransaction
+        |> Codec.buildCustom
+
+
 personCodec : Codec Person
 personCodec =
     Codec.object Person
         |> Codec.field "id" .id Codec.int
-        |> Codec.field "belongsTo" .belongsTo (Codec.set Codec.string)
+        |> Codec.field "belongsTo" .belongsTo (Codec.set Codec.int)
         |> Codec.buildObject
 
 
