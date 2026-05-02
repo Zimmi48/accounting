@@ -432,3 +432,33 @@ Full review documented in `.squad/decisions/inbox/ripley-id-keyed-review.md`.
 - **Scope:** Review invariants preservation when refactoring to ID-keyed persons/groups
 - **Constraints:** No Evergreen edits, preserve name-based transaction group field, maintain grouped-years storage and TransactionId.groupId
 - **Deliverables:** History update, decision inbox file, reviewer gates
+
+## 2026-05-02: Redundant Stored-ID Evaluation
+
+**Requested by:** Théo Zimmermann (post-ID-keyed-entities refactor cleanup)  
+**Task:** Evaluate whether `Person.id` and `StoredGroup.id` are truly redundant now that both dicts are Int-keyed, and if so, produce a clear implementation surface for Bishop.  
+**Mode:** Read-only evaluation (no product code changed)  
+**Status:** COMPLETE — AGREED, safe to remove
+
+### Findings
+
+Both fields are genuinely redundant. The invariant `record.id == dictKey` is enforced only by construction discipline across four creation sites (`CreatePerson`, `CreateGroup` for group record, CreatePerson also creates a group-for-person). The dict key is the canonical identity; storing it again inside the record is dual representation with drift potential.
+
+Four Backend.elm call sites used `.id`:
+1. `findPersonIdByName` (line 489) — chains `findPersonByName >> Maybe.map .id`. Fix: `Dict.toList` + filter + `Tuple.first`.
+2. `updateGroupByName` (line 540) — extracts key to call `updateGroupById`. Fix: change `findGroupByName` to return `Maybe (GroupId, StoredGroup)`.
+3. `groupIdForName` (line 785) — same lookup pattern. Fixed by same signature change to `findGroupByName`.
+4. `allTransactionsWithIdsForGroup` (line 1141) — receives `StoredGroup`, uses `group.id` in `TransactionId`. Fix: add explicit `GroupId` first parameter; call site at line 360 unpacks tuple.
+
+No frontend leakage. `ToFrontend` messages expose only `Group = Dict String Share` (name-keyed). Codec change (removing `id` from `personCodec` and `storedGroupCodec`) is backward-compatible for import — `elm-codec` ignores extra JSON fields. Newly exported JSON will be cleaner.
+
+No Evergreen work triggered — migration remains deferred; removing `id` now means the future snapshot will be clean.
+
+### Decision
+
+Approved and documented in `.squad/decisions/inbox/ripley-redundant-stored-ids.md`. Bishop owns implementation.
+
+### Learnings
+
+- After ID-keyed dict refactors, always check whether any field in the value equals the key. If yes, it is a drift-prone duplicate and should be removed in the same cleanup pass, not deferred.
+- `findGroupByName` return-type change to `Maybe (GroupId, StoredGroup)` is the cleanest path when downstream callers need the key — avoids a parallel `findGroupIdByName` helper that duplicates the scan.

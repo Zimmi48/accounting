@@ -242,6 +242,7 @@
 - 2026-05-02: `TransactionId` now includes `{ groupId, year, month, day, index }`; append-only slot stability is now per owning group/day bucket, so helpers and tests must resolve transactions through the group bucket before using the day index.
 - 2026-05-02: User directive remains explicit: implement the refactor and validation first, but do not touch `src/Evergreen/`, do not run `lamdera check --force`, and wait for review before writing the migration.
 - 2026-05-02: Regression coverage for this refactor lives in `tests/BackendTests.elm`, `tests/FrontendTests.elm`, and `tests/CodecsTests.elm`; the normal validation stack stayed `./check-codecs.sh --regenerate`, `lamdera make src/Frontend.elm --output=/dev/null`, `lamdera make src/Backend.elm --output=/dev/null`, `npm test`, and `lamdera live` with HTTP 200.
+- 2026-05-02: In the ID-keyed entity model, `Person` and `StoredGroup` should not persist redundant `id` fields when the surrounding `Dict` key is already authoritative. Backend name lookups that still serve string-based UI seams should return `(Id, Record)` tuples (`findGroupByName`) or recover the id from `Dict.toList` (`findPersonIdByName`) so routing helpers (`groupIdForName`, `RequestGroupTransactions`, `updateGroupByName`) never reach into duplicated identity state.
 
 ## 2026-05-02: Group-Owned Years Refactor — Implementation Start
 

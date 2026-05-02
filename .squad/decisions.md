@@ -72,6 +72,61 @@
 - Migration deployment step tracked separately
 - CI will not generate Evergreen automatically (safe state)
 
+---
+
+### Remove Redundant Stored IDs: Evaluation (Ripley, 2026-05-02)
+
+**Status:** APPROVED — cleared for Bishop implementation
+
+**Verdict:** The `id` fields in `Person` and `StoredGroup` are redundant given the current Int-keyed dictionaries and should be removed.
+
+**Reasoning:** Both records are now stored in `Dict PersonId Person` and `Dict GroupId StoredGroup` respectively. The `id` field invariant — `record.id == dictKey` — is enforced only by construction discipline, never mechanically. Storing the key redundantly inside its own value is the classic anti-pattern: two representations of the same identity that can drift silently.
+
+The only reason these fields survived the ID-keyed refactor is that some backend helpers were written to find a record by name (`findPersonByName`, `findGroupByName`) and then reach back into the record to recover the key. That's backwards — when you locate a record via `Dict.toList` + filter, you already have the key; you don't need the record to tell you what key it lives under.
+
+**Hidden Risk:** None found. Checked all four usages of `.id` in `Backend.elm`:
+1. **`findPersonIdByName` (line 489)** — rewrite to use `Dict.toList` + filter, return `Tuple.first`.
+2. **`updateGroupByName` (line 540)** — same pattern — scan `Dict.toList`, get key alongside record.
+3. **`groupIdForName` (line 785)** — same.
+4. **`allTransactionsWithIdsForGroup` (line 1141)** — add `GroupId` as explicit first parameter; update call site at line 360.
+
+No leakage to frontend: `ToFrontend` messages expose `Group = Dict String Share`, never `GroupId` or `PersonId`. The name-based boundary is stable. No Evergreen work triggered. Serialization backward-compatible for import via elm-codec.
+
+**Validation:** `elm-format`, `lamdera make src/Frontend.elm`, `lamdera make src/Backend.elm`, `npm test`
+
+**Implementation Surface:**
+- `src/Types.elm`: remove `id : PersonId` from `Person` and `id : GroupId` from `StoredGroup`
+- `src/Codecs.elm`: remove codec fields for id, run `./check-codecs.sh --regenerate`
+- `src/Backend.elm`: refactor `findGroupByName` to return `Maybe (GroupId, StoredGroup)`, update all callers
+- `tests/BackendTests.elm` and `tests/CodecsTests.elm`: remove `id` from record literals
+
+---
+
+### Remove Redundant Stored IDs: Implementation (Bishop, 2026-05-02)
+
+**Status:** ✅ COMPLETE — validated and staged for commit
+
+**Decision:** Removed `Person.id` and `StoredGroup.id` from the runtime model and codecs because `BackendModel.persons : Dict PersonId Person` and `groups : Dict GroupId StoredGroup` already provide the authoritative identity.
+
+**Implementation:**
+- Removed `id : PersonId` from `Person` and `id : GroupId` from `StoredGroup` in `src/Types.elm`
+- Updated `src/Codecs.elm`: removed codec field definitions, ran `./check-codecs.sh --regenerate`
+- Refactored backend helpers in `src/Backend.elm`:
+  - `findGroupByName` now returns `Maybe (GroupId, StoredGroup)` and preserves the key
+  - Updated `checkValidName`, `updateGroupByName`, `groupIdForName` to unpack tuples
+  - Updated `RequestGroupTransactions` call site (line 360)
+  - `allTransactionsWithIdsForGroup` now accepts `GroupId` as first parameter
+- Updated test helpers in `tests/BackendTests.elm` and `tests/CodecsTests.elm` to remove `id` fields
+
+**Validation:**
+- ✅ `elm-format src/ tests/ --yes`
+- ✅ `lamdera make src/Frontend.elm --output=/dev/null`
+- ✅ `lamdera make src/Backend.elm --output=/dev/null`
+- ✅ `npm test`
+- ✅ `lamdera live` responding with HTTP 200
+
+**Constraint:** No Evergreen files edited or generated. Removal happens before new migration snapshot is taken.
+
 ### Lifecycle Total Invariants (Newt, 2026-04-29)
 
 **Status:** Approved and implemented.
