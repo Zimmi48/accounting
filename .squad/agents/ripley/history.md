@@ -374,3 +374,61 @@ Before merge, require:
 
 ### Decision Merged
 Full review gates and invariant documentation merged to `.squad/decisions.md` under "Group-Owned Years Refactor: Review Gates".
+
+
+## 2026-05-02: ID-Keyed Groups and Persons — Invariant Review
+
+**Session:** 2026-05-02 (parallel with Bishop implementation)  
+**Task:** Identify invariants for swapping `Dict String StoredGroup` / `Dict String Person` to `Dict GroupId StoredGroup` / `Dict GroupId Person`, with names stored inside records  
+**Mode:** Read-only review pass (no code changes)  
+**Status:** COMPLETE
+
+### Key Invariants Identified
+
+**`Transaction.group : String` must NOT change (Evergreen deferred).** This is the single non-compile-error silent failure risk. `Transaction.group` is persisted in `Codecs.elm` as `Codec.field "group" .group Codec.string`. Changing it to `groupId : Int` requires Evergreen migration. All routing via `groupIdForName model transaction.group` must survive the dict restructure, changing from O(1) `Dict.get` to O(n) value scan.
+
+**Codec dict encoding breaks — explicit.** `Codec.dict` works only with `Dict String v`. After the change, `backendCodec` fields `groups` and `persons` must switch to the int-tuple pattern: `Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int ...))`. The encoding format changes mean previously exported JSON is unreadable.
+
+**`checkValidName` cross-dict uniqueness must scan values.** `Dict.member name model.persons` and `Dict.member name model.groups` become compile errors. Replacement must scan `.name` field across both dicts. Cross-dict uniqueness (no person and group sharing a name) must be preserved.
+
+**Autocomplete must extract names from values.** `Dict.keys model.persons` / `Dict.keys model.groups` → `Dict.values >> List.map .name`.
+
+**`StoredGroup` needs `name : String`; `Person` needs `name : String`.** Required for `findGroupNameAndRecordById` return value, `ListUserGroups` wire response, and autocomplete extraction.
+
+**`Person.id` field becomes redundant.** After ID-keying, `Person.id` equals the dict key. Bishop may remove it or leave it — either is acceptable; removing is cleaner.
+
+**`updateGroupById` becomes O(1); `updateGroupByName` becomes a shim.** `updateGroupById` (currently a linear scan via `Dict.map`) simplifies to `Dict.update groupId`. `updateGroupByName` should delegate to `updateGroupById` after resolving name → id.
+
+### Test Helpers That Overfit Old Name-Keyed Dict (All Compile Errors)
+
+- `groupedModel`: `Dict.fromList [("Alice", storedGroup 0 ...), ...]` → needs int keys and name param in `storedGroup`
+- `dayStatuses`: `Dict.get group model.groups` where `group : String` → needs name→ID resolution
+- `storedGroupTotalSummary`: four `Dict.get groupName model.groups` → same fix
+- `persons` fixture: `Dict.fromList [("Alice", { id = 0, ... })]` → must become int-keyed
+
+### Reviewer Gates for This Experiment
+
+**GATE 1 — `Transaction.group` field untouched.**  
+`Codecs.elm` must still show `Codec.field "group" .group Codec.string` for `Transaction`. No rename to `groupId`.
+
+**GATE 2 — `groups` and `persons` codecs use int-tuple pattern.**  
+Both fields in `backendCodec` use `Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int ...))`.
+
+**GATE 3 — `checkValidName` cross-dict name uniqueness on `.name` fields.**  
+Both person and group value lists scanned by `.name`.
+
+**GATE 4 — No Evergreen files generated.**  
+`src/Evergreen/` directory unchanged.
+
+### Narrow Blocker
+
+The narrowest genuine silent-failure risk is the `ImportJson` / `JsonExport` round-trip: codec format change makes previously exported JSON unreadable. Acceptable only if no production data exists. Bishop must confirm or document.
+
+Full review documented in `.squad/decisions/inbox/ripley-id-keyed-review.md`.
+
+## Session: 2026-05-02T15:57:12Z — ID-keyed entities orchestration
+
+- **Status:** Spawned as background agent for invariant review
+- **Scope:** Review invariants preservation when refactoring to ID-keyed persons/groups
+- **Constraints:** No Evergreen edits, preserve name-based transaction group field, maintain grouped-years storage and TransactionId.groupId
+- **Deliverables:** History update, decision inbox file, reviewer gates

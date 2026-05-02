@@ -1576,3 +1576,4 @@ Related to: newt-lifecycle-total-invariants.md (test cleanup decision)
 
 - Group-Owned Years Refactor: Implementation Scope (Bishop, 2026-05-02)
 - Group-Owned Years Refactor: Review Gates (Ripley, 2026-05-02)
+

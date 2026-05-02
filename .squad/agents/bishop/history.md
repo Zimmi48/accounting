@@ -39,6 +39,7 @@
 - Evergreen V26 migrates each legacy day spending into one stored spending plus one transaction with empty secondary description, while frontend/session migration intentionally resets fragile client-side edit/delete state to safe defaults.
 - Codec workflow remains `./check-codecs.sh --regenerate`, and migration validation succeeded with `lamdera check --force` after adding `src/Evergreen/V26/Types.elm` and `src/Evergreen/Migrate/V26.elm`.
 - 2026-04-21: Codec parity fixes can be generation-only; for the current model shape, `./check-codecs.sh --regenerate` refreshed `src/Codecs.elm` without touching `src/Types.elm`, `src/Backend.elm`, or any `src/Evergreen/` files, and validation stayed on `elm-format`, both `lamdera make` targets, and `lamdera live` HTTP 200.
+- 2026-05-02: The ID-keyed entity experiment compiles without new Evergreen work if the runtime keeps names at the API boundary only. `src/Types.elm` now stores `BackendModel.groups : Dict GroupId StoredGroup` and `persons : Dict PersonId Person`, `StoredGroup.members` uses `PersonId` keys, and `src/Backend.elm` translates between stored IDs and frontend names through lookup helpers (`findGroupByName`, `findPersonByName`, `groupMembersForFrontend`, `storedGroupMembersForNames`).
 
 ## 2026-04-21: Phase 2 Contract Correction Approved
 
@@ -285,3 +286,10 @@ Implement model refactor in runtime code without touching Evergreen:
 
 ### Decision Merged
 Full implementation scope merged to `.squad/decisions.md` under "Group-Owned Years Refactor: Implementation Scope".
+
+## Session: 2026-05-02T15:57:12Z — ID-keyed entities orchestration
+
+- **Status:** Spawned as background agent for implementation
+- **Scope:** Implement ID-keyed persons/groups with name fields, preserving grouped-years storage and TransactionId.groupId
+- **Constraints:** No Evergreen edits, preserve name-based transaction group field
+- **Deliverables:** Code changes, test updates, history update, decision inbox file, validation run, skill update
