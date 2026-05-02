@@ -36,29 +36,29 @@ roundTripModel =
                         { model
                             | persons =
                                 Dict.fromList
-                                    [ ( "Alice", { id = 0, belongsTo = Set.singleton 0 } )
-                                    , ( "Bob", { id = 1, belongsTo = Set.singleton 1 } )
+                                    [ ( 0, { name = "Alice", belongsTo = Set.singleton 0 } )
+                                    , ( 1, { name = "Bob", belongsTo = Set.singleton 1 } )
                                     ]
                             , nextId = 3
                             , groups =
                                 Dict.fromList
-                                    [ ( "Alice"
-                                      , { id = 0
-                                        , members = Dict.fromList [ ( "Alice", Share 1 ) ]
+                                    [ ( 0
+                                      , { name = "Alice"
+                                        , members = Dict.fromList [ ( 0, Share 1 ) ]
                                         , years = Dict.empty
                                         , totalCredit = Amount 0
                                         }
                                       )
-                                    , ( "Bob"
-                                      , { id = 1
-                                        , members = Dict.fromList [ ( "Bob", Share 1 ) ]
+                                    , ( 1
+                                      , { name = "Bob"
+                                        , members = Dict.fromList [ ( 1, Share 1 ) ]
                                         , years = Dict.empty
                                         , totalCredit = Amount 0
                                         }
                                       )
-                                    , ( "Trip"
-                                      , { id = 2
-                                        , members = Dict.fromList [ ( "Alice", Share 1 ), ( "Bob", Share 1 ) ]
+                                    , ( 2
+                                      , { name = "Trip"
+                                        , members = Dict.fromList [ ( 0, Share 1 ), ( 1, Share 1 ) ]
                                         , years = Dict.empty
                                         , totalCredit = Amount 0
                                         }

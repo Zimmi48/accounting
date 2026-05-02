@@ -100,16 +100,16 @@ updateFromFrontend sessionId clientId msg model =
                 in
                 ( { model
                     | persons =
-                        Dict.insert person
-                            { id = personId
+                        Dict.insert personId
+                            { name = person
                             , belongsTo = Set.singleton personId
                             }
                             model.persons
                     , groups =
                         -- persons are also stored as their own groups so that they can have transactions associated with them
-                        Dict.insert person
-                            { id = personId
-                            , members = Dict.singleton person (Share 1)
+                        Dict.insert personId
+                            { name = person
+                            , members = Dict.singleton personId (Share 1)
                             , years = Dict.empty
                             , totalCredit = Amount 0
                             }
@@ -126,33 +126,38 @@ updateFromFrontend sessionId clientId msg model =
 
         ( True, CreateGroup name members ) ->
             if checkValidName model name then
-                let
-                    groupId =
-                        model.nextId
-                in
-                ( { model
-                    | groups =
-                        Dict.insert name
-                            { id = groupId
-                            , members = members
-                            , years = Dict.empty
-                            , totalCredit = Amount 0
-                            }
-                            model.groups
-                    , persons =
-                        Dict.map
-                            (\personName person ->
-                                if Dict.member personName members then
-                                    { person | belongsTo = Set.insert groupId person.belongsTo }
+                case storedGroupMembersForNames model members of
+                    Err errorMessage ->
+                        ( model, Lamdera.sendToFrontend clientId (SpendingError errorMessage) )
 
-                                else
-                                    person
-                            )
-                            model.persons
-                    , nextId = groupId + 1
-                  }
-                , Lamdera.sendToFrontend clientId OperationSuccessful
-                )
+                    Ok storedMembers ->
+                        let
+                            groupId =
+                                model.nextId
+                        in
+                        ( { model
+                            | groups =
+                                Dict.insert groupId
+                                    { name = name
+                                    , members = storedMembers
+                                    , years = Dict.empty
+                                    , totalCredit = Amount 0
+                                    }
+                                    model.groups
+                            , persons =
+                                Dict.map
+                                    (\personId person ->
+                                        if Dict.member personId storedMembers then
+                                            { person | belongsTo = Set.insert groupId person.belongsTo }
+
+                                        else
+                                            person
+                                    )
+                                    model.persons
+                            , nextId = groupId + 1
+                          }
+                        , Lamdera.sendToFrontend clientId OperationSuccessful
+                        )
 
             else
                 ( model
@@ -244,13 +249,19 @@ updateFromFrontend sessionId clientId msg model =
 
         ( True, AutocompletePerson prefix ) ->
             ( model
-            , Dict.keys model.persons
+            , model.persons
+                |> Dict.values
+                |> List.map .name
+                |> List.sort
                 |> autocomplete clientId prefix AutocompletePersonPrefix InvalidPersonPrefix
             )
 
         ( True, AutocompleteGroup prefix ) ->
             ( model
-            , Dict.keys model.groups
+            , model.groups
+                |> Dict.values
+                |> List.map .name
+                |> List.sort
                 |> autocomplete clientId prefix AutocompleteGroupPrefix InvalidGroupPrefix
             )
 
@@ -285,7 +296,7 @@ updateFromFrontend sessionId clientId msg model =
                                 )
 
         ( True, RequestUserGroups user ) ->
-            case Dict.get user model.persons of
+            case findPersonByName user model of
                 Nothing ->
                     ( model
                     , Cmd.none
@@ -296,15 +307,15 @@ updateFromFrontend sessionId clientId msg model =
                         groupsWithAmounts =
                             person.belongsTo
                                 |> Set.toList
-                                |> List.filterMap (\groupId -> findGroupNameAndRecordById groupId model)
+                                |> List.filterMap (\groupId -> Dict.get groupId model.groups)
                                 |> List.filterMap
-                                    (\( groupName, groupRecord ) ->
+                                    (\groupRecord ->
                                         case groupRecord.totalCredit of
                                             Amount 0 ->
                                                 Nothing
 
                                             amount ->
-                                                Just ( groupName, groupRecord.members, amount )
+                                                Just ( groupRecord.name, groupMembersForFrontend model groupRecord, amount )
                                     )
 
                         debitorsWithAmounts =
@@ -342,8 +353,12 @@ updateFromFrontend sessionId clientId msg model =
         ( True, RequestGroupTransactions group ) ->
             let
                 transactions =
-                    Dict.get group model.groups
-                        |> Maybe.map (allTransactionsWithIdsForGroup >> List.filterMap (groupTransactionForList model))
+                    findGroupByName group model
+                        |> Maybe.map
+                            (\( groupId, storedGroup ) ->
+                                allTransactionsWithIdsForGroup groupId storedGroup
+                                    |> List.filterMap (groupTransactionForList model)
+                            )
                         |> Maybe.withDefault []
             in
             ( model
@@ -450,51 +465,103 @@ checkValidName : Model -> String -> Bool
 checkValidName model name =
     String.length name
         > 0
-        && not (Dict.member name model.persons)
-        && not (Dict.member name model.groups)
+        && (findPersonByName name model == Nothing)
+        && (findGroupByName name model == Nothing)
 
 
-findGroupNameAndRecordById : GroupId -> Model -> Maybe ( String, StoredGroup )
-findGroupNameAndRecordById groupId model =
-    model.groups
-        |> Dict.toList
-        |> List.filter (\( _, group ) -> group.id == groupId)
+findPersonByName : String -> Model -> Maybe Person
+findPersonByName personName model =
+    model.persons
+        |> Dict.values
+        |> List.filter (\person -> person.name == personName)
         |> List.head
 
 
-findGroupRecordById : GroupId -> Model -> Maybe StoredGroup
-findGroupRecordById groupId model =
-    findGroupNameAndRecordById groupId model
-        |> Maybe.map Tuple.second
+findPersonNameById : PersonId -> Model -> Maybe String
+findPersonNameById personId model =
+    model.persons
+        |> Dict.get personId
+        |> Maybe.map .name
+
+
+findPersonIdByName : String -> Model -> Maybe PersonId
+findPersonIdByName personName model =
+    model.persons
+        |> Dict.toList
+        |> List.filterMap
+            (\( personId, person ) ->
+                if person.name == personName then
+                    Just personId
+
+                else
+                    Nothing
+            )
+        |> List.head
+
+
+findGroupByName : String -> Model -> Maybe ( GroupId, StoredGroup )
+findGroupByName groupName model =
+    model.groups
+        |> Dict.toList
+        |> List.filter (\( _, group ) -> group.name == groupName)
+        |> List.head
+
+
+groupMembersForFrontend : Model -> StoredGroup -> Group
+groupMembersForFrontend model group =
+    group.members
+        |> Dict.toList
+        |> List.filterMap
+            (\( personId, share ) ->
+                findPersonNameById personId model
+                    |> Maybe.map (\personName -> ( personName, share ))
+            )
+        |> Dict.fromList
+
+
+storedGroupMembersForNames : Model -> Group -> Result String StoredGroupMembers
+storedGroupMembersForNames model members =
+    members
+        |> Dict.toList
+        |> List.map
+            (\( personName, share ) ->
+                findPersonIdByName personName model
+                    |> Maybe.map (\personId -> Ok ( personId, share ))
+                    |> Maybe.withDefault (Err ("Unknown person: " ++ personName))
+            )
+        |> List.foldr
+            (\result acc ->
+                case ( result, acc ) of
+                    ( Ok ( personId, share ), Ok storedMembers ) ->
+                        Ok (Dict.insert personId share storedMembers)
+
+                    ( Err message, _ ) ->
+                        Err message
+
+                    ( _, Err message ) ->
+                        Err message
+            )
+            (Ok Dict.empty)
 
 
 updateGroupByName : String -> (StoredGroup -> StoredGroup) -> Model -> Model
 updateGroupByName groupName transform model =
-    { model
-        | groups =
-            Dict.update groupName (Maybe.map transform) model.groups
-    }
+    findGroupByName groupName model
+        |> Maybe.map (\( groupId, _ ) -> updateGroupById groupId transform model)
+        |> Maybe.withDefault model
 
 
 updateGroupById : GroupId -> (StoredGroup -> StoredGroup) -> Model -> Model
 updateGroupById groupId transform model =
     { model
         | groups =
-            Dict.map
-                (\_ group ->
-                    if group.id == groupId then
-                        transform group
-
-                    else
-                        group
-                )
-                model.groups
+            Dict.update groupId (Maybe.map transform) model.groups
     }
 
 
 dayTransactionCount : GroupId -> Int -> Int -> Int -> Model -> Int
 dayTransactionCount groupId year month day model =
-    findGroupRecordById groupId model
+    Dict.get groupId model.groups
         |> Maybe.andThen (.years >> Dict.get year)
         |> Maybe.andThen (.months >> Dict.get month)
         |> Maybe.andThen (.days >> Dict.get day)
@@ -605,7 +672,7 @@ removeTransactionFromDay groupCredit maybeDay =
 -}
 findTransaction : TransactionId -> Model -> Maybe Transaction
 findTransaction transactionId model =
-    findGroupRecordById transactionId.groupId model
+    Dict.get transactionId.groupId model.groups
         |> Maybe.andThen (.years >> Dict.get transactionId.year)
         |> Maybe.andThen (.months >> Dict.get transactionId.month)
         |> Maybe.andThen (.days >> Dict.get transactionId.day)
@@ -724,8 +791,8 @@ storedTransaction pending =
 
 groupIdForName : Model -> String -> Result String GroupId
 groupIdForName model groupName =
-    Dict.get groupName model.groups
-        |> Maybe.map (.id >> Ok)
+    findGroupByName groupName model
+        |> Maybe.map (Tuple.first >> Ok)
         |> Maybe.withDefault (Err ("Unknown group or account: " ++ groupName))
 
 
@@ -949,7 +1016,7 @@ addTransactionToModel transaction model =
         groupCredit =
             groupCreditForTransaction transaction
     in
-    updateGroupByName transaction.group
+    updateGroupById transaction.groupId
         (\group ->
             { group
                 | years =
@@ -1069,8 +1136,8 @@ groupTransactionForList model ( transactionId, transaction ) =
                 )
 
 
-allTransactionsWithIdsForGroup : StoredGroup -> List ( TransactionId, Transaction )
-allTransactionsWithIdsForGroup group =
+allTransactionsWithIdsForGroup : GroupId -> StoredGroup -> List ( TransactionId, Transaction )
+allTransactionsWithIdsForGroup groupId group =
     Dict.foldr
         (\year yearRecord accYears ->
             Dict.foldr
@@ -1081,7 +1148,7 @@ allTransactionsWithIdsForGroup group =
                                 |> Array.toIndexedList
                                 |> List.map
                                     (\( index, transaction ) ->
-                                        ( { groupId = group.id
+                                        ( { groupId = groupId
                                           , year = year
                                           , month = month
                                           , day = day

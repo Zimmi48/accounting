@@ -504,41 +504,43 @@ groupedModel =
     { emptyModel
         | groups =
             Dict.fromList
-                [ ( "Alice"
-                  , storedGroup 0 [ ( "Alice", Share 1 ) ]
+                [ ( 0
+                  , storedGroup 0 "Alice" [ ( 0, Share 1 ) ]
                   )
-                , ( "Bob"
-                  , storedGroup 1 [ ( "Bob", Share 1 ) ]
+                , ( 1
+                  , storedGroup 1 "Bob" [ ( 1, Share 1 ) ]
                   )
-                , ( "Carol"
-                  , storedGroup 2 [ ( "Carol", Share 1 ) ]
+                , ( 2
+                  , storedGroup 2 "Carol" [ ( 2, Share 1 ) ]
                   )
-                , ( "Trip"
+                , ( 3
                   , storedGroup 3
-                        [ ( "Alice", Share 1 )
-                        , ( "Bob", Share 1 )
+                        "Trip"
+                        [ ( 0, Share 1 )
+                        , ( 1, Share 1 )
                         ]
                   )
-                , ( "House"
+                , ( 4
                   , storedGroup 4
-                        [ ( "Bob", Share 1 )
-                        , ( "Carol", Share 1 )
+                        "House"
+                        [ ( 1, Share 1 )
+                        , ( 2, Share 1 )
                         ]
                   )
                 ]
         , persons =
             Dict.fromList
-                [ ( "Alice", { id = 0, belongsTo = Set.fromList [ 0, 3 ] } )
-                , ( "Bob", { id = 1, belongsTo = Set.fromList [ 1, 3, 4 ] } )
-                , ( "Carol", { id = 2, belongsTo = Set.fromList [ 2, 4 ] } )
+                [ ( 0, { name = "Alice", belongsTo = Set.fromList [ 0, 3 ] } )
+                , ( 1, { name = "Bob", belongsTo = Set.fromList [ 1, 3, 4 ] } )
+                , ( 2, { name = "Carol", belongsTo = Set.fromList [ 2, 4 ] } )
                 ]
         , nextId = 5
     }
 
 
-storedGroup : GroupId -> List ( String, Share ) -> StoredGroup
-storedGroup id members =
-    { id = id
+storedGroup : GroupId -> String -> List ( PersonId, Share ) -> StoredGroup
+storedGroup id name members =
+    { name = name
     , members = Dict.fromList members
     , years = Dict.empty
     , totalCredit = Amount 0
@@ -569,8 +571,8 @@ transactionSlots spendingId model =
 
 dayStatuses : String -> Int -> Int -> Int -> Backend.Model -> List TransactionStatus
 dayStatuses group year month day model =
-    model.groups
-        |> Dict.get group
+    Backend.findGroupByName group model
+        |> Maybe.map Tuple.second
         |> Maybe.map .years
         |> Maybe.andThen (Dict.get year)
         |> Maybe.andThen (.months >> Dict.get month)
@@ -607,23 +609,23 @@ fullGroupTotalSummary amount =
 storedGroupTotalSummary : String -> Int -> Int -> Int -> Backend.Model -> GroupTotalSummary
 storedGroupTotalSummary groupName year month day model =
     { total =
-        model.groups
-            |> Dict.get groupName
+        Backend.findGroupByName groupName model
+            |> Maybe.map Tuple.second
             |> Maybe.map (.totalCredit >> amountValue)
     , yearly =
-        model.groups
-            |> Dict.get groupName
+        Backend.findGroupByName groupName model
+            |> Maybe.map Tuple.second
             |> Maybe.andThen (.years >> Dict.get year)
             |> Maybe.map (.totalCredit >> amountValue)
     , monthly =
-        model.groups
-            |> Dict.get groupName
+        Backend.findGroupByName groupName model
+            |> Maybe.map Tuple.second
             |> Maybe.andThen (.years >> Dict.get year)
             |> Maybe.andThen (.months >> Dict.get month)
             |> Maybe.map (.totalCredit >> amountValue)
     , daily =
-        model.groups
-            |> Dict.get groupName
+        Backend.findGroupByName groupName model
+            |> Maybe.map Tuple.second
             |> Maybe.andThen (.years >> Dict.get year)
             |> Maybe.andThen (.months >> Dict.get month)
             |> Maybe.andThen (.days >> Dict.get day)
@@ -633,7 +635,7 @@ storedGroupTotalSummary groupName year month day model =
 
 recomputedGroupTotals : Backend.Model -> Dict.Dict String GroupTotalSummary
 recomputedGroupTotals model =
-    Backend.allTransactionsWithIds model
+    allTransactionsWithIds model
         |> List.filter
             (\( _, transaction ) ->
                 transaction.status
@@ -736,7 +738,7 @@ listedTransactions :
             , share : Amount Debit
             }
 listedTransactions group model =
-    Backend.allTransactionsWithIds model
+    allTransactionsWithIds model
         |> List.filterMap
             (\( transactionId, transaction ) ->
                 if transaction.group == group then
@@ -755,6 +757,13 @@ listedTransactions group model =
                 , share = transaction.share
                 }
             )
+
+
+allTransactionsWithIds : Backend.Model -> List ( TransactionId, Transaction )
+allTransactionsWithIds model =
+    model.groups
+        |> Dict.toList
+        |> List.concatMap (\( groupId, group ) -> Backend.allTransactionsWithIdsForGroup groupId group)
 
 
 legacyBackendModel : V24.BackendModel

@@ -49,8 +49,14 @@ backendCodec : Codec BackendModel
 backendCodec =
     Codec.object BackendModel
         |> Codec.field "spendings" .spendings (Codec.array spendingCodec)
-        |> Codec.field "groups" .groups (Codec.dict storedGroupCodec)
-        |> Codec.field "persons" .persons (Codec.dict personCodec)
+        |> Codec.field
+            "groups"
+            .groups
+            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int storedGroupCodec)))
+        |> Codec.field
+            "persons"
+            .persons
+            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int personCodec)))
         |> Codec.field "nextId" .nextId Codec.int
         |> Codec.field "loggedInSessions" .loggedInSessions (Codec.set Codec.string)
         |> Codec.buildObject
@@ -100,14 +106,22 @@ transactionStatusCodec =
 storedGroupCodec : Codec Types.StoredGroup
 storedGroupCodec =
     Codec.object Types.StoredGroup
-        |> Codec.field "id" .id Codec.int
-        |> Codec.field "members" .members (Codec.dict shareCodec)
+        |> Codec.field "name" .name Codec.string
+        |> Codec.field
+            "members"
+            .members
+            (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple personIdCodec shareCodec)))
         |> Codec.field
             "years"
             .years
             (Codec.map Dict.fromList Dict.toList (Codec.list (Codec.tuple Codec.int yearCodec)))
         |> Codec.field "totalCredit" .totalCredit amountCodec
         |> Codec.buildObject
+
+
+personIdCodec : Codec Types.PersonId
+personIdCodec =
+    Codec.int
 
 
 shareCodec : Codec Share
@@ -180,7 +194,7 @@ transactionSideCodec =
 personCodec : Codec Person
 personCodec =
     Codec.object Person
-        |> Codec.field "id" .id Codec.int
+        |> Codec.field "name" .name Codec.string
         |> Codec.field "belongsTo" .belongsTo (Codec.set Codec.int)
         |> Codec.buildObject
 

@@ -58,8 +58,8 @@ type Page
 
 type alias BackendModel =
     { spendings : Array Spending
-    , groups : Dict String StoredGroup
-    , persons : Dict String Person
+    , groups : Dict GroupId StoredGroup
+    , persons : Dict PersonId Person
     , nextId : Int
     , loggedInSessions : Set SessionId
     }
@@ -276,7 +276,7 @@ type alias TransactionLine =
 
 
 type alias Person =
-    { id : GroupId
+    { name : String
     , belongsTo : Set GroupId
     }
 
@@ -332,13 +332,21 @@ type alias Group =
     Dict String Share
 
 
+type alias StoredGroupMembers =
+    Dict PersonId Share
+
+
+type alias PersonId =
+    Int
+
+
 type alias GroupId =
     Int
 
 
 type alias StoredGroup =
-    { id : GroupId
-    , members : Group
+    { name : String
+    , members : StoredGroupMembers
     , years : Dict Int Year
     , totalCredit : Amount Credit
     }
