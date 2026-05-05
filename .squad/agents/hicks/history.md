@@ -79,6 +79,8 @@
 
 ## Learnings
 
+- 2026-05-05: Negative spending totals are still a supported signed-total flow in this app. The regression was a frontend submit guard in `src/Frontend.elm` (`canSubmitSpending`) introduced during the multi-date spending refactor; backend validation in `src/Backend.elm` needed the same non-zero signed-total rule to keep create/edit behavior aligned. Relevant skill note updated in `.squad/skills/spending-validation/SKILL.md`.
+
 - 2026-04-26T10:38:28Z: Implemented safe per-line-date behavior so line.date remains Nothing until user sets it; dateText still shows the dialog default. Verified detail-date column width. Branch: squad/review/hicks-fix-date-defaults. Draft PR: https://github.com/Zimmi48/accounting/pull/43
 
 - 2026-04-26T14:31:25Z: Spawned to investigate and fix DatePicker.init misuse per directive: .squad/decisions/inbox/copilot-directive-2026-04-26T14-31-25Z.md. See orchestration log: .squad/orchestration-log/2026-04-26T14-31-25Z-hicks.md
@@ -144,3 +146,5 @@
 **Status:** Artifact resolved. Ready for merge.
 
 **Orchestration:** Vasquez review completed 2026-04-27T16:22:00Z. Decision recorded in `.squad/decisions/decisions.md`. Orchestration log: `.squad/orchestration-log/20260427-161057-vasquez-review-hicks-ordering.md`.
+
+- 2026-05-05T20:35:59Z: Fixed negative total spending regression by updating `canSubmitSpending` guard in `src/Frontend.elm` to allow non-zero signed totals (`totalInt /= 0` instead of `totalInt > 0`), updated matching backend validation in `src/Backend.elm`, and updated `.squad/skills/spending-validation/SKILL.md` with corrected semantics. Frontend and backend now both treat spendings as valid when credits, debits, and total all match the same non-zero amount (positive or negative), while preserving zero-total invalidity. Vasquez approved for team archive. Validation: elm-format, check-codecs, both lamdera make targets, npm test (33/33), HTTP 200. Orchestration log: `.squad/orchestration-log/2026-05-05T20:35:59Z-hicks.md`. Decision merged: `.squad/decisions/decisions.md`.

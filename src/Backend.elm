@@ -599,7 +599,7 @@ validateSpendingTransactions (Amount total) transactions =
             && credits
             == total
             && total
-            > 0
+            /= 0
     then
         Ok normalizedTransactions
 

@@ -123,6 +123,28 @@ suite =
 
                         Err errorMessage ->
                             Expect.fail ("Expected mixed-sign creditors to stay valid, got: " ++ errorMessage)
+            , test "validation accepts a balanced negative total" <|
+                \_ ->
+                    let
+                        result =
+                            Backend.validateSpendingTransactions
+                                (Amount -100)
+                                [ spendingTransaction 18 "Alice" CreditTransaction -100
+                                , spendingTransaction 18 "Trip" DebitTransaction -100
+                                ]
+                    in
+                    case result of
+                        Ok normalized ->
+                            Expect.equal
+                                ( Just (Amount -100)
+                                , Just (Amount -100)
+                                )
+                                ( findAmount "Alice" CreditTransaction normalized
+                                , findAmount "Trip" DebitTransaction normalized
+                                )
+
+                        Err errorMessage ->
+                            Expect.fail ("Expected negative total spending to stay valid, got: " ++ errorMessage)
             , test "normalization drops keys whose combined amount becomes zero" <|
                 \_ ->
                     Expect.equal

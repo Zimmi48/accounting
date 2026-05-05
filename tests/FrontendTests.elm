@@ -71,6 +71,9 @@ suite =
             [ test "canSubmitSpending allows a fully populated balanced dialog" <|
                 \_ ->
                     Expect.equal True (Frontend.canSubmitSpending validDialog)
+            , test "canSubmitSpending allows a balanced negative-total dialog" <|
+                \_ ->
+                    Expect.equal True (Frontend.canSubmitSpending negativeTotalDialog)
             , test "canSubmitSpending blocks incomplete transaction lines even when the total parses" <|
                 \_ ->
                     let
@@ -223,6 +226,18 @@ validDialog =
                 { dialog
                     | credits = [ completeLine "Alice" "10.00" ]
                     , debits = [ completeLine "Trip" "10.00" ]
+                }
+           )
+
+
+negativeTotalDialog : AddSpendingDialogModel
+negativeTotalDialog =
+    Frontend.emptySpendingDialog Nothing "Refund" "-10.00"
+        |> Frontend.setSpendingDateValue sampleDate
+        |> (\dialog ->
+                { dialog
+                    | credits = [ completeLine "Alice" "-10.00" ]
+                    , debits = [ completeLine "Trip" "-10.00" ]
                 }
            )
 

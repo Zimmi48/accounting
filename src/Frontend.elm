@@ -2579,7 +2579,7 @@ canSubmitSpending { description, total, date, credits, debits, submitted } =
                 |> Maybe.map
                     (\totalInt ->
                         totalInt
-                            > 0
+                            /= 0
                             && validTransactionLines date credits
                             && validTransactionLines date debits
                     )
