@@ -104,222 +104,27 @@
 
 [Summarized into Summarized Context above.]
 
-## 2026-04-27T11:47:00Z: Test Suite Delivery Complete
-
-**Event:** Test harness accepted and integrated into CI.
-
-**Delivered:**
-- 13 elm-test cases covering transaction invariants, dialog logic, codec parity
-- npm test runner integrated into CI
-- README updated with test instructions
-- Squad agent docs updated
-
-**Reviewer verdict:** Bishop's backend/model refactor rejected due to incomplete src/Evergreen/Migrate/V26.elm. Newt assigned to complete.
-
-**Status:** Vasquez role (Tester) validation cycle complete for this delivery.
-
-## 2026-04-27T12:04:51Z through 2026-04-27T13:38:00Z: Refactor Cycle Complete
-
-[Detailed rejection cycle and final approval condensed into Summarized Context above. Key outcome: Dallas array refactor now approved under clarified codec compatibility rule.]
-
-## 2026-04-27: Array Refactor Final Review & Approval
-
-✅ Approved Dallas Array refactor:
-- Validated codec shape matches new model
-- Confirmed Evergreen untouched
-- All gates passed: formatting, codecs, compile, tests, HTTP 200
-- Clarified codec compatibility rule applied (no legacy required)
-
-Status: Ready for next phase.
-
-## 2026-04-27T14:39:52Z: Review Cycle 4 — Hudson Rejection & Dallas Reassignment
-
-**Event:** Reviewed Hudson's `Spending.transactionIds` restoration attempt.
-
-**Verdict:** Reject current repo state.
-
-**Reason:** Workspace does not contain the required model property or backend implementation:
-- `src/Types.elm`: No `transactionIds` field on `Spending`
-- `src/Codecs.elm`: Does not serialize `transactionIds`
-- `src/Backend.elm`: Recovers spending transactions via `allTransactionsWithIds model |> List.filter` (whole-model scan still present)
-
-**Validation observed:** Despite all gates passing (format, codecs, compile, tests, HTTP 200), the user requirement is not satisfied. Tests and validation alone are insufficient; repo state must align with directive.
-
-**Action:** Hudson locked out; Dallas assigned to next attempt.
-
-**Key insight for next owner:** The test suite does not catch missing model properties. The codecs check passes because the codec matches the (incomplete) model. Validator diligence requires checking both workspace alignment with directives AND gate success.
-
-## 2026-04-27T14:49:39Z: Final Review — Dallas Restoration APPROVED
-
-**Event:** Reviewed Dallas's `Spending.transactionIds` restoration implementation.
-
-**Verdict:** Approve. All requirements satisfied.
-
-**What was fixed:**
-- ✅ `src/Types.elm`: `Spending.transactionIds : List TransactionId` restored
-- ✅ `src/Codecs.elm`: Field serialization aligned
-- ✅ `src/Backend.elm`: Recovery uses direct `findTransaction` lookup on stored ids, not `allTransactionsWithIds |> filter`
-- ✅ Defensive `transaction.spendingId == spendingId` check retained
-
-**Validation:**
-- ✅ `elm-format --validate src/ tests/`
-- ✅ `./check-codecs.sh`
-- ✅ `lamdera make src/Frontend.elm --output=/dev/null`
-- ✅ `lamdera make src/Backend.elm --output=/dev/null`
-- ✅ `npm test` (13/13 passing)
-- ✅ HTTP 200 on `http://localhost:8000` (existing local server)
-
-**Consequence:** Regression closed. `Spending.transactionIds` is required and persisted; whole-model transaction scans for spending recovery are removed.
-
-**Consequence:** Regression closed. `Spending.transactionIds` is required and persisted; whole-model transaction scans for spending recovery are removed.
-
-**Status:** Complete and committed.
-
-## 2026-04-27T15:52:08Z: Split Verdict on Backend Cleanup + Ordering
-
-**Event:** Review of Dallas's dual-commit backend pass.
-
-**Verdict:** Approved cleanup; rejected ordering/test for reassignment.
-
-### Cleanup Approval ✅
-- `PendingTransaction` kept (still carries staging date fields)
-- `getSpendingTransactions` dead helper removed
-- Backend cleanup is safe and complete
-
-### Ordering Rejection ❌
-**Reason:** Not proven safe; likely inverts already-newest-first flow.
-- `RequestGroupTransactions` via nested `Dict.foldr` already yields newest-first
-- Frontend reversal likely flips back to older-first display
-- Test only covers synthetic `List.reverse`, not real backend/frontend seam
-- Same-day ordering not protected
-
-**Reassignment:** Hudson assigned to ordering revision with corrected seam testing.
-
-**Status:** Review complete. Follow-up assigned to Hudson.
-
-- 2026-04-27T16:02:33Z (Scribe orchestration): Vasquez rejection completed. Decision inbox merged; Hudson locked out for artifact (standing policy); Hicks assigned as next owner. Orchestration logs written; team updates appended to affected agent histories.
-
-- 2026-04-27T16:22:00Z (Hicks ordering review): APPROVED. `groupTransactionsFromBackend` in `src/Frontend.elm` now contains `List.reverse responseTransactions`. Regression test in `tests/FrontendTests.elm` uses realistic ascending input (Apr 16 → Apr 17 → Apr 18 idx=1 → Apr 18 idx=2) and asserts newest-first output including same-day ordering (idx=2 before idx=1). Backend `allTransactionsWithIds` confirmed still emitting oldest-first via `Dict.foldr ++ acc`. All 15 tests pass. Seam contract fully restored.
-
-### 2026-04-27T16:22:00Z: Hicks Transaction Ordering — APPROVED ✅
-
-**Artifact:** reverse-transaction-order (Hicks revision)  
-**Verdict:** APPROVED — No further revision required  
-
-**Verification Summary:**
-- ✅ Frontend consumer seam: `groupTransactionsFromBackend` restores `List.reverse responseTransactions` at correct boundary
-- ✅ Backend emission order: `allTransactionsWithIds` confirmed ascending (oldest-first) via nested `Dict.foldr ++ acc` pattern
-- ✅ Test quality: Upgraded from synthetic to realistic — feeds ascending backend response, asserts newest-first consumption, covers same-day ordering
-- ✅ Validation gates: elm-format, both lamdera make targets, npm test (15/15 passing), HTTP 200
-- ✅ Regression coverage: Multi-day ordering, same-day index ordering, group isolation
-
-**Status:** Complete. Ready for merge. Orchestration record: `.squad/orchestration-log/20260427-161057-vasquez-review-hicks-ordering.md`
-
-- 2026-04-27T16:22:00Z (Hicks ordering review): APPROVED. `groupTransactionsFromBackend` in `src/Frontend.elm` now contains `List.reverse responseTransactions`. Regression test in `tests/FrontendTests.elm` uses realistic ascending input (Apr 16 → Apr 17 → Apr 18 idx=1 → Apr 18 idx=2) and asserts newest-first output including same-day ordering (idx=2 before idx=1). Backend `allTransactionsWithIds` confirmed still emitting oldest-first via `Dict.foldr ++ acc`. All 15 tests pass. Seam contract fully restored.
-
-## 2026-04-27T17:xx: Test Regression — Transaction Status Filter Fix
-
-**Incident:** Two tests failing in `BackendTests.elm`:
-- `editing a spending keeps the replaced slots stable and appends the replacement rows` 
-- `deleting a spending keeps its historical slots while hiding it from active detail views`
-
-**Root cause:** `getSpendingTransactionsWithIds` in `src/Backend.elm` was filtering to only return transactions with `status == Active`. This violated the append-only invariant: when tests marked old transactions as `Replaced` or `Deleted` via `setTransactionStatuses`, those status changes became invisible to callers. The tests expect `getSpendingTransactionsWithIds` to return all transactions in a spending's `transactionIds` list, preserving their statuses for historical inspection.
-
-**Fix applied:** Removed the `transaction.status == Active` filter from `getSpendingTransactionsWithIds` (line 964). Now the function returns all transactions regardless of status, making status mutations visible and restoring the immutability contract: old slots stay stable and visible with their updated status markers.
-
-**Validation:** 
-- ✅ npm test: 15/15 passing
-- ✅ elm-format --validate: pass
-- ✅ ./check-codecs.sh: up to date
-- ✅ lamdera make (both Frontend and Backend): Success
-
-**Impact:** Spending edit/delete workflows now properly track historical transaction slots via status markers, enabling audit trails and protecting against accidental reuse of old slots.
-
-## 2026-04-28: Evergreen V24→V26 migration review completed
-
-**Session:** Evergreen migration preparation
-**Partner Agent:** Ripley (strategy + execution)
-
-Reviewed and validated Evergreen migration artifacts. Confirmed:
-
-**Regression risk assessment:**
-1. ✅ Backend accounting history preserved (no empty arrays)
-2. ✅ Spending-transaction membership reconstructed correctly
-3. ✅ Historical status/audit data retained (append-only discipline)
-4. ✅ Frontend state safely reset where ID mapping cannot be reconstructed
-5. ✅ Two-commit workflow maintained (generated + manual separation)
-
-**Validation checklist passed:**
-- ✅ No `Unimplemented` placeholders remain
-- ✅ Commit boundaries clean (no mixing of generated + manual)
-- ✅ All repo checks green (tests, codecs, Frontend, Backend)
-- ✅ Post-edit `lamdera check --force` confirmed Evergreen coherence
-
-**Outcome:** Migration approved for production. All rejection criteria satisfied. Ready for deploy.
-
-- 2026-04-28: Migration regression coverage now lives in `tests/MigrationTests.elm` plus `tests/FrontendTests.elm`: backend fixtures should assert reconstructed `BackendModel.spendings`, per-day `Day.transactions`, `Spending.transactionIds`, transaction statuses, and copied credit totals from `src/Evergreen/Migrate/V26.elm`; frontend safety is best proven at exposed dialog/message migration boundaries (`migrateFrontendDialog`, `migrateFrontendMsg`, `migrateToBackend`, `migrateToFrontend`) because old `FrontendModel` contains an opaque navigation key that is awkward to construct in pure tests.
-
-## 2026-04-28T09:40:39Z: Migration Test Coverage Expansion — Backend + Frontend Safety
-
-**Event:** Assigned as tester for extensive migration coverage; Dallas confirmed frontend safety.
-
-**Context:** User directive requires backend migration extensively tested and frontend migration to avoid confusing stale IDs; acceptable to reset state.
-
-**Execution:**
-
-### Backend Migration Tests
-Added comprehensive `tests/MigrationTests.elm` coverage for V24→V26:
-- Spendings reconstruction from V24 per-day storage to V26 top-level array
-- Transaction membership: per-day `Day.transactions` array construction
-- Membership links: `Spending.transactionIds` list alignment with migrated transactions
-- Status propagation: Historical `Deleted`/`Replaced` statuses survive migration
-- Metadata preservation: Transaction line dates, descriptions, amounts
-- Totals correctness: Spending total and per-line credits/debits preserved
-
-### Frontend Test Assertions  
-Updated `tests/FrontendTests.elm` to require stale-ID safety patterns:
-- `migrateFrontendDialog`: Legacy edit dialogs must drop (not preserve)
-- `migrateFrontendMsg`: Legacy edit/delete/detail messages convert to no-ops
-- `migrateToBackend`/`migrateToFrontend`: Stale references handled safely
-
-**Decision:** Test contract locked: transaction-addressed UI state unsafe to preserve; must reset or no-op.
-
-**Outcome:**
-- ✅ Backend migration tests: Comprehensive coverage for all data structures
-- ✅ Frontend tests: Stale-ID safety assertions in place
-- ✅ Decision doc: Test contract for future migration work
-- ✅ Validation: Repo passing (tests, codecs, Frontend, Backend)
-
-**Status:** Complete. Ready for code review. Migration test infrastructure established for future releases.
-
-- 2026-04-28: Re-review of Dallas's `scripts/compare_exports.py` revision approves the group-listing seam coverage. The script now mirrors `src/Backend.elm` `groupTransactionForList` plus `src/Frontend.elm` `groupTransactionsFromBackend`: it filters to active transactions with active spendings, composes descriptions with trimmed secondary descriptions, renders credit shares negative / debit shares positive via the same amount formatting, and reverses each per-group list to newest-first (including same-day index order). Key review files: `scripts/compare_exports.py`, `src/Backend.elm`, `src/Frontend.elm`, `README.md`.
-
-## 2026-04-28: Group Transaction Diff Review - Migration Safety Gate
-
-**Event:** Reviewed group transaction diff export tool for migration-safety seams.
-
-**Cycle 1 - First Review (Hudson):**
-- Rejected: Script compared storage-level facts but did not replay `RequestGroupTransactions` seam
-- Missing backend active filtering, frontend rendering, and ordering semantics
-- Established requirement: direct per-group active transaction multiset comparison
-
-**Cycle 2 - Re-Review (Dallas):**
-- Approved: Revised implementation replays real seam
-- Active filtering matches `src/Backend.elm` `groupTransactionForList`
-- Credit/debit sign rendering matches app listing contract
-- Description composition matches `transactionDescription` logic
-- Per-group ordering matches real seam (backend traversal → bucket → frontend newest-first)
-
-**Key learning:** Migration safety evidence must include user-facing seams, not just storage parity. Export diff now covers both logical spendings + group-list rendering semantics.
-
-## 2026-04-28: Total Replay Regression Test Coverage Added
-
-- Implemented 3 comprehensive regression test cases in `tests/BackendTests.elm`
-- All fail on current codebase (2 of 30 tests fail)
-- Tests confirm exact aggregate replay as required invariant
-- Isolated defect to `removeTransactionFromModel` (active-row filtering layer works correctly)
-- Decision merged into `.squad/decisions.md` with Ripley's root cause analysis
-- Test failures now provide specification for backend remediation
+## Summarized Context (2026-04-27 through 2026-04-28)
+
+**Refactoring & Validation Cycle (2026-04-27):**
+- Accepted test harness with 13 elm-test cases; integrated into CI with npm test runner
+- Rejected Hudson's `Spending.transactionIds` restoration (model/codec incomplete) but approved Dallas's corrected implementation with proper codec alignment and `findTransaction` lookup
+- Approved Dallas's array refactor under clarified codec compatibility rule
+- Rejected ordering implementation (synthetic test coverage insufficient), approved Hicks's revision with realistic seam testing and same-day ordering proof
+- Fixed `getSpendingTransactionsWithIds` status filter regression; now returns all transaction statuses for audit trail visibility
+- Established validator principle: repo state must align with directives; gate success alone insufficient
+
+**Migration & Safety Testing (2026-04-28):**
+- Reviewed Evergreen V24→V26 migration artifacts; approved for production with clean commit boundaries and no `Unimplemented` placeholders
+- Expanded migration test coverage: backend fixtures assert reconstructed spendings, per-day transactions, membership, status propagation, and totals; frontend tests require stale-ID safety (reset/no-op for dialog state)
+- Reviewed group-listing diff export seam: approved Dallas's revision for coverage of active filtering, credit/debit sign rendering, description composition, and ordering semantics
+- Implemented 3 comprehensive backend regression tests confirming aggregate replay invariant; isolated defect to `removeTransactionFromModel`
+- Total replay test failures provide specification for backend remediation
+
+**Key Learnings:**
+- Test suite does not catch missing model properties; validator diligence requires workspace alignment verification
+- Migration safety evidence must include user-facing seams, not just storage parity
+- Transaction status visibility critical for edit/delete audit trails and slot reuse prevention
 
 ## 2026-05-05T19:49:26Z: Mixed-sign Spending Regression Verification (Background)
 

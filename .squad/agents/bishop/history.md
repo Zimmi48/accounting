@@ -46,147 +46,24 @@
 - **Validation:** Compiles; codecs validated; development server HTTP 200; no Evergreen migrations (feature branch only)
 - **Status:** Completed
 
-## 2026-04-27T11:02:33Z: Array vs List Backend Tradeoff Analysis
+## Summarized Context (2026-04-27 through 2026-04-29)
 
-- **Session timestamp:** 2026-04-27T11:02:33Z
-- **Orchestration:** Completed with Ripley (sync review)
-- **Task:** Evaluate concrete data-structure tradeoffs in Elm/Lamdera model for day-transaction storage
-- **Output:** Tradeoff matrix and backend-specific concerns documented in decisions.md
-- **Key Finding:** Array would stabilize indices if paired with strict append-only discipline everywhere; current backend mostly append-only already
-- **Tradeoff:** Schema/invariant change cost exceeds local lookup optimization benefit; recommend explicit stored-ID approach for now
-- **Decision merged:** bishop-array-tradeoffs.md tradeoff guidance merged to decisions.md (2026-04-27)
+**ID Stability & Schema Tradeoffs (2026-04-27):**
+- Evaluated Array vs List backend tradeoff for transaction storage; recommended stored-ID approach for current model complexity
+- Designed append-only positional transaction ID scheme to stabilize indices without schema migration
+- Attempted removal of stored `Transaction.id` and `Spending.transactionIds` for append-only model (rejected by Vasquez due to codec breaking change)
+- Investigated delete/edit performance: confirmed `setSpendingStatus` called once per operation; redundant traversal in `setTransactionStatuses` + `removeTransactionFromModel` is architectural not accidental; optimization deferred pending profiling evidence
 
-## 2026-04-27T11:31:00Z: Append-Only Positional Transaction IDs
+**Lifecycle Totals Bug Discovery & Remediation (2026-04-28 to 2026-04-29):**
+- Identified real backend data corruption: `removeTransactionFromModel` leaves zero-valued entries in `totalGroupCredits` dicts at all scopes plus stale entries in `Person.belongsTo` set
+- Impact partially hidden by UI filters (`RequestUserGroups` filters non-zero credits/debits); fragile—proper fix requires source cleanup
+- User directive: track cleanup as non-priority follow-up, preserve test coverage without pinning leak as contract
+- Implemented export validator tooling (`scripts/validate_totals.py`) to replay active transactions and recompute derived fields (`totalGroupCredits`, `belongsTo`) for validation/repair; safe to rewrite only derived fields, must surface errors in non-fixable integrity issues for manual review
 
-- **Request:** Remove stored/precomputed transaction ids now that exact addressing can rely on append-only day positions.
-- **Files:** `src/Types.elm`, `src/Backend.elm`, `src/Codecs.elm`, `src/Evergreen/Migrate/V26.elm`
-- **Outcome:** Stored `Transaction.id` and `Spending.transactionIds` were removed; backend now derives `TransactionId` from each day's append-only list order and finds spending membership via `transaction.spendingId`.
-- **Validation:** `elm-format src/ --yes`, `./check-codecs.sh`, both `lamdera make` targets, `lamdera check --force` (migration compile succeeded; final step blocked only by missing `lamdera login`), and `lamdera live --port=8002` with HTTP 200.
-
-## 2026-04-27T11:31:00Z: Append-Only Positional Transaction IDs
-
-- **Request:** Remove stored/precomputed transaction ids now that exact addressing can rely on append-only day positions.
-- **Files:** `src/Types.elm`, `src/Backend.elm`, `src/Codecs.elm`, `src/Evergreen/Migrate/V26.elm`
-- **Outcome:** Stored `Transaction.id` and `Spending.transactionIds` were removed; backend now derives `TransactionId` from each day's append-only list order and finds spending membership via `transaction.spendingId`.
-- **Validation:** `elm-format src/ --yes`, `./check-codecs.sh`, both `lamdera make` targets, `lamdera check --force` (migration compile succeeded; final step blocked only by missing `lamdera login`), and `lamdera live --port=8002` with HTTP 200.
-
-## 2026-04-27T11:47:00Z: Artifact Rejection & Lock
-
-**Event:** Backend/model refactor artifact rejected in review.
-
-**Reason:** `src/Evergreen/Migrate/V26.elm` incomplete with Unimplemented placeholders risking data loss.
-
-**Status:** Locked out of this artifact for current cycle. Newt assigned to complete.
-
-**Reviewer:** Vasquez (Tester)
-
-## 2026-04-28T08:18:47Z: Backend spending status churn investigation
-
-- **Session:** Parallel investigation of test failures and backend performance
-- **Role:** Backend analysis to trace spending edit/delete paths
-- **Finding:** `setSpendingStatus` is called exactly once per operation (correct). Real inefficiency is in transaction-status and removal traversals over active transactions, not in repeated setSpendingStatus calls.
-- **Pattern:** Two separate traversals of transaction metadata:
-  1. `setTransactionStatuses`: Nested foldl over transactionIds to update status in year→month→day structure
-  2. `removeTransactionFromModel` loop: Another traversal to update aggregates
-- **Cost:** O(N) nested Dict updates per operation
-- **Optimization Option:** Combine both concerns into single traversal to reduce from O(2N) to O(N)
-- **Recommendation:** Profile first. Current performance acceptable for typical spendings (<100 transactions). No refactoring without profiling evidence.
-- **Status:** Investigation complete; decision merged to decisions.md 
-
-**Note:** Vasquez's test suite (13 tests) now available for future validation.
-
-## 2026-04-27T12:04:51Z: Second Rejection & Dallas Reassignment
-
-**Event:** Newt's replacement revision rejected by Vasquez. Both Bishop and Newt locked out; Dallas assigned.
-
-**What Passed:**
-- Append-only slot logic internally correct
-- All validation gates: compile, codecs, tests, server HTTP 200
-- No Evergreen files regenerated
-
-**Why It Fails:**
-- Persisted `Spending` and `Transaction` codec shapes changed without migration support
-- Removes `BackendModel.nextSpendingId`, `Spending.transactionIds`
-- Replaces `Transaction.id : TransactionId` with top-level year/month/day
-- Breaking change for Lamdera state and exported JSON
-- Under no-migration directive, unacceptable
-
-**Next Assignment:** Dallas to produce backend/model revision with codec compatibility preservation.
-
-## Delete/Edit Performance Investigation
-
-**Request:** "When deleting or editing a spending, `setSpendingStatus` is run many times for no reason (as many times as there are active transactions instead of just once)."
-
-**Trace & Finding:**
-- `setSpendingStatus` is called exactly **once** per delete/edit operation (lines 163, 192 in current Backend.elm)
-- Pattern uses three-phase approach: (1) mark spending Replaced/Deleted, (2) mark all transactions Replaced/Deleted via nested foldl, (3) loop N times to remove from aggregates
-- `setTransactionStatuses` uses nested Dict.update traversal that grows O(N) but is architecturally necessary to reach year→month→day→transaction structure
-- No hidden loops calling `setSpendingStatus` within transaction iteration
-
-**Why it feels redundant:** The design separates status updates (one foldl through transactionIds) from aggregate removal (another foldl through activeTransactions). Both traverse the transaction list but do different work—a performance optimization would combine them into one loop, but risks introducing bugs in deeply nested Dict manipulation.
-
-**Assessment:** Code is correct as-is. `setSpendingStatus` is already called once. The architectural concern is the redundant traversal in `setTransactionStatuses` + `removeTransactionFromModel` loop, not multiple calls to `setSpendingStatus`.
-
-**Safe optimization candidate:** Inline transaction-status update into the `removeTransactionFromModel` foldl to eliminate the separate `setTransactionStatuses` call entirely. Current cost is acceptable for typical <100 transaction spendings; only worth pursuing if profiling shows measurable impact.
-
-## 2026-04-28T14:15:00Z: Spending Lifecycle Totals Test Review
-
-- **Request:** Investigate failing lifecycle-total tests to determine if they reflect user-visible bugs or internal inconsistencies.
-- **Tests:** Two failing tests in `BackendTests.elm` (lines 126-169):
-  1. "same-day add/edit/delete keeps exact stored totals aligned with active transactions"
-  2. "cross-period edits and deletion keep year, month, and day totals aligned"
-- **Finding:** Both tests are **correct and reveal a real backend bug**.
-
-**Root Cause:** When `removeTransactionFromModel` removes a transaction:
-  1. It negates the transaction's amounts: `Dict.map (\_ (Amount x) -> Amount -x) groupCredits`
-  2. Passes negated amounts to `addToTotalGroupCredits` to zero them out
-  3. `addAmounts` correctly produces `Amount 0` when the amounts cancel
-  4. **Bug:** Zero-valued entries are never removed from `totalGroupCredits` dicts at any level (global, yearly, monthly, daily)
-  5. These "ghost" entries persist indefinitely in the model
-
-**Data Integrity Impact:**
-- Global, yearly, monthly, and daily `totalGroupCredits` dicts accumulate zero entries that should be absent
-- `Person.belongsTo` set is also never cleaned up—group keys remain even after all that person's amounts in that group are zero
-
-**User Visibility:** Partially hidden by UI filtering:
-- `RequestUserGroups` (line 266) filters creditors with `credit > 0`
-- `RequestUserGroups` (line 266) filters debitors with `credit < 0`
-- Zero amounts are naturally excluded from these lists, so users don't see phantom groups
-- **However:** This is fragile—proper fix requires cleaning up at the source, not relying on UI filters
-
-**Precise Manual Reproduction (if UI filters weren't present):**
-1. Create group "Trip" with Alice and Bob as members
-2. Record expense: "Dinner", total 1200, Alice pays (credit 1200), Trip owes (debit 1200, split 50/50)
-3. Delete the "Dinner" expense
-4. **Expected:** Backend totals dicts should be empty for Trip at all levels
-5. **Actual:** Stored totals contain `Trip → {Alice: 0, Bob: 0}` and similar zero entries at year/month/day levels
-6. Alice's `belongsTo` still includes the Trip key
-
-**Verdict:** Internal data corruption bug (model not cleaned on delete), partially masked by UI filters but represents accumulating garbage in stored state.
-
-## 2026-04-29T06:59:52Z: Lifecycle Totals Bug Validation
-
-- **Session:** Orchestrated split review with Ripley
-- **Task:** Validate whether failing tests expose real backend bugs or false positives
-- **Finding:** Backend has real internal data corruption bug:
-  - `removeTransactionFromModel` negates amounts correctly but leaves zero-valued entries in totals dicts
-  - Leakage sites: global/yearly/monthly/daily `totalGroupCredits` + `Person.belongsTo` set
-  - Root cause: No cleanup when entries hit zero
-- **User Impact:** Partially hidden by UI filters (RequestUserGroups filters non-zero amounts). Fragile; needs source cleanup.
-- **Fix Requirements:** (1) Remove dict entries when they hit zero, (2) Clean up `Person.belongsTo`, (3) Audit model queries for zero-entry assumptions
-- **Orchestration status:** Under review; awaiting decision on cleanup strategy and scope
-- **Artifact:** `.squad/decisions/inbox/bishop-test-validation-lifecycle-totals.md` (archived to decisions.md)
-- 2026-04-29: Export repair tooling now lives in `scripts/validate_totals.py`. It targets the current `/json` export shape from `src/Types.elm` / `src/Codecs.elm`, replays active transactions via `Transaction.spendingId`, validates spending totals plus root/year/month/day `totalGroupCredits` and `Person.belongsTo`, and writes fixes to a separate JSON file instead of mutating source exports in place.
-
-## 2026-04-29T07:25:19Z: Export Validator Implementation (Background)
-
-- **Task:** Add export validator and fixer script with associated documentation
-- **Deliverables:** `scripts/validate_totals.py`, README usage section
-- **Scope Decision:** Only rewrite derived fields (`totalGroupCredits` at all scopes, `persons.*.belongsTo`)
-- **Rationale:** Only recomputable fields are safe to mutate; spendings, transactions, statuses must be surfaced as errors for manual review
-- **Flag:** `--write-fixed` enables corrected export copy; errors in non-fixable fields preserved intentionally
-- **Decision merged:** Export Validator Fix Scope (2026-04-29)
-- **Status:** Completed; ready for merge review
+**Key Learnings:**
+- Append-only positional indexing can stabilize transaction IDs but requires strict discipline everywhere
+- Schema shape change cost exceeds local optimization benefit for current model scope
+- Test failures reveal real bugs; validator must check workspace alignment against directives, not just gate success
 
 ## 2026-05-05T19:49:26Z: Mixed-sign Spending Regression Fix (Background)
 
