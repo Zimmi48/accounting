@@ -1433,3 +1433,31 @@ Opened GitHub issue #48 to document the backend cleanup leak (zero-valued entrie
 
 Related to: newt-lifecycle-total-invariants.md (test cleanup decision)
 
+
+# Decision: Mixed-sign spending validation
+
+**Timestamp:** 2026-05-05T19:39:52Z
+
+**Role:** Bishop
+
+## Decision
+
+Keep signed spending lines through backend normalization and validation, rejecting only zero-valued normalized rows.
+
+## Why
+
+The spending invariant is at the aggregate level (`credits == debits == total`), so blocking negative individual creditor/debitor rows wrongly rejects balanced mixed-sign submissions that the frontend already allows.
+
+## Rationale
+
+The regression was in `src/Backend.elm` validation: `normalizeSpendingTransactions` and `isBalancedTransaction` were incorrectly stripping non-zero negative amounts from individual transaction lines. The fix preserves signed amounts through normalization, only dropping rows that sum to exactly zero after merging by (date, secondaryDescription) bucket.
+
+## Verification
+
+- Files: `src/Backend.elm`, `tests/BackendTests.elm`
+- Validation: `elm-format src/ tests/ --yes`, `./check-codecs.sh`, `lamdera make src/Frontend.elm --output=/dev/null`, `lamdera make src/Backend.elm --output=/dev/null`, `npm test`, `lamdera live` with HTTP 200
+- Approval: Vasquez (Tester) verified regression reproduction and approved the fix
+
+## Status
+
+✓ Merged and approved

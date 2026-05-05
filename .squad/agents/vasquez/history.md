@@ -8,6 +8,7 @@
 
 ## Learnings
 
+- 2026-05-05: The mixed-sign spending regression lives in `src/Backend.elm` validation, not the dialog submit path: `normalizeSpendingTransactions` and `isBalancedTransaction` must preserve non-zero negative amounts so cases like total 100 with creditors `200` and `-100` survive, and `tests/BackendTests.elm` now guards that exact backend seam.
 - 2026-04-28: Regression coverage in `tests/BackendTests.elm` now replays active transactions to compare exact stored `totalGroupCredits` snapshots against recomputation at global/year/month/day scope; current failures show `src/Backend.elm` edit/delete flows leave zero-valued group entries and empty period buckets behind after `removeTransactionFromModel`, while `groupTransactionForList` and `spendingTransactionsForDetails` still correctly expose only the active replacement rows.
 - 2026-04-27: Review of the backend cleanup + group-ordering pass confirmed `src/Backend.elm` still needs `PendingTransaction` because it carries staging-only `year`/`month`/`day` fields into `assignTransactionIds` and the year/month/day storage buckets, while stored `Transaction` records no longer persist those fields; `getSpendingTransactions` is gone, but `src/Frontend.elm` now reverses a backend `RequestGroupTransactions` list that is already produced newest-first via nested `Dict.foldr`, and the added frontend test only proves a synthetic `List.reverse` helper instead of the real backend/frontend ordering seam.
 
@@ -319,3 +320,17 @@ Updated `tests/FrontendTests.elm` to require stale-ID safety patterns:
 - Isolated defect to `removeTransactionFromModel` (active-row filtering layer works correctly)
 - Decision merged into `.squad/decisions.md` with Ripley's root cause analysis
 - Test failures now provide specification for backend remediation
+
+## 2026-05-05T19:49:26Z: Mixed-sign Spending Regression Verification (Background)
+
+- **Task:** Verify and review Bishop's fix for mixed-sign creditor spending regression
+- **Reproduction:** Manually confirmed regression in live app: spending dialog rejects balanced mixed-sign creditor amounts with validation error "Spending total must match total credits and total debits"
+- **Bishop's Fix Review:** Examined changes to `src/Backend.elm` validation and `tests/BackendTests.elm` regression test
+- **Verification Scope:** Approved scenario: total 100 with creditors [200, -100] must succeed after fix
+- **Validation:**
+  - Reproduced original failure on reverted backend
+  - Verified fix resolves the regression on restored backend
+  - Confirmed all validation gates: elm-format, check-codecs.sh, both lamdera make targets, npm test, lamdera live HTTP 200
+- **Verdict:** ✓ Approved for merge
+- **Decision merged:** Mixed-sign spending validation (2026-05-05)
+- **Status:** Completed

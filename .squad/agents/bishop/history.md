@@ -15,6 +15,7 @@
 - Evergreen V26 migrates each legacy day spending into one stored spending plus one transaction with empty secondary description, while frontend/session migration intentionally resets fragile client-side edit/delete state to safe defaults.
 - Codec workflow remains `./check-codecs.sh --regenerate`, and migration validation succeeded with `lamdera check --force` after adding `src/Evergreen/V26/Types.elm` and `src/Evergreen/Migrate/V26.elm`.
 - 2026-04-21: Codec parity fixes can be generation-only; for the current model shape, `./check-codecs.sh --regenerate` refreshed `src/Codecs.elm` without touching `src/Types.elm`, `src/Backend.elm`, or any `src/Evergreen/` files, and validation stayed on `elm-format`, both `lamdera make` targets, and `lamdera live` HTTP 200.
+- 2026-05-05: Mixed-sign creditor spendings fail in `src/Backend.elm` before persistence, not in the dialog submit gate. `Frontend.canSubmitSpending` and `dialogTransactions` already pass signed amounts through, so backend normalization/validation must keep non-zero signed transaction lines and only drop exact zero merges; regression coverage now lives in `tests/BackendTests.elm`.
 
 ## 2026-04-21: Phase 2 Contract Correction Approved
 
@@ -186,3 +187,16 @@
 - **Flag:** `--write-fixed` enables corrected export copy; errors in non-fixable fields preserved intentionally
 - **Decision merged:** Export Validator Fix Scope (2026-04-29)
 - **Status:** Completed; ready for merge review
+
+## 2026-05-05T19:49:26Z: Mixed-sign Spending Regression Fix (Background)
+
+- **Task:** Fix backend regression where validation rejected balanced mixed-sign creditor amounts
+- **Diagnosis:** `normalizeSpendingTransactions` and `isBalancedTransaction` in `src/Backend.elm` were incorrectly stripping non-zero negative amounts from individual transaction lines
+- **Fix:** Preserve signed amounts through normalization; only drop rows that sum to exactly zero after merging by (date, secondaryDescription) bucket
+- **Deliverables:**
+  - Modified `src/Backend.elm` to keep non-zero signed transaction lines
+  - Added regression test in `tests/BackendTests.elm` with mixed-sign scenario (total 100, creditors [200, -100])
+- **Validation:** elm-format, check-codecs.sh, both lamdera make targets, npm test, lamdera live HTTP 200
+- **Approval:** Vasquez (Tester) reproduced regression, verified fix, and approved for merge
+- **Decision merged:** Mixed-sign spending validation (2026-05-05)
+- **Status:** Completed; ready for merge
