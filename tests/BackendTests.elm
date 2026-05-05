@@ -98,6 +98,31 @@ suite =
 
                         Err errorMessage ->
                             Expect.fail ("Expected normalized transactions, got: " ++ errorMessage)
+            , test "validation accepts mixed-sign creditors when the spending still balances overall" <|
+                \_ ->
+                    let
+                        result =
+                            Backend.validateSpendingTransactions
+                                (Amount 100)
+                                [ spendingTransaction 18 "Alice" CreditTransaction 200
+                                , spendingTransaction 18 "Bob" CreditTransaction -100
+                                , spendingTransaction 18 "Trip" DebitTransaction 100
+                                ]
+                    in
+                    case result of
+                        Ok normalized ->
+                            Expect.equal
+                                ( Just (Amount 200)
+                                , Just (Amount -100)
+                                , Just (Amount 100)
+                                )
+                                ( findAmount "Alice" CreditTransaction normalized
+                                , findAmount "Bob" CreditTransaction normalized
+                                , findAmount "Trip" DebitTransaction normalized
+                                )
+
+                        Err errorMessage ->
+                            Expect.fail ("Expected mixed-sign creditors to stay valid, got: " ++ errorMessage)
             , test "normalization drops keys whose combined amount becomes zero" <|
                 \_ ->
                     Expect.equal

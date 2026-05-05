@@ -632,7 +632,7 @@ normalizeSpendingTransactions transactions =
             (\transaction ->
                 case transaction.amount of
                     Amount amount ->
-                        amount > 0
+                        amount /= 0
             )
 
 
@@ -643,7 +643,7 @@ isBalancedTransaction transaction =
             String.trim transaction.group
                 /= ""
                 && amount
-                > 0
+                /= 0
 
 
 totalAmount : Dict String (Amount a) -> Int
