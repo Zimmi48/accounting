@@ -2,6 +2,26 @@
 
 ## Active Decisions
 
+### V31 Migration Boundary (Dallas, 2026-05-14)
+
+**Status:** Approved and in progress.
+
+**Decision:** Keep Lamdera-generated `src/Evergreen/V31/Types.elm` untouched in the working tree. Hand-edit only `src/Evergreen/Migrate/V31.elm` for the storage rewrite, so review can isolate the manual migration logic from generated artifacts.
+
+**Storage rewrite strategy:**
+- Traverse legacy top-level day transactions
+- Partition them under id-keyed stored groups
+- Remap every persisted `Spending.transactionIds` entry through an explicit old-to-new transaction-id map
+
+**Frontend state preservation:**
+- Keep only where it already keys by `SpendingId`
+- Clear stale `groupTransactions`, `ListGroupTransactions`, and `ShowAddSpendingDialog (Just _)` seams
+- Rationale: Legacy transaction ids do not encode the new `groupId` scope
+
+**Why:** Clean-diff discipline separates generated artifacts from handwritten migration logic. Enables focused review of actual domain migration work without noise from auto-generated type definitions.
+
+**Reviewer:** Ripley approved the migration shape and clean-diff discipline.
+
 ### Lifecycle Total Invariants (Newt, 2026-04-29)
 
 **Status:** Approved and implemented.

@@ -8,8 +8,11 @@ import Array
 import Backend
 import Dict
 import Evergreen.Migrate.V26 as MigrateV26
+import Evergreen.Migrate.V31 as MigrateV31
 import Evergreen.V24.Types as V24
 import Evergreen.V26.Types as V26
+import Evergreen.V28.Types as V28
+import Evergreen.V31.Types as V31
 import Expect
 import Set
 import String
@@ -530,6 +533,116 @@ suite =
                         , lunchDebit |> Maybe.map (\transaction -> ( transaction.groupMembersKey, transaction.groupMembers ))
                         )
             ]
+        , describe "V28 to V31 backend migration"
+            [ test "migration repartitions transactions under group-owned storage without changing spending membership" <|
+                \_ ->
+                    let
+                        migrated =
+                            MigrateV31.migrate_Types_BackendModel legacyBackendModelV28
+                    in
+                    Expect.equal
+                        { spendings =
+                            [ { spendingId = 0, description = "Dinner", transactionIds = [ ( 1, 0 ), ( 3, 0 ) ], status = V31.Active }
+                            , { spendingId = 1, description = "Snacks", transactionIds = [ ( 2, 0 ), ( 3, 1 ) ], status = V31.Deleted }
+                            ]
+                        , aliceDay =
+                            [ { index = 0, spendingId = 0, group = "Alice", status = V31.Active, groupMembersKey = "1,2" } ]
+                        , tripDay =
+                            [ { index = 0, spendingId = 0, group = "Trip", status = V31.Active, groupMembersKey = "1,2" }
+                            , { index = 1, spendingId = 1, group = "Trip", status = V31.Deleted, groupMembersKey = "1,2" }
+                            ]
+                        , bobDay =
+                            [ { index = 0, spendingId = 1, group = "Bob", status = V31.Deleted, groupMembersKey = "1,2" } ]
+                        }
+                        { spendings =
+                            migrated.spendings
+                                |> Array.toIndexedList
+                                |> List.map
+                                    (\( spendingId, spending ) ->
+                                        { spendingId = spendingId
+                                        , description = spending.description
+                                        , transactionIds = spending.transactionIds |> List.map (\transactionId -> ( transactionId.groupId, transactionId.index ))
+                                        , status = spending.status
+                                        }
+                                    )
+                        , aliceDay =
+                            v31DayTransactions 1 2025 4 18 migrated
+                                |> List.indexedMap
+                                    (\index transaction ->
+                                        { index = index
+                                        , spendingId = transaction.spendingId
+                                        , group = transaction.group
+                                        , status = transaction.status
+                                        , groupMembersKey = transaction.groupMembersKey
+                                        }
+                                    )
+                        , tripDay =
+                            v31DayTransactions 3 2025 4 18 migrated
+                                |> List.indexedMap
+                                    (\index transaction ->
+                                        { index = index
+                                        , spendingId = transaction.spendingId
+                                        , group = transaction.group
+                                        , status = transaction.status
+                                        , groupMembersKey = transaction.groupMembersKey
+                                        }
+                                    )
+                        , bobDay =
+                            v31DayTransactions 2 2025 4 18 migrated
+                                |> List.indexedMap
+                                    (\index transaction ->
+                                        { index = index
+                                        , spendingId = transaction.spendingId
+                                        , group = transaction.group
+                                        , status = transaction.status
+                                        , groupMembersKey = transaction.groupMembersKey
+                                        }
+                                    )
+                        }
+            , test "migration keeps due owed totals and a single spending-wide member key consistent" <|
+                \_ ->
+                    let
+                        migrated =
+                            MigrateV31.migrate_Types_BackendModel legacyBackendModelV28
+
+                        dinnerMetadata =
+                            migrated.spendings
+                                |> Array.get 0
+                                |> Maybe.map
+                                    (.transactionIds
+                                        >> List.filterMap (\transactionId -> v31FindTransaction transactionId migrated)
+                                        >> List.map (\transaction -> ( transaction.groupMembersKey, transaction.groupMembers ))
+                                    )
+                    in
+                    Expect.equal
+                        { aliceBelongsTo = Just (Set.singleton "1,2")
+                        , bobBelongsTo = Just (Set.singleton "1,2")
+                        , totalGroupCredits = Just [ ( "Alice", 1200 ), ( "Trip", -1200 ) ]
+                        , groupTotals = { alice = Just 1200, bob = Just 0, trip = Just -1200 }
+                        , dinnerMetadata =
+                            Just
+                                [ ( "1,2", Set.fromList [ "Alice", "Bob" ] )
+                                , ( "1,2", Set.fromList [ "Alice", "Bob" ] )
+                                ]
+                        }
+                        { aliceBelongsTo = migrated.persons |> Dict.get 1 |> Maybe.map .belongsTo
+                        , bobBelongsTo = migrated.persons |> Dict.get 2 |> Maybe.map .belongsTo
+                        , totalGroupCredits =
+                            migrated.totalGroupCredits
+                                |> Dict.get "1,2"
+                                |> Maybe.map
+                                    (Dict.toList
+                                        >> List.sortBy Tuple.first
+                                        >> List.map (\( groupName, V31.Amount amount ) -> ( groupName, amount ))
+                                    )
+                        , groupTotals =
+                            { alice = migrated.groups |> Dict.get 1 |> Maybe.map (.totalCredit >> amountValueV31)
+                            , bob = migrated.groups |> Dict.get 2 |> Maybe.map (.totalCredit >> amountValueV31)
+                            , trip = migrated.groups |> Dict.get 3 |> Maybe.map (.totalCredit >> amountValueV31)
+                            }
+                        , dinnerMetadata = dinnerMetadata
+                        }
+            ]
         ]
 
 
@@ -982,6 +1095,100 @@ legacyTotals amount =
         ]
 
 
+legacyBackendModelV28 : V28.BackendModel
+legacyBackendModelV28 =
+    { years =
+        Dict.fromList
+            [ ( 2025
+              , { months =
+                    Dict.fromList
+                        [ ( 4
+                          , { days =
+                                Dict.fromList
+                                    [ ( 18
+                                      , { transactions =
+                                            Array.fromList
+                                                [ legacyV28Transaction 0 "Alice" V28.CreditTransaction 1200 V28.Active
+                                                , legacyV28Transaction 0 "Trip" V28.DebitTransaction 1200 V28.Active
+                                                , legacyV28Transaction 1 "Bob" V28.CreditTransaction 800 V28.Deleted
+                                                , legacyV28Transaction 1 "Trip" V28.DebitTransaction 800 V28.Deleted
+                                                ]
+                                        , totalGroupCredits = legacyV28Totals 1200
+                                        }
+                                      )
+                                    ]
+                            , totalGroupCredits = legacyV28Totals 1200
+                            }
+                          )
+                        ]
+                , totalGroupCredits = legacyV28Totals 1200
+                }
+              )
+            ]
+    , spendings =
+        Array.fromList
+            [ { description = "Dinner"
+              , total = V28.Amount 1200
+              , transactionIds =
+                    [ { year = 2025, month = 4, day = 18, index = 0 }
+                    , { year = 2025, month = 4, day = 18, index = 1 }
+                    ]
+              , status = V28.Active
+              }
+            , { description = "Snacks"
+              , total = V28.Amount 800
+              , transactionIds =
+                    [ { year = 2025, month = 4, day = 18, index = 2 }
+                    , { year = 2025, month = 4, day = 18, index = 3 }
+                    ]
+              , status = V28.Deleted
+              }
+            ]
+    , groups =
+        Dict.fromList
+            [ ( "Trip"
+              , Dict.fromList
+                    [ ( "Alice", V28.Share 1 )
+                    , ( "Bob", V28.Share 1 )
+                    ]
+              )
+            ]
+    , totalGroupCredits = legacyV28Totals 1200
+    , persons =
+        Dict.fromList
+            [ ( "Alice", { id = 1, belongsTo = Set.singleton "Trip" } )
+            , ( "Bob", { id = 2, belongsTo = Set.singleton "Trip" } )
+            ]
+    , nextPersonId = 3
+    , loggedInSessions = Set.empty
+    }
+
+
+legacyV28Transaction : Int -> String -> V28.TransactionSide -> Int -> V28.TransactionStatus -> V28.Transaction
+legacyV28Transaction spendingId group side amount status =
+    { spendingId = spendingId
+    , secondaryDescription = ""
+    , group = group
+    , amount = V28.Amount amount
+    , side = side
+    , groupMembersKey = "1,2"
+    , groupMembers = Set.fromList [ "Alice", "Bob" ]
+    , status = status
+    }
+
+
+legacyV28Totals : Int -> Dict.Dict String (Dict.Dict String (V28.Amount V28.Credit))
+legacyV28Totals amount =
+    Dict.fromList
+        [ ( "1,2"
+          , Dict.fromList
+                [ ( "Alice", V28.Amount amount )
+                , ( "Trip", V28.Amount -amount )
+                ]
+          )
+        ]
+
+
 v26FindTransaction : V26.TransactionId -> V26.BackendModel -> Maybe V26.Transaction
 v26FindTransaction transactionId model =
     model.years
@@ -1010,3 +1217,29 @@ transactionIdToString transactionId =
         ++ String.fromInt transactionId.day
         ++ "-"
         ++ String.fromInt transactionId.index
+
+
+v31FindTransaction : V31.TransactionId -> V31.BackendModel -> Maybe V31.Transaction
+v31FindTransaction transactionId model =
+    model.groups
+        |> Dict.get transactionId.groupId
+        |> Maybe.andThen (.years >> Dict.get transactionId.year)
+        |> Maybe.andThen (.months >> Dict.get transactionId.month)
+        |> Maybe.andThen (.days >> Dict.get transactionId.day)
+        |> Maybe.andThen (.transactions >> Array.get transactionId.index)
+
+
+v31DayTransactions : V31.GroupId -> Int -> Int -> Int -> V31.BackendModel -> List V31.Transaction
+v31DayTransactions groupId year month day model =
+    model.groups
+        |> Dict.get groupId
+        |> Maybe.andThen (.years >> Dict.get year)
+        |> Maybe.andThen (.months >> Dict.get month)
+        |> Maybe.andThen (.days >> Dict.get day)
+        |> Maybe.map (.transactions >> Array.toList)
+        |> Maybe.withDefault []
+
+
+amountValueV31 : V31.Amount a -> Int
+amountValueV31 (V31.Amount amount) =
+    amount

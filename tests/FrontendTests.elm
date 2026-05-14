@@ -9,8 +9,11 @@ import Date
 import DatePicker
 import Dict
 import Evergreen.Migrate.V26 as MigrateV26
+import Evergreen.Migrate.V31 as MigrateV31
 import Evergreen.V24.Types as V24
 import Evergreen.V26.Types as V26
+import Evergreen.V28.Types as V28
+import Evergreen.V31.Types as V31
 import Expect
 import Frontend
 import Test exposing (..)
@@ -198,6 +201,24 @@ suite =
                                 )
                         }
             ]
+        , describe "V28 to V31 frontend migration safety"
+            [ test "frontend dialog migration preserves spending editor contents that already use spending ids" <|
+                \_ ->
+                    Expect.equal
+                        (V31.AddSpendingDialog legacyFrontendDialogV31)
+                        (MigrateV31.migrate_Types_Dialog (V28.AddSpendingDialog legacyFrontendDialogV28))
+            , test "frontend message and payload migration no-op stale edit intents and clear old transaction listings" <|
+                \_ ->
+                    Expect.equal
+                        ( V31.NoOpFrontendMsg
+                        , V31.ShowAddSpendingDialog Nothing
+                        , V31.ListGroupTransactions { group = "Trip", transactions = [] }
+                        )
+                        ( MigrateV31.migrate_Types_FrontendMsg (V28.ShowAddSpendingDialog (Just legacySpendingReferenceV28))
+                        , MigrateV31.migrate_Types_FrontendMsg (V28.ShowAddSpendingDialog Nothing)
+                        , MigrateV31.migrate_Types_ToFrontend legacyGroupTransactionsPayloadV28
+                        )
+            ]
         ]
 
 
@@ -356,4 +377,94 @@ legacyListedTransaction =
     , day = 18
     , total = V24.Amount 1000
     , share = V24.Amount 500
+    }
+
+
+legacyFrontendDialogV28 : V28.AddSpendingDialogModel
+legacyFrontendDialogV28 =
+    { spendingId = Just 0
+    , description = "Dinner"
+    , total = "10.00"
+    , date = Just sampleDate
+    , today = Just sampleDate
+    , dateText = "2025-04-18"
+    , datePickerModel = DatePicker.init
+    , credits = [ legacyTransactionLineV28 "Alice" ]
+    , debits = [ legacyTransactionLineV28 "Trip" ]
+    , submitted = False
+    }
+
+
+legacyFrontendDialogV31 : V31.AddSpendingDialogModel
+legacyFrontendDialogV31 =
+    { spendingId = Just 0
+    , description = "Dinner"
+    , total = "10.00"
+    , date = Just sampleDate
+    , today = Just sampleDate
+    , dateText = "2025-04-18"
+    , datePickerModel = DatePicker.init
+    , credits = [ legacyTransactionLineV31 "Alice" ]
+    , debits = [ legacyTransactionLineV31 "Trip" ]
+    , submitted = False
+    }
+
+
+legacyTransactionIdV28 : V28.TransactionId
+legacyTransactionIdV28 =
+    { year = 2025
+    , month = 4
+    , day = 18
+    , index = 0
+    }
+
+
+legacySpendingReferenceV28 : V28.SpendingReference
+legacySpendingReferenceV28 =
+    { spendingId = 0
+    , transactionId = legacyTransactionIdV28
+    }
+
+
+legacyGroupTransactionsPayloadV28 : V28.ToFrontend
+legacyGroupTransactionsPayloadV28 =
+    V28.ListGroupTransactions
+        { group = "Trip"
+        , transactions =
+            [ { transactionId = legacyTransactionIdV28
+              , spendingId = 0
+              , description = "Dinner"
+              , year = 2025
+              , month = 4
+              , day = 18
+              , total = V28.Amount 1000
+              , share = V28.Amount 500
+              }
+            ]
+        }
+
+
+legacyTransactionLineV28 : String -> V28.TransactionLine
+legacyTransactionLineV28 group =
+    { date = Just sampleDate
+    , dateText = "2025-04-18"
+    , datePickerModel = DatePicker.init
+    , secondaryDescription = ""
+    , detailsExpanded = False
+    , group = group
+    , amount = "10.00"
+    , nameValidity = V28.Complete
+    }
+
+
+legacyTransactionLineV31 : String -> V31.TransactionLine
+legacyTransactionLineV31 group =
+    { date = Just sampleDate
+    , dateText = "2025-04-18"
+    , datePickerModel = DatePicker.init
+    , secondaryDescription = ""
+    , detailsExpanded = False
+    , group = group
+    , amount = "10.00"
+    , nameValidity = V31.Complete
     }

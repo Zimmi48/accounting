@@ -26,6 +26,7 @@ import Evergreen.V31.Types
 import Lamdera.Migrations exposing (..)
 import List
 import Maybe
+import Set
 
 
 frontendModel : Evergreen.V28.Types.FrontendModel -> ModelMigration Evergreen.V31.Types.FrontendModel Evergreen.V31.Types.FrontendMsg
@@ -58,17 +59,422 @@ toFrontend old =
     MsgMigrated ( migrate_Types_ToFrontend old, Cmd.none )
 
 
+migrate_Types_Transaction : Evergreen.V28.Types.Transaction -> Evergreen.V31.Types.Transaction
+migrate_Types_Transaction old =
+    { spendingId = old.spendingId
+    , secondaryDescription = old.secondaryDescription
+    , group = old.group
+    , amount = old.amount |> migrate_Types_Amount
+    , side = old.side |> migrate_Types_TransactionSide
+    , groupMembersKey = old.groupMembersKey
+    , groupMembers = old.groupMembers
+    , status = old.status |> migrate_Types_TransactionStatus
+    }
+
+
 migrate_Types_BackendModel : Evergreen.V28.Types.BackendModel -> Evergreen.V31.Types.BackendModel
 migrate_Types_BackendModel old =
-    { spendings = old.spendings |> Array.map migrate_Types_Spending
-    , groups = old.groups |> Dict.toList |> List.map (Tuple.mapBoth (Unimplemented {- Type changed from `String` to `Evergreen.V31.Types.GroupId`. I need you to write this migration. -}) migrate_Types_StoredGroup) |> Dict.fromList
-    , persons = old.persons |> Dict.toList |> List.map (Tuple.mapBoth (Unimplemented {- Type changed from `String` to `Evergreen.V31.Types.PersonId`. I need you to write this migration. -}) migrate_Types_Person) |> Dict.fromList
-    , nextId = (Unimplemented {- Type `Int` was added in V31. I need you to set a default value. -})
-    , totalGroupCredits = old.totalGroupCredits |> Dict.map (\k -> Dict.map (\k -> migrate_Types_Amount))
+    let
+        groupDirectory =
+            buildGroupDirectory old
+
+        migratedTransactions =
+            migrateLegacyTransactions groupDirectory.groupIds groupDirectory.groups old
+    in
+    { spendings = migrateLegacySpendings migratedTransactions.transactionIds old.spendings
+    , groups = migratedTransactions.groups
+    , persons = migrateLegacyPersons old
+    , nextId = groupDirectory.nextId
+    , totalGroupCredits = old.totalGroupCredits |> Dict.map (\_ -> Dict.map (\_ -> migrate_Types_Amount))
     , loggedInSessions = old.loggedInSessions
-    , nextPersonId = (Unimplemented {- Field of type `Int` was removed in V31. I need you to do something with the `old.nextPersonId` value if you wish to keep the data, then remove this line. -})
-    , years = (Unimplemented {- Field of type `Dict (Int) (Evergreen.V28.Types.Year)` was removed in V31. I need you to do something with the `old.years` value if you wish to keep the data, then remove this line. -})
     }
+
+
+invalidGroupId : Evergreen.V31.Types.GroupId
+invalidGroupId =
+    -1
+
+
+type alias LegacyTransactionKey =
+    ( Int, Int, ( Int, Int ) )
+
+
+type alias GroupDirectory =
+    { groupIds : Dict.Dict String Evergreen.V31.Types.GroupId
+    , groups : Dict.Dict Evergreen.V31.Types.GroupId Evergreen.V31.Types.StoredGroup
+    , nextId : Int
+    }
+
+
+type alias TransactionMigrationState =
+    { groups : Dict.Dict Evergreen.V31.Types.GroupId Evergreen.V31.Types.StoredGroup
+    , transactionIds : Dict.Dict LegacyTransactionKey Evergreen.V31.Types.TransactionId
+    }
+
+
+buildGroupDirectory : Evergreen.V28.Types.BackendModel -> GroupDirectory
+buildGroupDirectory old =
+    let
+        personEntries =
+            old.persons
+                |> Dict.toList
+                |> List.map
+                    (\( personName, person ) ->
+                        ( personName
+                        , person.id
+                        , { name = personName
+                          , members = Dict.singleton person.id (Evergreen.V31.Types.Share 1)
+                          , years = Dict.empty
+                          , totalCredit = Evergreen.V31.Types.Amount 0
+                          }
+                        )
+                    )
+
+        maxPersonId =
+            personEntries
+                |> List.map (\( _, personId, _ ) -> personId)
+                |> List.maximum
+                |> Maybe.withDefault -1
+
+        firstGroupId =
+            max old.nextPersonId (maxPersonId + 1)
+
+        personIds =
+            personEntries
+                |> List.map (\( personName, personId, _ ) -> ( personName, personId ))
+                |> Dict.fromList
+
+        personGroups =
+            personEntries
+                |> List.map (\( _, personId, group ) -> ( personId, group ))
+                |> Dict.fromList
+
+        ( groupIds, groups, nextId ) =
+            old.groups
+                |> Dict.toList
+                |> List.foldl
+                    (\( groupName, members ) ( groupIdsAcc, groupsAcc, nextIdAcc ) ->
+                        let
+                            groupId =
+                                nextIdAcc
+                        in
+                        ( Dict.insert groupName groupId groupIdsAcc
+                        , Dict.insert groupId (emptyStoredGroup groupName (migrateStoredGroupMembers personIds members)) groupsAcc
+                        , nextIdAcc + 1
+                        )
+                    )
+                    ( personIds, personGroups, firstGroupId )
+    in
+    { groupIds = groupIds
+    , groups = groups
+    , nextId = nextId
+    }
+
+
+emptyStoredGroup : String -> Evergreen.V31.Types.StoredGroupMembers -> Evergreen.V31.Types.StoredGroup
+emptyStoredGroup groupName members =
+    { name = groupName
+    , members = members
+    , years = Dict.empty
+    , totalCredit = Evergreen.V31.Types.Amount 0
+    }
+
+
+migrateStoredGroupMembers :
+    Dict.Dict String Evergreen.V31.Types.PersonId
+    -> Evergreen.V28.Types.Group
+    -> Evergreen.V31.Types.StoredGroupMembers
+migrateStoredGroupMembers personIds oldMembers =
+    oldMembers
+        |> Dict.toList
+        |> List.filterMap
+            (\( personName, share ) ->
+                Dict.get personName personIds
+                    |> Maybe.map (\personId -> ( personId, migrate_Types_Share share ))
+            )
+        |> Dict.fromList
+
+
+migrateLegacyPersons : Evergreen.V28.Types.BackendModel -> Dict.Dict Evergreen.V31.Types.PersonId Evergreen.V31.Types.Person
+migrateLegacyPersons old =
+    old.persons
+        |> Dict.toList
+        |> List.map
+            (\( personName, person ) ->
+                ( person.id
+                , { name = personName
+                  , belongsTo = belongsToKeys personName old
+                  }
+                )
+            )
+        |> Dict.fromList
+
+
+belongsToKeys : String -> Evergreen.V28.Types.BackendModel -> Set.Set String
+belongsToKeys personName old =
+    old.years
+        |> Dict.toList
+        |> List.concatMap
+            (\( _, year ) ->
+                year.months
+                    |> Dict.toList
+                    |> List.concatMap
+                        (\( _, month ) ->
+                            month.days
+                                |> Dict.toList
+                                |> List.concatMap (\( _, day ) -> day.transactions |> Array.toList)
+                        )
+            )
+        |> List.filter (\transaction -> Set.member personName transaction.groupMembers)
+        |> List.map .groupMembersKey
+        |> Set.fromList
+
+
+migrateLegacyTransactions :
+    Dict.Dict String Evergreen.V31.Types.GroupId
+    -> Dict.Dict Evergreen.V31.Types.GroupId Evergreen.V31.Types.StoredGroup
+    -> Evergreen.V28.Types.BackendModel
+    -> TransactionMigrationState
+migrateLegacyTransactions groupIds initialGroups old =
+    old.years
+        |> Dict.toList
+        |> List.foldl
+            (\( year, oldYear ) state ->
+                oldYear.months
+                    |> Dict.toList
+                    |> List.foldl
+                        (\( month, oldMonth ) monthState ->
+                            oldMonth.days
+                                |> Dict.toList
+                                |> List.foldl
+                                    (\( day, oldDay ) dayState ->
+                                        oldDay.transactions
+                                            |> Array.toIndexedList
+                                            |> List.foldl
+                                                (\( index, transaction ) transactionState ->
+                                                    let
+                                                        oldTransactionId =
+                                                            { year = year
+                                                            , month = month
+                                                            , day = day
+                                                            , index = index
+                                                            }
+
+                                                        newTransactionId =
+                                                            nextTransactionId groupIds transactionState.groups oldTransactionId transaction.group
+                                                    in
+                                                    { groups =
+                                                        transactionState.groups
+                                                            |> Dict.update newTransactionId.groupId
+                                                                (Maybe.map (appendLegacyTransaction year month day transaction))
+                                                    , transactionIds =
+                                                        Dict.insert (legacyTransactionKey oldTransactionId) newTransactionId transactionState.transactionIds
+                                                    }
+                                                )
+                                                dayState
+                                    )
+                                    monthState
+                        )
+                        state
+            )
+            { groups = initialGroups
+            , transactionIds = Dict.empty
+            }
+
+
+legacyTransactionKey : Evergreen.V28.Types.TransactionId -> LegacyTransactionKey
+legacyTransactionKey transactionId =
+    ( transactionId.year, transactionId.month, ( transactionId.day, transactionId.index ) )
+
+
+nextTransactionId :
+    Dict.Dict String Evergreen.V31.Types.GroupId
+    -> Dict.Dict Evergreen.V31.Types.GroupId Evergreen.V31.Types.StoredGroup
+    -> Evergreen.V28.Types.TransactionId
+    -> String
+    -> Evergreen.V31.Types.TransactionId
+nextTransactionId groupIds groups oldTransactionId groupName =
+    let
+        groupId =
+            Dict.get groupName groupIds
+                |> Maybe.withDefault invalidGroupId
+    in
+    { groupId = groupId
+    , year = oldTransactionId.year
+    , month = oldTransactionId.month
+    , day = oldTransactionId.day
+    , index = groupDayLength groupId oldTransactionId.year oldTransactionId.month oldTransactionId.day groups
+    }
+
+
+groupDayLength :
+    Evergreen.V31.Types.GroupId
+    -> Int
+    -> Int
+    -> Int
+    -> Dict.Dict Evergreen.V31.Types.GroupId Evergreen.V31.Types.StoredGroup
+    -> Int
+groupDayLength groupId year month day groups =
+    groups
+        |> Dict.get groupId
+        |> Maybe.andThen (.years >> Dict.get year)
+        |> Maybe.andThen (.months >> Dict.get month)
+        |> Maybe.andThen (.days >> Dict.get day)
+        |> Maybe.map (.transactions >> Array.length)
+        |> Maybe.withDefault 0
+
+
+appendLegacyTransaction :
+    Int
+    -> Int
+    -> Int
+    -> Evergreen.V28.Types.Transaction
+    -> Evergreen.V31.Types.StoredGroup
+    -> Evergreen.V31.Types.StoredGroup
+appendLegacyTransaction year month day oldTransaction group =
+    let
+        totalCredit =
+            legacyTransactionTotalCredit oldTransaction
+    in
+    { group
+        | years =
+            group.years
+                |> Dict.update year
+                    (Just << appendLegacyYear month day oldTransaction totalCredit)
+        , totalCredit = addCredits group.totalCredit totalCredit
+    }
+
+
+appendLegacyYear :
+    Int
+    -> Int
+    -> Evergreen.V28.Types.Transaction
+    -> Evergreen.V31.Types.Amount Evergreen.V31.Types.Credit
+    -> Maybe Evergreen.V31.Types.Year
+    -> Evergreen.V31.Types.Year
+appendLegacyYear month day oldTransaction totalCredit maybeYear =
+    let
+        year =
+            maybeYear
+                |> Maybe.withDefault
+                    { months = Dict.empty
+                    , totalCredit = Evergreen.V31.Types.Amount 0
+                    }
+    in
+    { months =
+        year.months
+            |> Dict.update month
+                (Just << appendLegacyMonth day oldTransaction totalCredit)
+    , totalCredit = addCredits year.totalCredit totalCredit
+    }
+
+
+appendLegacyMonth :
+    Int
+    -> Evergreen.V28.Types.Transaction
+    -> Evergreen.V31.Types.Amount Evergreen.V31.Types.Credit
+    -> Maybe Evergreen.V31.Types.Month
+    -> Evergreen.V31.Types.Month
+appendLegacyMonth day oldTransaction totalCredit maybeMonth =
+    let
+        month =
+            maybeMonth
+                |> Maybe.withDefault
+                    { days = Dict.empty
+                    , totalCredit = Evergreen.V31.Types.Amount 0
+                    }
+    in
+    { days =
+        month.days
+            |> Dict.update day
+                (Just << appendLegacyDay oldTransaction totalCredit)
+    , totalCredit = addCredits month.totalCredit totalCredit
+    }
+
+
+appendLegacyDay :
+    Evergreen.V28.Types.Transaction
+    -> Evergreen.V31.Types.Amount Evergreen.V31.Types.Credit
+    -> Maybe Evergreen.V31.Types.Day
+    -> Evergreen.V31.Types.Day
+appendLegacyDay oldTransaction totalCredit maybeDay =
+    let
+        day =
+            maybeDay
+                |> Maybe.withDefault
+                    { transactions = Array.empty
+                    , totalCredit = Evergreen.V31.Types.Amount 0
+                    }
+    in
+    { transactions = Array.push (migrateStoredTransaction oldTransaction) day.transactions
+    , totalCredit = addCredits day.totalCredit totalCredit
+    }
+
+
+migrateStoredTransaction : Evergreen.V28.Types.Transaction -> Evergreen.V31.Types.Transaction
+migrateStoredTransaction old =
+    { spendingId = old.spendingId
+    , secondaryDescription = old.secondaryDescription
+    , group = old.group
+    , amount = migrate_Types_Amount old.amount
+    , side = migrate_Types_TransactionSide old.side
+    , groupMembersKey = old.groupMembersKey
+    , groupMembers = old.groupMembers
+    , status = migrate_Types_TransactionStatus old.status
+    }
+
+
+legacyTransactionTotalCredit : Evergreen.V28.Types.Transaction -> Evergreen.V31.Types.Amount Evergreen.V31.Types.Credit
+legacyTransactionTotalCredit transaction =
+    if transaction.status == Evergreen.V28.Types.Active then
+        case ( transaction.side, transaction.amount ) of
+            ( Evergreen.V28.Types.CreditTransaction, Evergreen.V28.Types.Amount amount ) ->
+                Evergreen.V31.Types.Amount amount
+
+            ( Evergreen.V28.Types.DebitTransaction, Evergreen.V28.Types.Amount amount ) ->
+                Evergreen.V31.Types.Amount -amount
+
+    else
+        Evergreen.V31.Types.Amount 0
+
+
+addCredits :
+    Evergreen.V31.Types.Amount Evergreen.V31.Types.Credit
+    -> Evergreen.V31.Types.Amount Evergreen.V31.Types.Credit
+    -> Evergreen.V31.Types.Amount Evergreen.V31.Types.Credit
+addCredits (Evergreen.V31.Types.Amount left) (Evergreen.V31.Types.Amount right) =
+    Evergreen.V31.Types.Amount (left + right)
+
+
+migrateLegacySpendings :
+    Dict.Dict LegacyTransactionKey Evergreen.V31.Types.TransactionId
+    -> Array.Array Evergreen.V28.Types.Spending
+    -> Array.Array Evergreen.V31.Types.Spending
+migrateLegacySpendings transactionIds oldSpendings =
+    oldSpendings
+        |> Array.map
+            (\spending ->
+                { description = spending.description
+                , total = migrate_Types_Amount spending.total
+                , transactionIds = spending.transactionIds |> List.map (lookupTransactionId transactionIds)
+                , status = migrate_Types_TransactionStatus spending.status
+                }
+            )
+
+
+lookupTransactionId :
+    Dict.Dict LegacyTransactionKey Evergreen.V31.Types.TransactionId
+    -> Evergreen.V28.Types.TransactionId
+    -> Evergreen.V31.Types.TransactionId
+lookupTransactionId transactionIds oldTransactionId =
+    Dict.get (legacyTransactionKey oldTransactionId) transactionIds
+        |> Maybe.withDefault
+            { groupId = invalidGroupId
+            , year = oldTransactionId.year
+            , month = oldTransactionId.month
+            , day = oldTransactionId.day
+            , index = oldTransactionId.index
+            }
 
 
 migrate_Types_FrontendModel : Evergreen.V28.Types.FrontendModel -> Evergreen.V31.Types.FrontendModel
@@ -88,20 +494,7 @@ migrate_Types_FrontendModel old =
                 )
     , group = old.group
     , groupValidity = old.groupValidity |> migrate_Types_NameValidity
-    , groupTransactions =
-        old.groupTransactions
-            |> List.map
-                (\rec ->
-                    { transactionId = rec.transactionId |> migrate_Types_TransactionId
-                    , spendingId = rec.spendingId
-                    , description = rec.description
-                    , year = rec.year
-                    , month = rec.month
-                    , day = rec.day
-                    , total = rec.total |> migrate_Types_Amount
-                    , share = rec.share |> migrate_Types_Amount
-                    }
-                )
+    , groupTransactions = []
     , key = old.key
     , windowWidth = old.windowWidth
     , windowHeight = old.windowHeight
@@ -184,7 +577,12 @@ migrate_Types_FrontendMsg old =
             Evergreen.V31.Types.ShowAddGroupDialog
 
         Evergreen.V28.Types.ShowAddSpendingDialog p0 ->
-            Evergreen.V31.Types.ShowAddSpendingDialog (p0 |> Maybe.map migrate_Types_SpendingReference)
+            case p0 of
+                Nothing ->
+                    Evergreen.V31.Types.ShowAddSpendingDialog Nothing
+
+                Just _ ->
+                    Evergreen.V31.Types.NoOpFrontendMsg
 
         Evergreen.V28.Types.ShowConfirmDeleteDialog p0 ->
             Evergreen.V31.Types.ShowConfirmDeleteDialog p0
@@ -316,14 +714,6 @@ migrate_Types_PasswordDialogModel old =
     old
 
 
-migrate_Types_Person : Evergreen.V28.Types.Person -> Evergreen.V31.Types.Person
-migrate_Types_Person old =
-    { name = (Unimplemented {- Type `String` was added in V31. I need you to set a default value. -})
-    , belongsTo = old.belongsTo
-    , id = (Unimplemented {- Field of type `Int` was removed in V31. I need you to do something with the `old.id` value if you wish to keep the data, then remove this line. -})
-    }
-
-
 migrate_Types_Share : Evergreen.V28.Types.Share -> Evergreen.V31.Types.Share
 migrate_Types_Share old =
     case old of
@@ -340,13 +730,6 @@ migrate_Types_Spending old =
     }
 
 
-migrate_Types_SpendingReference : Evergreen.V28.Types.SpendingReference -> Evergreen.V31.Types.SpendingReference
-migrate_Types_SpendingReference old =
-    { spendingId = old.spendingId
-    , transactionId = old.transactionId |> migrate_Types_TransactionId
-    }
-
-
 migrate_Types_SpendingTransaction : Evergreen.V28.Types.SpendingTransaction -> Evergreen.V31.Types.SpendingTransaction
 migrate_Types_SpendingTransaction old =
     { year = old.year
@@ -357,11 +740,6 @@ migrate_Types_SpendingTransaction old =
     , amount = old.amount |> migrate_Types_Amount
     , side = old.side |> migrate_Types_TransactionSide
     }
-
-
-migrate_Types_StoredGroup : Evergreen.V28.Types.Group -> Evergreen.V31.Types.StoredGroup
-migrate_Types_StoredGroup old =
-    (Unimplemented {- Type changed from `Dict (String) (Evergreen.V28.Types.Share)` to `{}`. I need you to write this migration. -})
 
 
 migrate_Types_Theme : Evergreen.V28.Types.Theme -> Evergreen.V31.Types.Theme
@@ -408,20 +786,7 @@ migrate_Types_ToFrontend old =
         Evergreen.V28.Types.ListGroupTransactions p0 ->
             Evergreen.V31.Types.ListGroupTransactions
                 { group = p0.group
-                , transactions =
-                    p0.transactions
-                        |> List.map
-                            (\rec1 ->
-                                { transactionId = rec1.transactionId |> migrate_Types_TransactionId
-                                , spendingId = rec1.spendingId
-                                , description = rec1.description
-                                , year = rec1.year
-                                , month = rec1.month
-                                , day = rec1.day
-                                , total = rec1.total |> migrate_Types_Amount
-                                , share = rec1.share |> migrate_Types_Amount
-                                }
-                            )
+                , transactions = []
                 }
 
         Evergreen.V28.Types.AuthenticationStatus p0 ->
@@ -444,7 +809,7 @@ migrate_Types_ToFrontend old =
 
 migrate_Types_TransactionId : Evergreen.V28.Types.TransactionId -> Evergreen.V31.Types.TransactionId
 migrate_Types_TransactionId old =
-    { groupId = (Unimplemented {- Type `Evergreen.V31.Types.GroupId` was added in V31. I need you to set a default value. -})
+    { groupId = invalidGroupId
     , year = old.year
     , month = old.month
     , day = old.day
