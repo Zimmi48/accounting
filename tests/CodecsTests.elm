@@ -68,7 +68,7 @@ roundTripModel =
                    )
 
         createdModel =
-            Backend.createSpendingInModel
+            createSpending
                 "Dinner"
                 (Amount 1000)
                 [ { year = 2025
@@ -107,3 +107,13 @@ deleteSpending spendingId model =
             |> Backend.setTransactionStatuses spendingId Deleted
         )
         activeTransactions
+
+
+createSpending : String -> Amount Credit -> List SpendingTransaction -> Backend.Model -> Backend.Model
+createSpending description total transactions model =
+    case Backend.createSpendingInModel description total transactions model of
+        Ok updatedModel ->
+            updatedModel
+
+        Err errorMessage ->
+            Debug.todo errorMessage

@@ -14,6 +14,7 @@ import Evergreen.V26.Types as V26
 import Evergreen.V28.Types as V28
 import Evergreen.V31.Types as V31
 import Expect
+import Frontend
 import Set
 import String
 import Test exposing (..)
@@ -442,6 +443,50 @@ suite =
                         , detailsAfterDelete = Backend.spendingTransactionsForDetails 1 afterDelete
                         }
             ]
+        , {- Spending metadata is computed once per spending. Every derived row must
+             keep the same member universe even when the line groups differ.
+          -}
+          describe "spending metadata"
+            [ test "all transactions from one spending share the same groupMembersKey" <|
+                \_ ->
+                    let
+                        model =
+                            createSpending "Split housing" (Amount 1200) mixedGroupMembersTransactions groupedModel
+                    in
+                    Expect.equal
+                        [ ( "Alice", "1,2,3", [ "Alice", "Bob", "Carol" ] )
+                        , ( "Trip", "1,2,3", [ "Alice", "Bob", "Carol" ] )
+                        , ( "House", "1,2,3", [ "Alice", "Bob", "Carol" ] )
+                        ]
+                        (Backend.getSpendingTransactionsWithIds 0 model
+                            |> List.map
+                                (\( _, transaction ) ->
+                                    ( transaction.group
+                                    , transaction.groupMembersKey
+                                    , transaction.groupMembers |> Set.toList
+                                    )
+                                )
+                        )
+            ]
+        , {- User summaries depend on spending-level membership, so mixed-creditor
+             spendings must yield the same due/owed totals for each participant.
+          -}
+          describe "user group summaries"
+            [ test "participants in the same spending get the same due/owed view" <|
+                \_ ->
+                    let
+                        model =
+                            createSpending "Shared dinner" (Amount 600) splitCreditorTransactions groupedModel
+
+                        expected =
+                            Dict.fromList [ ( "Alice", Amount 100 ), ( "Bob", Amount -100 ) ]
+                    in
+                    Expect.equal
+                        ( Just expected, Just expected )
+                        ( userAmountsDue "Alice" model
+                        , userAmountsDue "Bob" model
+                        )
+            ]
         , describe "V24 to V26 backend migration"
             [ test "migration rebuilds same-day spendings with stable transaction ids and statuses" <|
                 \_ ->
@@ -676,6 +721,22 @@ groupedRevisedTransactions : List SpendingTransaction
 groupedRevisedTransactions =
     [ spendingTransaction 18 "Bob" CreditTransaction 800
     , spendingTransaction 18 "Trip" DebitTransaction 800
+    ]
+
+
+mixedGroupMembersTransactions : List SpendingTransaction
+mixedGroupMembersTransactions =
+    [ spendingTransaction 18 "Alice" CreditTransaction 1200
+    , spendingTransaction 18 "Trip" DebitTransaction 600
+    , spendingTransaction 18 "House" DebitTransaction 600
+    ]
+
+
+splitCreditorTransactions : List SpendingTransaction
+splitCreditorTransactions =
+    [ spendingTransaction 18 "Alice" CreditTransaction 200
+    , spendingTransaction 18 "Bob" CreditTransaction 400
+    , spendingTransaction 18 "Trip" DebitTransaction 600
     ]
 
 
@@ -1010,6 +1071,12 @@ listedTransactions group model =
                 , share = transaction.share
                 }
             )
+
+
+userAmountsDue : String -> Backend.Model -> Maybe (Dict.Dict String (Amount Debit))
+userAmountsDue user model =
+    Backend.userGroupsForPerson user model
+        |> Maybe.map (\userGroups -> Frontend.personalAmountsDue userGroups.debitors userGroups.creditors)
 
 
 legacyBackendModel : V24.BackendModel
