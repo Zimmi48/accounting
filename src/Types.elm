@@ -57,15 +57,11 @@ type Page
 
 
 type alias BackendModel =
-    { years : Dict Int Year
-    , spendings : Array Spending
-    , groups : Dict String Group
-
-    -- person set -> group -> amount
-    -- could be renamed to aggregatedSpendings
+    { spendings : Array Spending
+    , groups : Dict GroupId StoredGroup
+    , persons : Dict PersonId Person
+    , nextId : Int
     , totalGroupCredits : Dict String (Dict String (Amount Credit))
-    , persons : Dict String Person
-    , nextPersonId : Int
     , loggedInSessions : Set SessionId
     }
 
@@ -142,7 +138,8 @@ type alias SpendingId =
 
 
 type alias TransactionId =
-    { year : Int
+    { groupId : GroupId
+    , year : Int
     , month : Int
     , day : Int
     , index : Int -- append-only slot for that day; writes must append to keep exact addressing stable
@@ -280,26 +277,26 @@ type alias TransactionLine =
 
 
 type alias Person =
-    { id : Int
+    { name : String
     , belongsTo : Set String
     }
 
 
 type alias Year =
     { months : Dict Int Month
-    , totalGroupCredits : Dict String (Dict String (Amount Credit))
+    , totalCredit : Amount Credit
     }
 
 
 type alias Month =
     { days : Dict Int Day
-    , totalGroupCredits : Dict String (Dict String (Amount Credit))
+    , totalCredit : Amount Credit
     }
 
 
 type alias Day =
     { transactions : Array Transaction
-    , totalGroupCredits : Dict String (Dict String (Amount Credit))
+    , totalCredit : Amount Credit
     }
 
 
@@ -336,6 +333,26 @@ type TransactionStatus
 
 type alias Group =
     Dict String Share
+
+
+type alias StoredGroupMembers =
+    Dict PersonId Share
+
+
+type alias PersonId =
+    Int
+
+
+type alias GroupId =
+    Int
+
+
+type alias StoredGroup =
+    { name : String
+    , members : StoredGroupMembers
+    , years : Dict Int Year
+    , totalCredit : Amount Credit
+    }
 
 
 type Share

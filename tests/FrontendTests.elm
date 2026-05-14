@@ -259,7 +259,8 @@ listedTransaction :
         }
 listedTransaction index year month day =
     { transactionId =
-        { year = year
+        { groupId = 0
+        , year = year
         , month = month
         , day = day
         , index = index

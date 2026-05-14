@@ -36,13 +36,34 @@ roundTripModel =
                         { model
                             | persons =
                                 Dict.fromList
-                                    [ ( "Alice", { id = 0, belongsTo = Set.empty } )
-                                    , ( "Bob", { id = 1, belongsTo = Set.empty } )
+                                    [ ( 1, { name = "Alice", belongsTo = Set.empty } )
+                                    , ( 2, { name = "Bob", belongsTo = Set.empty } )
                                     ]
-                            , nextPersonId = 2
+                            , nextId = 4
                             , groups =
                                 Dict.fromList
-                                    [ ( "Trip", Dict.fromList [ ( "Alice", Share 1 ), ( "Bob", Share 1 ) ] ) ]
+                                    [ ( 1
+                                      , { name = "Alice"
+                                        , members = Dict.fromList [ ( 1, Share 1 ) ]
+                                        , years = Dict.empty
+                                        , totalCredit = Amount 0
+                                        }
+                                      )
+                                    , ( 2
+                                      , { name = "Bob"
+                                        , members = Dict.fromList [ ( 2, Share 1 ) ]
+                                        , years = Dict.empty
+                                        , totalCredit = Amount 0
+                                        }
+                                      )
+                                    , ( 3
+                                      , { name = "Trip"
+                                        , members = Dict.fromList [ ( 1, Share 1 ), ( 2, Share 1 ) ]
+                                        , years = Dict.empty
+                                        , totalCredit = Amount 0
+                                        }
+                                      )
+                                    ]
                         }
                    )
 

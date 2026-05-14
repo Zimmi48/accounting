@@ -82,3 +82,150 @@ The seam is cross-cutting; frontend and backend must agree on validation semanti
 - Kept backend behavior unchanged.
 - Replaced the prior weak ordering test with a regression in `tests/FrontendTests.elm` that feeds a realistic oldest-first backend response and asserts stored transactions are newest-first after consumption.
 - Validation run: `elm-format`, both `lamdera make` targets, `npm test`, and `lamdera live --port=8002` with HTTP 200.
+
+---
+
+## 2026-05-14T11:20:56Z: User Directive — Storage Rewrite Approval
+
+**By:** Théo Zimmermann (via Copilot)  
+**Topic:** storage rewrite without Evergreen migration  
+**Status:** APPROVED ✅
+
+### Directive
+
+Proceed with the transaction storage model rewrite now:
+- Keep the due/owed and spending-wide groupMembersKey invariants intact
+- Allow the backend model and transaction IDs to break (types will change)
+- Defer the Evergreen migration until explicitly requested
+
+### Rationale
+
+User approval to unblock Dallas's implementation of the refactor-transactions model port without waiting for migration strategy.
+
+---
+
+## 2026-05-14: Model Port Boundary — Transaction ID + Storage Reshape
+
+**Lead:** Ripley  
+**Status:** APPROVED FOR IMPLEMENTATION ✅  
+**User Approval:** Théo Zimmermann ("I'm OK with the backend model and transaction IDs changing...")
+
+### Charter
+
+Define the exact implementation scope Dallas should land NOW for the refactor-transactions model port, while explicitly deferring Evergreen migration work until user review.
+
+**Critical invariant:** All transactions within a single spending MUST share identical group membership (now encoded in `TransactionId.groupId`). Violation causes silent data corruption in group-credit aggregates.
+
+### Approved Type Changes
+
+From refactor-transactions branch ARE APPROVED and should be landed as-is:
+
+**BackendModel:**
+```elm
+type alias BackendModel =
+    { spendings : Array Spending
+    , groups : Dict GroupId StoredGroup
+    , persons : Dict PersonId Person
+    , nextId : Int
+    , loggedInSessions : Set SessionId
+    }
+```
+- Per-group year storage removes architectural mismatch
+- Int-keyed persons/groups enable efficient membership queries
+- Single nextId simplifies entity allocation
+
+**TransactionId:**
+```elm
+type alias TransactionId =
+    { groupId : GroupId       -- NEW: encodes which group's timeline this TX lives on
+    , year : Int
+    , month : Int
+    , day : Int
+    , index : Int
+    }
+```
+- Moves groupMembersKey from redundant Transaction field into TransactionId
+- Enables canonical per-group dated transaction storage
+- groupId becomes the anchor for "which group members participated"
+
+**Person & StoredGroup:**
+- Person removes redundant `id`, keys derive from Dict
+- StoredGroup replaces old Group, stores names inside records
+- years and totalCredit now scoped to group (consistency)
+
+### Implementation Scope IN
+
+1. Type definitions as-is from refactor-transactions
+2. Codec parity in `src/Codecs.elm` to match new record shapes
+3. Backend model initialization in `init`
+4. Backend seams already extracted and validated
+5. No Evergreen migration files — leave `src/Evergreen/` untouched
+
+### Implementation Scope OUT
+
+1. **Invariant-breaking backend logic:**
+   - ❌ DO NOT accept Backend changes that allow different transactions in same spending to have different groupIds
+   - Current refactor-transactions Backend assigns groupId per transaction; must be fixed
+   - ❌ DO NOT remove the "all transactions from one spending share the same groupMembersKey" test
+
+2. **Storage reshape Backend logic:**
+   - ❌ DO NOT land per-group year storage machinery (deferred)
+   - ❌ DO NOT remove global year iteration (keep placeholder storage)
+
+3. **Evergreen migrations:**
+   - ❌ DO NOT generate `src/Evergreen/V27/` files yet
+   - Migration logic depends on Backend changes and user review
+
+### Invariant Preservation Rules
+
+When a spending S contains transactions T1, T2, T3:
+- T1.transactionId.groupId == T2.transactionId.groupId == T3.transactionId.groupId (same groupId)
+- All transactions' member sets are derived from StoredGroup.members[groupId], not per-transaction
+
+**Validation checklist:**
+1. Test: "all transactions from one spending share the same groupMembersKey" — MUST PASS
+2. Test: "participants in the same spending get the same due/owed view" — MUST PASS
+3. Manual: Verify group-credit aggregates match old nested structure
+4. All gates: elm-format, lamdera make (both), npm test, ./check-codecs.sh, lamdera live HTTP 200
+
+### Deferred to Next Phase
+
+- Per-group year storage Backend machinery (needs Evergreen V27)
+- Aggregation flattening validation (needs report equivalence proof)
+- All Evergreen migration logic (user approval required first)
+
+---
+
+## 2026-05-14: Group-Owned Year Storage — Spending-Wide Report Metadata Preserved
+
+**Owner:** Dallas  
+**Artifact:** refactor-transactions branch (group-owned transaction storage)  
+**Status:** APPROVED FOR TYPES ✅
+
+### Context
+
+The storage move places dated transactions under `BackendModel.groups` and changes `TransactionId` to include `groupId`. Prior review flagged two invariants that must not regress: due/owed consistency and a single spending-wide `groupMembersKey` across every transaction emitted by one spending.
+
+### Decision
+
+- Keep the refactor's group-owned year/month/day transaction storage and group-scoped `TransactionId`
+- Preserve the existing global `totalGroupCredits : Dict String (Dict String (Amount Credit))` cache
+- Preserve per-transaction `groupMembersKey` and `groupMembers`, computed once per spending and copied onto every emitted transaction row
+- Keep `Person.belongsTo` keyed by spending-wide member-set strings, not by `GroupId`
+
+### Why
+
+The group-owned storage solves the model rewrite, but report correctness depends on aggregating by the full participant set of a spending rather than by each line's storage group. Without the preserved spending metadata, mixed-creditor spendings drift and user/group due-vs-owed views disagree.
+
+### Implementation Status
+
+✅ Types defined and approved  
+✅ Codecs updated  
+✅ Backend initialization completed  
+✅ Invariant tests pass (groupMembersKey uniformity, due-vs-owed consistency)  
+⏳ Per-group year storage machinery (deferred)  
+⏳ Evergreen migration (deferred until user reviews)
+
+### Follow-up Boundary
+
+Evergreen migration is intentionally deferred. Any migration pass must rebuild the new group-owned storage and extend migrated `TransactionId` values with `groupId` while proving stored `Spending.transactionIds` still resolve to the intended rows.

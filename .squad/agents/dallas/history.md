@@ -10,127 +10,34 @@
 
 **One-sided transaction model:** Transactions are one-sided line items per group/side; spendings own the invariant that total credits = total debits = spending total. Each transaction line owns its (year, month, day) and optional secondary description.
 
-**Storage & ID addressing:** Day storage is `Array Transaction` (append-only); `TransactionId` is `{ year, month, day, index }` derived at read time. `Spending.transactionIds` stores the list of transaction ids for direct lookup (no whole-model scan/filter).
-
-**Cleanup status:** `PendingTransaction` retained (carries staging date fields); `getSpendingTransactions` dead helper removed. Backend recovery now uses stored `transactionIds` + `findTransaction` instead of `allTransactionsWithIds |> filter`.
+**Storage & ID addressing:** Day storage is `Array Transaction` (append-only); `TransactionId` is `{ year, month, day, index }` (now includes groupId for group-owned storage). `Spending.transactionIds` stores the list of transaction ids for direct lookup (no whole-model scan/filter).
 
 **Validation gates:** `elm-format src/ tests/ --yes`, `./check-codecs.sh`, both `lamdera make` targets, `npm test`, `lamdera live` → HTTP 200.
 
-**Approval chain:** 
+**Key approvals:**
 - Phase 2 contract (spending invariant + transaction dates): ✅ Approved 2026-04-21
-- Array refactor (drop id persistence): ✅ Approved 2026-04-27 (per user directive)
-- Spending.transactionIds restoration: ✅ Approved 2026-04-27 (direct lookup replaces whole-model scan)
+- Spending.transactionIds restoration (direct lookup replaces whole-model scan): ✅ Approved 2026-04-27
+- Transaction ordering (frontend reversal at seam): ✅ Approved 2026-04-27
+- Model port boundary (types + codecs, defer per-group machinery): ✅ Approved 2026-05-14
 
-## Current Cycle: Cleanup Split & Ordering Reassignment
+## Historical Work Summary (Consolidated from 2026-04-27 to 2026-05-03)
 
-### 2026-04-27T12:04:51Z: Backend/Model Revision Assignment
+**Spending.transactionIds Restoration (2026-04-27):** Restored direct lookup using stored transaction ids instead of whole-model scan/filter. Updated Types.elm, Codecs.elm, and Backend.elm. All validation gates passed. Approved by Vasquez.
 
-**Event:** Assigned to produce next backend/model revision.
+**Cleanup Split Verdict (2026-04-27):** Dual-commit pass delivered two separate revisions: (A) cleanup-pending-transaction approved, (B) reverse-transaction-order rejected pending retest. Reassigned ordering to Hicks; Dallas locked from ordering artifact for cycle.
 
-**Context:** 
-- Bishop locked out (first rejection 2026-04-27T11:47:00Z): incomplete migration implementation with Unimplemented placeholders
-- Newt locked out (second rejection 2026-04-27T12:04:51Z): internal logic correct but changes persisted codec shapes without migration support
+**Evergreen V26 Migration (2026-04-28):** Participated in migration planning and testing. Chronological rebuild strategy preserved backend history exactly. Durable ID mapping validated. All repo checks green. Ready for deployment.
 
-**Task:** Produce backend/model revision that preserves persisted codec compatibility.
+**Export Diff Tool (2026-04-28):** Revised scripts/compare_exports.py to replay actual RequestGroupTransactions seam instead of storage-only comparison. Legacy exports derived from active spendings; current exports use backend filter. Approved after code inspection and seam assertions.
 
-**Constraint:** Cannot accept revisions that need Evergreen migration support while generation is forbidden. Must preserve `Spending`, `Transaction`, and `BackendModel` codec compatibility unless Théo explicitly authorizes migration plan.
+**Lifecycle Total & Regression Testing (2026-04-29):** Comprehensive test coverage for spending total recomputation across add/edit/delete. Identified and fixed aggregation bugs. Per-transaction lifecycle now validated. Tests cover full flow.
 
-**Available Assets:**
-- Vasquez's 13-test suite for validation (`npm test`)
-- Current working compile/codec/server validation gates
-- Detailed decision history in decisions.md
+**Group Years Refactor (2026-05-02 to 2026-05-03):** Transitioned storage to per-group ownership. Person ID keying simplified. Staged three-phase approval: (1) grouping refactor, (2) per-group owner migration, (3) ID-keyed lookup consistency. All tests passing; migration safety validated.
 
-**Key Requirement:** Data-migration-aware approach to ensure no breaking changes in persisted shapes.
+**Negative Spending Support (2026-05-05):** Frontend and Backend validation gates restored signed-total support. Changed totalInt > 0 to totalInt /= 0. Historical negative spendings preserved; zero-total constraint maintained. Approved by Vasquez.
 
-### 2026-04-27T12:16:40Z: Rejection Cycle 3 & Lock Status
+## Recent Work: Storage Rewrite Implementation (2026-05-14)
 
-**Event:** Vasquez review cycle 3 complete. Revision rejected.
-
-**Status:** Locked out for this artifact in current cycle.
-
-**Reason for Lock:** Dallas's compatibility-safe revision attempted to preserve append-only positional addressing without migrations, but persisted codec shapes still changed:
-- `BackendModel.nextSpendingId` removed from persistence
-- `Spending.transactionIds` removed from persistence
-- `Transaction.id` changed to top-level year/month/day codec structure
-- Not compatible with standing no-migration directive despite runtime correctness
-
-**Validation Evidence:** All gates passed (format, codecs, lamdera makes, tests, HTTP 200), but constraints failed.
-
-**Next Assignment:** Hudson takes over compatibility recovery pass.
-
-**Remaining Path:** Next revision must preserve old persisted codec shape while fixing runtime semantics, or await explicit Théo authorization for migration plan.
-
-### 2026-04-27T14:39:52Z: Reassignment for Spending.transactionIds Restoration
-
-**Event:** Hudson's restoration attempt rejected; Dallas assigned to next attempt.
-
-**Context:** Hudson tried to restore `Spending.transactionIds` in model/codecs/backend, but Vasquez found repo state still omits the property and uses whole-model scan/filter in recovery path.
-
-**Task:** Restore `Spending.transactionIds` so spending transactions are recovered via direct lookup (using stored ids) instead of `allTransactionsWithIds model |> List.filter`.
-
-**Constraint:** Must not break validation gates: formatting, codecs, both `lamdera make` targets, tests, HTTP 200.
-
-**Requirement from user directive:** Do not recover a spending's transactions by listing/filtering all model transactions.
-
-**Status:** Assignment active; ready for Dallas to take over.
-
-## 2026-04-27T14:49:39Z: Spending.transactionIds Restoration Complete — APPROVED
-
-**Event:** Dallas's restoration implementation accepted by Vasquez.
-
-**Accomplishment:**
-- Restored `Spending.transactionIds : List TransactionId` in `src/Types.elm`
-- Updated `src/Codecs.elm` to serialize the restored field
-- Replaced `allTransactionsWithIds model |> List.filter` with direct `findTransaction` lookup in `src/Backend.elm`
-- Kept defensive `transaction.spendingId == spendingId` check as consistency guard
-- All validation gates passed: format, codecs, both Lamdera builds, tests, HTTP 200
-
-**Verdict:** Approve. Regression closed: spending recovery is now keyed by stored transaction ids, not whole-model scan/filter.
-
-**Consequence:** `Spending.transactionIds` is required and persisted; whole-store transaction scans for spending recovery are removed.
-
-**Status:** Complete; ready for next phase.
-
-## 2026-04-27T15:52:08Z: Backend Cleanup Split Verdict & Ordering Reassignment
-
-**Event:** Vasquez completed review of Dallas's dual-commit pass.
-
-**Verdict:** Split decision.
-- **cleanup-pending-transaction:** ✅ Approved
-  - `PendingTransaction` correctly kept (still carries staging-only `year`/`month`/`day` fields)
-  - `getSpendingTransactions` dead helper removed
-  - Backend cleanup is safe and complete
-
-- **reverse-transaction-order:** ❌ Rejected
-  - Ordering change not proven safe
-  - `RequestGroupTransactions` builds list via nested `Dict.foldr` (already newest-first via traversal order)
-  - Reversing in `src/Frontend.elm` likely inverts already-newest-first flow back to older-first
-  - Test only validates synthetic `List.reverse` helper, not real backend/frontend seam
-  - Test does not protect same-day ordering behavior
-
-**Reassignment:** Hudson now owns `reverse-transaction-order` revision.
-
-**Status:** Locked out of ordering/test artifact for this cycle. Cleanup task complete.
-
-## 2026-04-27T16:02:33Z: Ordering Artifact Review Completion & Continued Lockout
-
-**Event:** Vasquez completed sync review. Split verdict rendered.
-
-**Cleanup Cleanup Outcome:** ✅ Approved (Dallas's commits validated; task complete)
-
-**Ordering Outcome:** ❌ Rejected (different artifact; Hudson owned and failed)
-
-**Consequence:** Dallas remains locked from this cycle per standing policy. No action required. Next ordering revision assigned to Hicks.
-
-**Status:** Cleanup phase complete; standby for next phase.
-
-## Learnings
-
-- 2026-04-28: `scripts/compare_exports.py` should mirror the actual group-list seam, not just storage facts: replay backend `RequestGroupTransactions` filtering, then frontend `groupTransactionsFromBackend` newest-first ordering and `viewAmount`/description rendering so migration diffs catch row-order, sign, and composed-description regressions.
-- 2026-04-28: `src/Evergreen/Migrate/V26.elm` already treats legacy transaction-addressed frontend state as unsafe: edit/delete dialogs are dropped, legacy edit/delete/detail messages become no-ops, `ListGroupTransactions` is cleared, and stale `TransactionDetails` responses become a reopen prompt instead of being remapped.
-- 2026-04-28: Migration regression coverage now lives primarily in `tests/MigrationTests.elm`, with supporting assertions in `tests/BackendTests.elm` and `tests/FrontendTests.elm`; the critical backend seam is “stored `Spending.transactionIds` must resolve back to the intended migrated `Day.transactions` rows”.
-
-## 2026-04-28T09:40:39Z: Frontend Migration Safety Review Complete
 
 **Event:** Assigned to full-stack migration seam review for V24→V26 frontend safety.
 
@@ -168,3 +75,66 @@
 **Result:** Export diff tool now covers complete group-listing seam. Ready for merge/deployment.
 
 **Key learning:** When implementing export/diff tools, must replay the exact backend/frontend paths that determine what users see, not just logical business invariants.
+
+## 2026-05-14: Storage Rewrite Implementation — Transaction Storage Under Groups
+
+### Session: Storage Rewrite Without Evergreen Migration
+
+**Assignment: Rewrite transaction storage under groups while preserving the invariant and deferring Evergreen migration**
+
+Completed the refactor-transactions model port implementation:
+
+**Type Changes Landed:**
+- BackendModel: Moved years to per-group StoredGroup, simplified nextId to single Int
+- TransactionId: Added groupId field (encodes which group's timeline this transaction lives on)
+- Person: Removed redundant id field, keys derive from Dict
+- StoredGroup: New record replaces old Group, stores name inside record, scopes years and totalCredit
+- Year/Month/Day: Simplified aggregation with flat totalCredit per level
+
+**Codec & Backend Updates:**
+- Updated `src/Codecs.elm` to serialize new record shapes with groupId in TransactionId
+- Updated `src/Backend.elm` with new model initialization pattern
+- Updated backend seams (e.g., userGroupsForPerson)
+- **Critical:** Ensured all transactions from one spending share identical groupId (not per-transaction)
+
+**Invariant Preservation:**
+✅ Test: "all transactions from one spending share the same groupMembersKey" — PASS  
+✅ Test: "participants in the same spending get the same due/owed view" — PASS  
+✅ Manual: Group-credit aggregates match old nested structure  
+
+**Validation Gates:**
+- elm-format src/ tests/ --yes ✅
+- lamdera make src/Frontend.elm --output=/dev/null ✅
+- lamdera make src/Backend.elm --output=/dev/null ✅
+- npm test (all passing) ✅
+- ./check-codecs.sh ✅
+- lamdera live → HTTP 200 ✅
+
+**Scope Adherence:**
+
+IN (completed):
+- Type definitions and codec parity ✅
+- Backend model initialization ✅
+- Backend seams ✅
+- Invariant-preserving logic ✅
+
+OUT (deferred):
+- Per-group year storage machinery (backend code that moves transactions)
+- Evergreen migration files (V27 generation and logic)
+- Global year iteration replacement (kept as placeholder)
+
+### User Directive Context
+
+Théo approved: "Proceed with the transaction storage model rewrite now, keep the due/owed and spending-wide groupMembersKey invariants intact, allow the backend model and transaction IDs to break, and defer the Evergreen migration until explicitly requested."
+
+This approval unblocked the implementation without waiting for migration strategy.
+
+### Decisions Recorded
+
+- `.squad/decisions/decisions.md` — Merged decisions, including group-years runtime boundary and model port boundary
+- `.squad/orchestration-log/2026-05-14T11:19:55Z-dallas.md` — Work summary and invariant validation
+- `.squad/log/2026-05-14T11:19:55Z-storage-rewrite.md` — Session summary
+
+### Next Phase
+
+Ripley review of landed rewrite (invariant compliance check) → Then Evergreen migration planning.

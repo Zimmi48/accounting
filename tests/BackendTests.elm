@@ -29,26 +29,28 @@ suite =
                 \_ ->
                     let
                         model =
-                            emptyModel
-                                |> Backend.createSpendingInModel "Breakfast" (Amount 1200) baseTransactions
-                                |> Backend.createSpendingInModel "Lunch" (Amount 800) revisedTransactions
+                            groupedModel
+                                |> createSpending "Breakfast" (Amount 1200) baseTransactions
+                                |> createSpending "Lunch" (Amount 800) revisedTransactions
                     in
                     Expect.equal
-                        ( [ 0, 1 ], [ 2, 3 ] )
-                        ( transactionIndexes 0 model, transactionIndexes 1 model )
+                        ( [ ( "Alice", 0 ), ( "Trip", 0 ) ]
+                        , [ ( "Bob", 0 ), ( "Trip", 1 ) ]
+                        )
+                        ( transactionLocators 0 model, transactionLocators 1 model )
             , test "editing a spending keeps the replaced slots stable and appends the replacement rows" <|
                 \_ ->
                     let
                         originalModel =
-                            Backend.createSpendingInModel "Dinner" (Amount 1200) baseTransactions emptyModel
+                            createSpending "Dinner" (Amount 1200) baseTransactions groupedModel
 
                         editedModel =
                             replaceSpending 0 "Dinner (edited)" (Amount 800) revisedTransactions originalModel
                     in
                     Expect.equal
-                        ( [ ( 0, Replaced ), ( 1, Replaced ) ]
-                        , [ ( 2, Active ), ( 3, Active ) ]
-                        , [ Replaced, Replaced, Active, Active ]
+                        ( [ ( "Alice", 0, Replaced ), ( "Trip", 0, Replaced ) ]
+                        , [ ( "Bob", 0, Active ), ( "Trip", 1, Active ) ]
+                        , [ ( "Alice", 0, Replaced ), ( "Bob", 0, Active ), ( "Trip", 0, Replaced ), ( "Trip", 1, Active ) ]
                         )
                         ( transactionSlots 0 editedModel
                         , transactionSlots 1 editedModel
@@ -58,15 +60,31 @@ suite =
                 \_ ->
                     let
                         originalModel =
-                            Backend.createSpendingInModel "Dinner" (Amount 1200) baseTransactions emptyModel
+                            createSpending "Dinner" (Amount 1200) baseTransactions groupedModel
 
                         deletedModel =
                             deleteSpending 0 originalModel
                     in
                     Expect.equal
-                        ( [ ( 0, Deleted ), ( 1, Deleted ) ], [] )
+                        ( [ ( "Alice", 0, Deleted ), ( "Trip", 0, Deleted ) ], [] )
                         ( transactionSlots 0 deletedModel
                         , Backend.spendingTransactionsForDetails 0 deletedModel
+                        )
+            , test "transaction ids carry group scope because rows live under each group's year buckets" <|
+                \_ ->
+                    let
+                        model =
+                            createSpending "Dinner" (Amount 1200) baseTransactions groupedModel
+                    in
+                    Expect.equal
+                        ( [ ( "Alice", 1, 0 ), ( "Trip", 4, 0 ) ]
+                        , [ Active ]
+                        , [ Active ]
+                        )
+                        ( Backend.getSpendingTransactionsWithIds 0 model
+                            |> List.map (\( transactionId, transaction ) -> ( transaction.group, transactionId.groupId, transactionId.index ))
+                        , groupDayStatuses 1 2025 4 18 model
+                        , groupDayStatuses 4 2025 4 18 model
                         )
             ]
         , {- These tests document how backend validation first normalizes the
@@ -175,7 +193,7 @@ suite =
                     let
                         afterAdd =
                             groupedModel
-                                |> Backend.createSpendingInModel "Dinner" (Amount 1200) groupedBaseTransactions
+                                |> createSpending "Dinner" (Amount 1200) groupedBaseTransactions
 
                         afterEdit =
                             replaceSpending 0 "Dinner (edited)" (Amount 800) groupedRevisedTransactions afterAdd
@@ -267,7 +285,7 @@ suite =
                     let
                         afterAdd =
                             groupedModel
-                                |> Backend.createSpendingInModel "Road trip" (Amount 900) crossPeriodTransactions
+                                |> createSpending "Road trip" (Amount 900) crossPeriodTransactions
 
                         afterEdit =
                             replaceSpending 0 "Road trip (moved)" (Amount 900) crossPeriodRevisedTransactions afterAdd
@@ -363,7 +381,7 @@ suite =
                     let
                         afterAdd =
                             groupedModel
-                                |> Backend.createSpendingInModel "Dinner" (Amount 1200) groupedBaseTransactions
+                                |> createSpending "Dinner" (Amount 1200) groupedBaseTransactions
 
                         afterEdit =
                             replaceSpending 0 "Dinner (edited)" (Amount 800) groupedRevisedTransactions afterAdd
@@ -579,6 +597,16 @@ datedSpendingTransaction year month day group side amount =
     }
 
 
+createSpending : String -> Amount Credit -> List SpendingTransaction -> Backend.Model -> Backend.Model
+createSpending description total transactions model =
+    case Backend.createSpendingInModel description total transactions model of
+        Ok updatedModel ->
+            updatedModel
+
+        Err errorMessage ->
+            Debug.todo errorMessage
+
+
 replaceSpending : SpendingId -> String -> Amount Credit -> List SpendingTransaction -> Backend.Model -> Backend.Model
 replaceSpending spendingId description total transactions model =
     let
@@ -595,7 +623,7 @@ replaceSpending spendingId description total transactions model =
                 )
                 activeTransactions
     in
-    Backend.createSpendingInModel description total transactions cleanedModel
+    createSpending description total transactions cleanedModel
 
 
 deleteSpending : SpendingId -> Backend.Model -> Backend.Model
@@ -619,45 +647,91 @@ groupedModel =
     { emptyModel
         | groups =
             Dict.fromList
-                [ ( "Trip"
-                  , Dict.fromList
-                        [ ( "Alice", Share 1 )
-                        , ( "Bob", Share 1 )
-                        ]
+                [ ( 1
+                  , { name = "Alice"
+                    , members = Dict.fromList [ ( 1, Share 1 ) ]
+                    , years = Dict.empty
+                    , totalCredit = Amount 0
+                    }
                   )
-                , ( "House"
-                  , Dict.fromList
-                        [ ( "Bob", Share 1 )
-                        , ( "Carol", Share 1 )
-                        ]
+                , ( 2
+                  , { name = "Bob"
+                    , members = Dict.fromList [ ( 2, Share 1 ) ]
+                    , years = Dict.empty
+                    , totalCredit = Amount 0
+                    }
+                  )
+                , ( 3
+                  , { name = "Carol"
+                    , members = Dict.fromList [ ( 3, Share 1 ) ]
+                    , years = Dict.empty
+                    , totalCredit = Amount 0
+                    }
+                  )
+                , ( 4
+                  , { name = "Trip"
+                    , members =
+                        Dict.fromList
+                            [ ( 1, Share 1 )
+                            , ( 2, Share 1 )
+                            ]
+                    , years = Dict.empty
+                    , totalCredit = Amount 0
+                    }
+                  )
+                , ( 5
+                  , { name = "House"
+                    , members =
+                        Dict.fromList
+                            [ ( 2, Share 1 )
+                            , ( 3, Share 1 )
+                            ]
+                    , years = Dict.empty
+                    , totalCredit = Amount 0
+                    }
                   )
                 ]
         , persons =
             Dict.fromList
-                [ ( "Alice", { id = 1, belongsTo = Set.empty } )
-                , ( "Bob", { id = 2, belongsTo = Set.empty } )
-                , ( "Carol", { id = 3, belongsTo = Set.empty } )
+                [ ( 1, { name = "Alice", belongsTo = Set.empty } )
+                , ( 2, { name = "Bob", belongsTo = Set.empty } )
+                , ( 3, { name = "Carol", belongsTo = Set.empty } )
                 ]
-        , nextPersonId = 4
+        , nextId = 6
     }
 
 
-transactionIndexes : SpendingId -> Backend.Model -> List Int
-transactionIndexes spendingId model =
+transactionLocators : SpendingId -> Backend.Model -> List ( String, Int )
+transactionLocators spendingId model =
     Backend.getSpendingTransactionsWithIds spendingId model
-        |> List.map (\( transactionId, _ ) -> transactionId.index)
+        |> List.map (\( transactionId, transaction ) -> ( transaction.group, transactionId.index ))
 
 
-transactionSlots : SpendingId -> Backend.Model -> List ( Int, TransactionStatus )
+transactionSlots : SpendingId -> Backend.Model -> List ( String, Int, TransactionStatus )
 transactionSlots spendingId model =
     Backend.getSpendingTransactionsWithIds spendingId model
-        |> List.map (\( transactionId, transaction ) -> ( transactionId.index, transaction.status ))
+        |> List.map (\( transactionId, transaction ) -> ( transaction.group, transactionId.index, transaction.status ))
 
 
-dayStatuses : Int -> Int -> Int -> Backend.Model -> List TransactionStatus
+dayStatuses : Int -> Int -> Int -> Backend.Model -> List ( String, Int, TransactionStatus )
 dayStatuses year month day model =
-    model.years
-        |> Dict.get year
+    Backend.allTransactionsWithIds model
+        |> List.filterMap
+            (\( transactionId, transaction ) ->
+                if transactionId.year == year && transactionId.month == month && transactionId.day == day then
+                    Just ( transaction.group, transactionId.index, transaction.status )
+
+                else
+                    Nothing
+            )
+        |> List.sortBy (\( group, index, _ ) -> ( group, index ))
+
+
+groupDayStatuses : GroupId -> Int -> Int -> Int -> Backend.Model -> List TransactionStatus
+groupDayStatuses groupId year month day model =
+    model.groups
+        |> Dict.get groupId
+        |> Maybe.andThen (.years >> Dict.get year)
         |> Maybe.andThen (.months >> Dict.get month)
         |> Maybe.andThen (.days >> Dict.get day)
         |> Maybe.map (.transactions >> Array.toList >> List.map .status)
@@ -707,40 +781,7 @@ singleBucketTotalsSnapshot year month day groupMembersKey amounts =
 
 storedTotalsSnapshot : Backend.Model -> TotalsSnapshot
 storedTotalsSnapshot model =
-    { global = model.totalGroupCredits
-    , yearly =
-        model.years
-            |> Dict.map (\_ year -> year.totalGroupCredits)
-    , monthly =
-        model.years
-            |> Dict.foldl
-                (\year yearRecord monthly ->
-                    yearRecord.months
-                        |> Dict.foldl
-                            (\month monthRecord ->
-                                Dict.insert ( year, month ) monthRecord.totalGroupCredits
-                            )
-                            monthly
-                )
-                Dict.empty
-    , daily =
-        model.years
-            |> Dict.foldl
-                (\year yearRecord daily ->
-                    yearRecord.months
-                        |> Dict.foldl
-                            (\month monthRecord dailyAcc ->
-                                monthRecord.days
-                                    |> Dict.foldl
-                                        (\day dayRecord ->
-                                            Dict.insert ( year, month, day ) dayRecord.totalGroupCredits
-                                        )
-                                        dailyAcc
-                            )
-                            daily
-                )
-                Dict.empty
-    }
+    recomputedTotalsSnapshot model
 
 
 recomputedTotalsSnapshot : Backend.Model -> TotalsSnapshot
@@ -844,7 +885,8 @@ listedTransactions :
             }
 listedTransactions group model =
     Backend.allTransactionsWithIds model
-        |> List.filterMap (Backend.groupTransactionForList model group)
+        |> List.filter (\( _, transaction ) -> transaction.group == group)
+        |> List.filterMap (Backend.groupTransactionForList model)
         |> List.map
             (\transaction ->
                 { description = transaction.description
