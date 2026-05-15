@@ -172,43 +172,14 @@ updateFromFrontend sessionId clientId msg model =
                             ( model, Lamdera.sendToFrontend clientId (SpendingError errorMessage) )
 
         ( True, EditSpending { spendingId, description, total, transactions } ) ->
-            -- First, validate that the spending exists and is active
-            case Array.get spendingId model.spendings of
-                Nothing ->
-                    ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending not found") )
+            case editSpendingInModel spendingId description total transactions model of
+                Ok updatedModel ->
+                    ( updatedModel
+                    , Lamdera.sendToFrontend clientId OperationSuccessful
+                    )
 
-                Just spending ->
-                    if spending.status /= Active then
-                        ( model, Lamdera.sendToFrontend clientId (SpendingError "Spending is already deleted or replaced") )
-
-                    else
-                        -- Valid edit: delete old, add new
-                        case validateSpendingTransactions total transactions of
-                            Err errorMessage ->
-                                ( model, Lamdera.sendToFrontend clientId (SpendingError errorMessage) )
-
-                            Ok normalizedTransactions ->
-                                let
-                                    activeTransactions =
-                                        getSpendingTransactionsWithIds spendingId model
-
-                                    cleanedModel =
-                                        List.foldl
-                                            removeTransactionFromModel
-                                            (model
-                                                |> setSpendingStatus spendingId Replaced
-                                                |> setTransactionStatuses spendingId Replaced
-                                            )
-                                            activeTransactions
-                                in
-                                case createSpendingInModel description total normalizedTransactions cleanedModel of
-                                    Ok updatedModel ->
-                                        ( updatedModel
-                                        , Lamdera.sendToFrontend clientId OperationSuccessful
-                                        )
-
-                                    Err errorMessage ->
-                                        ( model, Lamdera.sendToFrontend clientId (SpendingError errorMessage) )
+                Err errorMessage ->
+                    ( model, Lamdera.sendToFrontend clientId (SpendingError errorMessage) )
 
         ( True, DeleteSpending spendingId ) ->
             -- First, validate that the spending exists and is active
@@ -955,6 +926,105 @@ createSpendingInModel description total spendingTransactions model =
             )
 
 
+editSpendingInModel : SpendingId -> String -> Amount Credit -> List SpendingTransaction -> Model -> Result String Model
+editSpendingInModel spendingId description total spendingTransactions model =
+    case Array.get spendingId model.spendings of
+        Nothing ->
+            Err "Spending not found"
+
+        Just spending ->
+            if spending.status /= Active then
+                Err "Spending is already deleted or replaced"
+
+            else
+                validateSpendingTransactions total spendingTransactions
+                    |> Result.andThen
+                        (\normalizedTransactions ->
+                            let
+                                replacementSpendingId =
+                                    Array.length model.spendings
+
+                                activeTransactions =
+                                    getSpendingTransactionsWithIds spendingId model
+                                        |> List.filter (\( _, transaction ) -> transaction.status == Active)
+                            in
+                            buildSpendingMetadata model normalizedTransactions
+                                |> Result.andThen
+                                    (\metadata ->
+                                        let
+                                            reconciliation =
+                                                reconcileSpendingTransactions activeTransactions normalizedTransactions
+
+                                            keptTransactions =
+                                                reconciliation.plannedTransactions
+                                                    |> List.filterMap
+                                                        (\plannedTransaction ->
+                                                            case plannedTransaction of
+                                                                KeepTransaction transactionWithId ->
+                                                                    Just transactionWithId
+
+                                                                AddTransaction _ ->
+                                                                    Nothing
+                                                        )
+
+                                            freshTransactions =
+                                                reconciliation.plannedTransactions
+                                                    |> List.filterMap
+                                                        (\plannedTransaction ->
+                                                            case plannedTransaction of
+                                                                KeepTransaction _ ->
+                                                                    Nothing
+
+                                                                AddTransaction transaction ->
+                                                                    Just transaction
+                                                        )
+
+                                            preparedModel =
+                                                let
+                                                    replacedModel =
+                                                        reconciliation.removedTransactions
+                                                            |> List.foldl
+                                                                (\( transactionId, _ ) updatedModel ->
+                                                                    setTransactionStatus transactionId Replaced updatedModel
+                                                                )
+                                                                (model |> setSpendingStatus spendingId Replaced)
+                                                in
+                                                keptTransactions
+                                                    |> List.foldl
+                                                        (preserveEditedTransaction replacementSpendingId metadata)
+                                                        (reconciliation.removedTransactions
+                                                            |> List.foldl removeTransactionFromModel replacedModel
+                                                        )
+                                        in
+                                        pendingTransactionsForSpendingWithMetadata replacementSpendingId metadata preparedModel freshTransactions
+                                            |> Result.map
+                                                (\pendingTransactions ->
+                                                    let
+                                                        newTransactionIds =
+                                                            assignTransactionIds preparedModel pendingTransactions
+
+                                                        finalTransactionIds =
+                                                            plannedTransactionIds reconciliation.plannedTransactions newTransactionIds
+
+                                                        spendingWithReplacement =
+                                                            { description = description
+                                                            , total = total
+                                                            , transactionIds = finalTransactionIds
+                                                            , status = Active
+                                                            }
+
+                                                        modelWithSpending =
+                                                            { preparedModel
+                                                                | spendings =
+                                                                    Array.push spendingWithReplacement preparedModel.spendings
+                                                            }
+                                                    in
+                                                    List.foldl addTransactionToModel modelWithSpending pendingTransactions
+                                                )
+                                    )
+                        )
+
+
 setSpendingStatus : SpendingId -> TransactionStatus -> Model -> Model
 setSpendingStatus spendingId status model =
     { model
@@ -968,61 +1038,72 @@ setSpendingStatus spendingId status model =
     }
 
 
+setTransactionStatus : TransactionId -> TransactionStatus -> Model -> Model
+setTransactionStatus transactionId status =
+    updateTransaction transactionId
+        (\transaction ->
+            if transaction.status == Active then
+                { transaction | status = status }
+
+            else
+                transaction
+        )
+
+
 setTransactionStatuses : SpendingId -> TransactionStatus -> Model -> Model
 setTransactionStatuses spendingId status model =
     Array.get spendingId model.spendings
         |> Maybe.map
             (.transactionIds
                 >> List.foldl
-                    (\transactionId updatedModel ->
-                        updatedModel
-                            |> updateGroupById transactionId.groupId
-                                (\group ->
-                                    { group
-                                        | years =
-                                            Dict.update transactionId.year
-                                                (Maybe.map
-                                                    (\year ->
-                                                        { year
-                                                            | months =
-                                                                Dict.update transactionId.month
-                                                                    (Maybe.map
-                                                                        (\month ->
-                                                                            { month
-                                                                                | days =
-                                                                                    Dict.update transactionId.day
-                                                                                        (Maybe.map
-                                                                                            (\day ->
-                                                                                                { day
-                                                                                                    | transactions =
-                                                                                                        case Array.get transactionId.index day.transactions of
-                                                                                                            Nothing ->
-                                                                                                                day.transactions
-
-                                                                                                            Just transaction ->
-                                                                                                                if transaction.status == Active then
-                                                                                                                    Array.set transactionId.index { transaction | status = status } day.transactions
-
-                                                                                                                else
-                                                                                                                    day.transactions
-                                                                                                }
-                                                                                            )
-                                                                                        )
-                                                                                        month.days
-                                                                            }
-                                                                        )
-                                                                    )
-                                                                    year.months
-                                                        }
-                                                    )
-                                                )
-                                                group.years
-                                    }
-                                )
-                    )
+                    (\transactionId updatedModel -> setTransactionStatus transactionId status updatedModel)
                     model
             )
         |> Maybe.withDefault model
+
+
+updateTransaction : TransactionId -> (Transaction -> Transaction) -> Model -> Model
+updateTransaction transactionId transform model =
+    updateGroupById transactionId.groupId
+        (\group ->
+            { group
+                | years =
+                    Dict.update transactionId.year
+                        (Maybe.map
+                            (\year ->
+                                { year
+                                    | months =
+                                        Dict.update transactionId.month
+                                            (Maybe.map
+                                                (\month ->
+                                                    { month
+                                                        | days =
+                                                            Dict.update transactionId.day
+                                                                (Maybe.map
+                                                                    (\day ->
+                                                                        { day
+                                                                            | transactions =
+                                                                                case Array.get transactionId.index day.transactions of
+                                                                                    Nothing ->
+                                                                                        day.transactions
+
+                                                                                    Just transaction ->
+                                                                                        Array.set transactionId.index (transform transaction) day.transactions
+                                                                        }
+                                                                    )
+                                                                )
+                                                                month.days
+                                                    }
+                                                )
+                                            )
+                                            year.months
+                                }
+                            )
+                        )
+                        group.years
+            }
+        )
+        model
 
 
 type alias TransactionKey =
@@ -1082,6 +1163,17 @@ type alias SpendingMetadata =
     }
 
 
+type PlannedTransaction
+    = KeepTransaction ( TransactionId, Transaction )
+    | AddTransaction SpendingTransaction
+
+
+type alias SpendingTransactionReconciliation =
+    { plannedTransactions : List PlannedTransaction
+    , removedTransactions : List ( TransactionId, Transaction )
+    }
+
+
 buildSpendingMetadata : Model -> List SpendingTransaction -> Result String SpendingMetadata
 buildSpendingMetadata model transactions =
     let
@@ -1096,6 +1188,194 @@ buildSpendingMetadata model transactions =
                 , groupMembers = groupMembers
                 }
             )
+
+
+pendingTransactionsForSpendingWithMetadata : SpendingId -> SpendingMetadata -> Model -> List SpendingTransaction -> Result String (List PendingTransaction)
+pendingTransactionsForSpendingWithMetadata spendingId metadata model spendingTransactions =
+    spendingTransactions
+        |> List.map
+            (\transaction ->
+                groupIdForName model transaction.group
+                    |> Result.map (\groupId -> pendingTransactionForSpending spendingId groupId metadata transaction)
+            )
+        |> List.foldr
+            (\result acc ->
+                case ( result, acc ) of
+                    ( Ok transaction, Ok transactions ) ->
+                        Ok (transaction :: transactions)
+
+                    ( Err message, _ ) ->
+                        Err message
+
+                    ( _, Err message ) ->
+                        Err message
+            )
+            (Ok [])
+
+
+type alias ExistingTransactionMatches =
+    Dict ComparableSpendingTransaction (List ( TransactionId, Transaction ))
+
+
+type alias ComparableSpendingTransaction =
+    ( NormalizedTransactionKey, Int )
+
+
+comparableSpendingTransaction : SpendingTransaction -> ComparableSpendingTransaction
+comparableSpendingTransaction transaction =
+    let
+        amountValue =
+            case transaction.amount of
+                Amount amount ->
+                    amount
+    in
+    ( normalizedTransactionKey transaction, amountValue )
+
+
+existingTransactionMatches : List ( TransactionId, Transaction ) -> ExistingTransactionMatches
+existingTransactionMatches transactions =
+    transactions
+        |> List.foldl
+            (\( transactionId, transaction ) matches ->
+                Dict.update
+                    (toSpendingTransaction transactionId transaction |> comparableSpendingTransaction)
+                    (\maybeMatches ->
+                        Just
+                            (( transactionId, transaction )
+                                :: Maybe.withDefault [] maybeMatches
+                            )
+                    )
+                    matches
+            )
+            Dict.empty
+        |> Dict.map (\_ matches -> List.reverse matches)
+
+
+takeExistingTransaction :
+    SpendingTransaction
+    -> ExistingTransactionMatches
+    -> ( Maybe ( TransactionId, Transaction ), ExistingTransactionMatches )
+takeExistingTransaction spendingTransaction matches =
+    case Dict.get (comparableSpendingTransaction spendingTransaction) matches of
+        Nothing ->
+            ( Nothing, matches )
+
+        Just [] ->
+            ( Nothing, Dict.remove (comparableSpendingTransaction spendingTransaction) matches )
+
+        Just (matchedTransaction :: remainingTransactions) ->
+            ( Just matchedTransaction
+            , if List.isEmpty remainingTransactions then
+                Dict.remove (comparableSpendingTransaction spendingTransaction) matches
+
+              else
+                Dict.insert (comparableSpendingTransaction spendingTransaction) remainingTransactions matches
+            )
+
+
+reconcileSpendingTransactions :
+    List ( TransactionId, Transaction )
+    -> List SpendingTransaction
+    -> SpendingTransactionReconciliation
+reconcileSpendingTransactions existingTransactions spendingTransactions =
+    let
+        ( plannedTransactions, remainingTransactions ) =
+            List.foldl
+                (\spendingTransaction ( planned, matches ) ->
+                    let
+                        ( maybeMatch, updatedMatches ) =
+                            takeExistingTransaction spendingTransaction matches
+                    in
+                    ( case maybeMatch of
+                        Just matchedTransaction ->
+                            KeepTransaction matchedTransaction :: planned
+
+                        Nothing ->
+                            AddTransaction spendingTransaction :: planned
+                    , updatedMatches
+                    )
+                )
+                ( [], existingTransactionMatches existingTransactions )
+                spendingTransactions
+    in
+    { plannedTransactions = List.reverse plannedTransactions
+    , removedTransactions =
+        remainingTransactions
+            |> Dict.values
+            |> List.concat
+    }
+
+
+plannedTransactionIds : List PlannedTransaction -> List TransactionId -> List TransactionId
+plannedTransactionIds plannedTransactions newTransactionIds =
+    case plannedTransactions of
+        [] ->
+            []
+
+        plannedTransaction :: remainingTransactions ->
+            case plannedTransaction of
+                KeepTransaction ( transactionId, _ ) ->
+                    transactionId :: plannedTransactionIds remainingTransactions newTransactionIds
+
+                AddTransaction _ ->
+                    case newTransactionIds of
+                        [] ->
+                            plannedTransactionIds remainingTransactions []
+
+                        transactionId :: remainingIds ->
+                            transactionId :: plannedTransactionIds remainingTransactions remainingIds
+
+
+preserveEditedTransaction : SpendingId -> SpendingMetadata -> ( TransactionId, Transaction ) -> Model -> Model
+preserveEditedTransaction replacementSpendingId metadata ( transactionId, transaction ) model =
+    let
+        updatedTransaction =
+            { transaction
+                | spendingId = replacementSpendingId
+                , groupMembersKey = metadata.groupMembersKey
+                , groupMembers = metadata.groupMembers
+            }
+    in
+    model
+        |> reassignTransactionMetadata transaction updatedTransaction
+        |> updateTransaction transactionId (\_ -> updatedTransaction)
+
+
+reassignTransactionMetadata : Transaction -> Transaction -> Model -> Model
+reassignTransactionMetadata originalTransaction updatedTransaction model =
+    if
+        originalTransaction.groupMembersKey
+            == updatedTransaction.groupMembersKey
+            && originalTransaction.groupMembers
+            == updatedTransaction.groupMembers
+    then
+        model
+
+    else
+        let
+            groupCredits =
+                groupCreditsForTransaction originalTransaction
+        in
+        { model
+            | totalGroupCredits =
+                model.totalGroupCredits
+                    |> addToTotalGroupCredits originalTransaction.groupMembersKey
+                        (Dict.map (\_ (Amount amount) -> Amount -amount) groupCredits)
+                    |> addToTotalGroupCredits updatedTransaction.groupMembersKey groupCredits
+            , persons =
+                Dict.map
+                    (\_ person ->
+                        if Set.member person.name updatedTransaction.groupMembers then
+                            { person
+                                | belongsTo =
+                                    Set.insert updatedTransaction.groupMembersKey person.belongsTo
+                            }
+
+                        else
+                            person
+                    )
+                    model.persons
+        }
 
 
 groupCreditsForTransaction :

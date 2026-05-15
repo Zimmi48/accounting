@@ -60,6 +60,24 @@ suite =
                         , transactionSlots 1 editedModel
                         , dayStatuses 2025 4 18 editedModel
                         )
+            , test "editing a spending preserves logically unchanged transactions on the replacement spending" <|
+                \_ ->
+                    let
+                        originalModel =
+                            createSpending "Dinner" (Amount 1200) partiallyPreservedTransactions groupedModel
+
+                        editedModel =
+                            replaceSpending 0 "Dinner (edited)" (Amount 1200) partiallyRevisedTransactions originalModel
+                    in
+                    Expect.equal
+                        ( [ ( "Alice", 0, Replaced ) ]
+                        , [ ( "Alice", 1, Active ), ( "Bob", 0, Active ), ( "House", 0, Active ), ( "Trip", 0, Active ) ]
+                        , [ ( "Alice", 0, Replaced ), ( "Alice", 1, Active ), ( "Bob", 0, Active ), ( "House", 0, Active ), ( "Trip", 0, Active ) ]
+                        )
+                        ( transactionSlots 0 editedModel
+                        , transactionSlots 1 editedModel
+                        , dayStatuses 2025 4 18 editedModel
+                        )
             , test "deleting a spending keeps its historical slots while hiding it from active detail views" <|
                 \_ ->
                     let
@@ -724,6 +742,23 @@ groupedRevisedTransactions =
     ]
 
 
+partiallyPreservedTransactions : List SpendingTransaction
+partiallyPreservedTransactions =
+    [ spendingTransaction 18 "Alice" CreditTransaction 1200
+    , spendingTransaction 18 "Trip" DebitTransaction 600
+    , spendingTransaction 18 "House" DebitTransaction 600
+    ]
+
+
+partiallyRevisedTransactions : List SpendingTransaction
+partiallyRevisedTransactions =
+    [ spendingTransaction 18 "Alice" CreditTransaction 800
+    , spendingTransaction 18 "Bob" CreditTransaction 400
+    , spendingTransaction 18 "Trip" DebitTransaction 600
+    , spendingTransaction 18 "House" DebitTransaction 600
+    ]
+
+
 mixedGroupMembersTransactions : List SpendingTransaction
 mixedGroupMembersTransactions =
     [ spendingTransaction 18 "Alice" CreditTransaction 1200
@@ -783,21 +818,12 @@ createSpending description total transactions model =
 
 replaceSpending : SpendingId -> String -> Amount Credit -> List SpendingTransaction -> Backend.Model -> Backend.Model
 replaceSpending spendingId description total transactions model =
-    let
-        activeTransactions =
-            Backend.getSpendingTransactionsWithIds spendingId model
-                |> List.filter (\( _, transaction ) -> transaction.status == Active)
+    case Backend.editSpendingInModel spendingId description total transactions model of
+        Ok updatedModel ->
+            updatedModel
 
-        cleanedModel =
-            List.foldl
-                Backend.removeTransactionFromModel
-                (model
-                    |> Backend.setSpendingStatus spendingId Replaced
-                    |> Backend.setTransactionStatuses spendingId Replaced
-                )
-                activeTransactions
-    in
-    createSpending description total transactions cleanedModel
+        Err errorMessage ->
+            Debug.todo errorMessage
 
 
 deleteSpending : SpendingId -> Backend.Model -> Backend.Model
