@@ -77,6 +77,24 @@ suite =
             , test "canSubmitSpending allows a balanced negative-total dialog" <|
                 \_ ->
                     Expect.equal True (Frontend.canSubmitSpending negativeTotalDialog)
+            , test "canSubmitSpending blocks dialogs whose credits and debits do not both match the total" <|
+                \_ ->
+                    Expect.equal
+                        ( False, False )
+                        ( Frontend.canSubmitSpending
+                            { validDialog
+                                | credits =
+                                    [ completeLine "Alice" "6.00"
+                                    , completeLine "Bob" "4.00"
+                                    ]
+                                , debits = [ completeLine "Trip" "9.00" ]
+                            }
+                        , Frontend.canSubmitSpending
+                            { negativeTotalDialog
+                                | credits = [ completeLine "Alice" "-9.00" ]
+                                , debits = [ completeLine "Trip" "-10.00" ]
+                            }
+                        )
             , test "canSubmitSpending blocks incomplete transaction lines even when the total parses" <|
                 \_ ->
                     let

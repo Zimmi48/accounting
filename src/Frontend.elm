@@ -316,17 +316,19 @@ update msg model =
                             )
 
                         Just (AddSpendingDialog dialogModel) ->
-                            let
-                                maybeTotal =
-                                    dialogModel.total |> parseAmountValue
-
-                                transactions =
-                                    dialogTransactions dialogModel
-                            in
-                            if List.isEmpty transactions || Maybe.isNothing maybeTotal then
+                            if not (canSubmitSpending dialogModel) then
                                 ( model, Cmd.none )
 
                             else
+                                let
+                                    totalInt =
+                                        dialogModel.total
+                                            |> parseAmountValue
+                                            |> Maybe.withDefault 0
+
+                                    transactions =
+                                        dialogTransactions dialogModel
+                                in
                                 ( { model
                                     | showDialog =
                                         Just
@@ -339,7 +341,7 @@ update msg model =
                                         Lamdera.sendToBackend
                                             (CreateSpending
                                                 { description = dialogModel.description
-                                                , total = maybeTotal |> Maybe.withDefault 0 |> Amount
+                                                , total = Amount totalInt
                                                 , transactions = transactions
                                                 }
                                             )
@@ -349,7 +351,7 @@ update msg model =
                                             (EditSpending
                                                 { spendingId = spendingId
                                                 , description = dialogModel.description
-                                                , total = maybeTotal |> Maybe.withDefault 0 |> Amount
+                                                , total = Amount totalInt
                                                 , transactions = transactions
                                                 }
                                             )
@@ -2569,6 +2571,14 @@ validTransactionLines spendingDate lines =
            )
 
 
+transactionLinesTotal spendingDate lines =
+    lines
+        |> List.filter (transactionLineIsBlank spendingDate >> not)
+        |> List.map (.amount >> parseAmountValue)
+        |> Maybe.combine
+        |> Maybe.map List.sum
+
+
 canSubmitSpending { description, total, date, credits, debits, submitted } =
     not submitted
         && String.length description
@@ -2582,6 +2592,10 @@ canSubmitSpending { description, total, date, credits, debits, submitted } =
                             /= 0
                             && validTransactionLines date credits
                             && validTransactionLines date debits
+                            && transactionLinesTotal date credits
+                            == Just totalInt
+                            && transactionLinesTotal date debits
+                            == Just totalInt
                     )
                 |> Maybe.withDefault False
            )
