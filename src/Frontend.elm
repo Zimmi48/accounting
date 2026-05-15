@@ -1112,7 +1112,7 @@ transactionLineFromSpendingTransaction maybeSpendingDate maybeToday side transac
                     , secondaryDescription = transaction.secondaryDescription
                     , detailsExpanded = False
                     , group = transaction.group
-                    , amount = formatAmountValue amount
+                    , amount = viewAmount amount
                     , nameValidity = Complete
                     }
 
@@ -1526,7 +1526,7 @@ updateFromBackend msg model =
                                     (AddSpendingDialog
                                         { dialogModel
                                             | description = description
-                                            , total = total |> (\(Amount amount) -> formatAmountValue amount)
+                                            , total = total |> (\(Amount amount) -> viewAmount amount)
                                             , date = spendingDate
                                             , dateText =
                                                 spendingDate
@@ -2729,37 +2729,6 @@ viewAmount amount =
         |> (++) "."
         |> (++) (absAmount // 100 |> String.fromInt)
         |> (++) sign
-
-
-{-| Convert amount from cents (Int) to dollar string with decimal point
--}
-formatAmountValue : Int -> String
-formatAmountValue cents =
-    let
-        absolute =
-            abs cents
-
-        beforeComma =
-            absolute // 100
-
-        afterComma =
-            modBy 100 absolute
-
-        afterCommaString =
-            if afterComma < 10 then
-                "0" ++ String.fromInt afterComma
-
-            else
-                String.fromInt afterComma
-
-        sign =
-            if cents < 0 then
-                "-"
-
-            else
-                ""
-    in
-    sign ++ String.fromInt beforeComma ++ "." ++ afterCommaString
 
 
 parseAmountValue : String -> Maybe Int

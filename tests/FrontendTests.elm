@@ -28,7 +28,7 @@ suite =
              see which user inputs are intentionally accepted.
           -}
           describe "amount parsing and formatting"
-            [ test "formatAmountValue round-trips representative cent amounts through parseAmountValue" <|
+            [ test "viewAmount round-trips representative cent amounts through parseAmountValue" <|
                 \_ ->
                     let
                         cents =
@@ -37,7 +37,7 @@ suite =
                     Expect.equal
                         (List.map Just cents)
                         (cents
-                            |> List.map Frontend.formatAmountValue
+                            |> List.map Frontend.viewAmount
                             |> List.map Frontend.parseAmountValue
                         )
             , test "parseAmountValue accepts commas and rejects more than two decimals" <|

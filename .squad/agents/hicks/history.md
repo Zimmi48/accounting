@@ -65,3 +65,7 @@
 **Orchestration:** Vasquez review completed 2026-04-27T16:22:00Z. Decision recorded in `.squad/decisions/decisions.md`. Orchestration log: `.squad/orchestration-log/20260427-161057-vasquez-review-hicks-ordering.md`.
 
 - 2026-05-05T20:35:59Z: Fixed negative total spending regression by updating `canSubmitSpending` guard in `src/Frontend.elm` to allow non-zero signed totals (`totalInt /= 0` instead of `totalInt > 0`), updated matching backend validation in `src/Backend.elm`, and updated `.squad/skills/spending-validation/SKILL.md` with corrected semantics. Frontend and backend now both treat spendings as valid when credits, debits, and total all match the same non-zero amount (positive or negative), while preserving zero-total invalidity. Vasquez approved for team archive. Validation: elm-format, check-codecs, both lamdera make targets, npm test (33/33), HTTP 200. Orchestration log: `.squad/orchestration-log/2026-05-05T20:35:59Z-hicks.md`. Decision merged: `.squad/decisions/decisions.md`.
+
+## Learnings
+
+- 2026-05-15: `src/Frontend.elm` already had `viewAmount` as the canonical cents-to-decimal formatter for UI text. Reusing it in spending-editor hydration (`transactionLineFromSpendingTransaction`, `SpendingDetails`) is safer than keeping a second helper, and `tests/FrontendTests.elm` now guards the `viewAmount` ↔ `parseAmountValue` round-trip seam. User preference on this fix: keep #40 isolated from unrelated issue work and avoid Evergreen migration work unless explicitly requested.
