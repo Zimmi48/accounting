@@ -96,6 +96,8 @@
 
 - 2026-05-15: Issue #32's click path already flips `checked` in frontend state (`ToggleTransactionChecked` / `toggleGroupTransactionChecked`) and persists through `ToggleTransactionCheckedRequest`, so the user-visible regression sits in `src/Frontend.elm`'s dot rendering seam rather than backend storage.
 - 2026-05-15: The regression escaped because `tests/FrontendTests.elm` only asserted the pure toggle helper and list refresh separately; it never covered the visible checked/unchecked affordance or the composed click-plus-refresh path for the reconciliation dot.
+- 2026-05-15: Group transaction chronology now depends on `src/Backend.elm`'s `groupTransactionsForMonth` plus `src/Frontend.elm`'s `normalizeGroupTransactionListItems`; summary-header tests alone do not prove reverse chronology inside a month/day bucket.
+- 2026-05-15: For paginated transaction reviews, `tests/BackendTests.elm` must assert actual `GroupTransactionRow` sequence (day and same-day index order), because `groupTransactionBoundaryMarkers` intentionally collapses each month to a single `T YYYY-MM` marker and can hide chronology regressions.
 
 ### 2026-05-15T11:17:55Z: Issue #32 Repair Review — Toggle Dot Visual Affordance ✅ APPROVED
 
@@ -107,3 +109,104 @@
   - Validation gates all pass: elm-format, both lamdera make targets, npm test, HTTP 200
 - **Verdict:** Approved; commit 9c81ea4 merged
 - **Decision merged:** Transaction Toggle Dot Visual Repair (2026-05-15)
+
+- 2026-05-15: Issue #52 revision: top-of-period ordering requires backend page generation logic to hoist year summaries before first loaded month, and frontend merge to normalize late-arriving year summaries above already-visible months (not buried in the middle).
+- 2026-05-15: When verifying ordering regressions, boundary markers (Y 2025 → M 2025-04 → T 2025-04-15) must be explicit in test expectations for both initial and load-more paths; implicit "count" assertions miss the ordering requirement.
+- 2026-05-15: Mutation-triggered group-transaction reloads need explicit frontend state for "how many pages are already loaded"; reusing `RequestGroupTransactions { before = Nothing }` after add/edit silently collapses deep history back to page 1 even while pagination tests still pass.
+- 2026-05-15: When a model change is introduced only to remember pagination depth, the stale generated Evergreen artifacts must be removed, not regenerated, until the user explicitly approves migration work.
+- 2026-05-15: Deep-page reload reviews must prove the composed frontend refresh seam, not just helper arithmetic: `src/Frontend.elm` can store `groupTransactionsLoadedPages`, yet the real guard is a test that `OperationSuccessful` re-requests `RequestGroupTransactions` with the remembered depth.
+- 2026-05-15: For this pagination contract, chronology/header regression coverage now lives in `tests/FrontendTests.elm` pagination merge expectations plus `tests/BackendTests.elm` page-shape assertions, but those do not substitute for an explicit mutation-refresh test.
+- 2026-05-15: The regression proof still fails if `tests/FrontendTests.elm` never exercises `Frontend.updateFromBackend OperationSuccessful`; searching only helper tests (`groupTransactionsReloadPages`, `updatedGroupTransactionsLoadedPages`) is enough to spot the missing seam.
+- 2026-05-15: `src/Evergreen/Migrate/V34.elm` and `src/Evergreen/V34/Types.elm` staying deleted is the correct interim state for this model-only pagination fix until the user explicitly asks for migration regeneration.
+- 2026-05-15: The acceptable proof pattern for Lamdera mutation refreshes is to extract a pure helper like `Frontend.operationSuccessfulRefreshPlan`, have `updateFromBackend OperationSuccessful` consume it directly, and test the replayed `RequestGroupTransactions` plus the refreshed merged list together.
+- 2026-05-15: For the deep-page reload seam, the explicit composed proof now lives in `tests/BackendTests.elm` because it can drive backend page generation, frontend refresh planning, and frontend list merging in one regression without trying to unwrap Lamdera `Cmd`s.
+- 2026-05-15: V34 remains intentionally unregenerated for this review-first workflow: no `src/Evergreen/Migrate/V34.elm` or `src/Evergreen/V34/Types.elm` file should reappear before the user asks for migration work.
+- 2026-05-15: The late-year pagination bug lives in `src/Backend.elm`'s page slicing seam: `groupTransactionMonthSlices` attaches a year summary only to the oldest month in that year, so `takeTransactionMonthSlices` can load the first months of a newly entered older year on page 2 without its year header if that year itself still spans more than 100 transaction rows.
+- 2026-05-15: Existing pagination tests are too soft for this seam. `tests/BackendTests.elm` only proves later-page year summaries when the page also includes the summary-carrying boundary month, and `tests/FrontendTests.elm` only hoists a late summary within the same year; neither proves "new year first appears on page 2 and must already show its summary line."
+
+### 2026-05-15T15:40:58Z: Issue #52 Summary Header Ordering — APPROVED ✅
+
+- **Task:** Implement issue #52 revision where summary rows appear as headers leading their periods (previously requested fix for summary row positioning)
+- **Implementation:**
+  - Backend `src/Backend.elm`: Month summaries emit before their month rows; year summary inserted before first loaded month of completed year page
+  - Frontend `src/Frontend.elm`: Page merge normalization hoists year summary arriving on later page above already-loaded months for that year
+- **Regression Coverage:**
+  - `tests/BackendTests.elm`: Boundary markers (Y 2025 → M 2025-04 → T 2025-04-15) assert ordering on both initial and load-more paths
+  - `tests/FrontendTests.elm`: Pagination merge tests verify year summary hoisting on load-more
+- **Validation:** elm-format, lamdera make src/Frontend.elm, lamdera make src/Backend.elm, npm test (57/57 pass), HTTP 200
+- **Verdict:** Vasquez approved; commit e36ea18 production-ready
+- **Decision merged:** Summary Header Ordering (2026-05-15)
+
+### 2026-05-15T17:15:00Z: Reverse Chronology Follow-up Review — REJECTED ❌
+
+- **Task:** Review Dallas's chronology follow-up for the group transaction list after summary headers were moved above period blocks
+- **Findings:**
+  - `src/Backend.elm` still builds month rows through `groupTransactionsForMonth` without an explicit descending day/index guarantee, so strict reverse chronology is not proven for rows inside a month.
+  - `tests/BackendTests.elm` and `tests/FrontendTests.elm` only prove header placement and merge shape; they do not assert actual row order across day or same-day seams.
+- **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test (57/57) ✅, HTTP 200 ✅
+- **Verdict:** Rejected pending explicit reverse-chronology coverage across summary rows and pagination seams
+
+### 2026-05-15T16:20:00Z: Deep-Page Reload State Review — REJECTED ❌
+
+- **Task:** Review the follow-up fix for incremental transaction loading where add/edit should reload as many pages as were already visible.
+- **Findings:**
+  - `src/Types.elm` / `src/Frontend.elm` still only track `groupTransactionsNextCursor` and `groupTransactionsLoading`; there is no frontend model field recording loaded page depth.
+  - `src/Frontend.elm`'s `OperationSuccessful` branch still reloads with a single `RequestGroupTransactions { before = Nothing }`, so editing or adding from older pages will jump the list back toward newer history.
+  - `tests/FrontendTests.elm` and `tests/MigrationTests.elm` do not prove the deep-page reload seam, and the generated `src/Evergreen/Migrate/V34.elm` plus `src/Evergreen/V34/Types.elm` are still present instead of being removed pending explicit migration approval.
+- **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test (57/57) ✅
+- **Verdict:** Rejected until the frontend persists loaded-page depth across refreshes, tests cover the composed deep-page reload seam without disturbing chronology/header placement, and the stale generated migration artifacts are deleted rather than refreshed.
+
+### 2026-05-15T16:40:00Z: Deep-Page Reload State Review (commit 8224e1b) — REJECTED ❌
+
+- **Task:** Review Newt's follow-up commit `8224e1b` for preserved paginated transaction reload depth after add/edit refreshes.
+- **Findings:**
+  - `src/Types.elm` and `src/Frontend.elm` now remember reload depth through `groupTransactionsLoadedPages`, and `OperationSuccessful` does reissue `requestInitialGroupTransactions model.group model.groupTransactionsLoadedPages`.
+  - The stale generated artifacts were handled per user instruction: `src/Evergreen/Migrate/V34.elm` and `src/Evergreen/V34/Types.elm` are deleted rather than regenerated.
+  - Chronology/header guards remain present in `tests/FrontendTests.elm` and `tests/BackendTests.elm`, but the new reload-depth coverage only exercises `groupTransactionsReloadPages` and `updatedGroupTransactionsLoadedPages` as pure helpers. It still does **not** prove the composed several-pages-down mutation path (`OperationSuccessful` -> reload request -> same-depth response), which is the exact seam that regressed.
+- **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test (58/58) ✅, localhost:8000 HTTP 200 ✅
+- **Verdict:** Rejected. Newt remains locked out for the next revision cycle until another agent adds explicit regression coverage for the mutation-triggered deep-page refresh path.
+
+### 2026-05-15T16:10:58Z: Deep-Page Refresh Proof Review (current artifact) — REJECTED ❌
+
+- **Task:** Review Hudson's follow-up artifact for the incremental-loading refresh bug, with emphasis on proof that several-pages-down add/edit flows reload the same depth.
+- **Findings:**
+  - `src/Types.elm` / `src/Frontend.elm` still contain the intended stateful fix: `groupTransactionsLoadedPages` is tracked and `OperationSuccessful` reuses it through `requestInitialGroupTransactions`.
+  - The stale generated migration artifacts remain correctly deleted: no `src/Evergreen/Migrate/V34.elm` or `src/Evergreen/V34/Types.elm` is present.
+  - The remaining seam is unchanged: `tests/FrontendTests.elm` still has no regression that drives the actual `OperationSuccessful` / `updateFromBackend` branch. Coverage stops at helper math (`groupTransactionsReloadPages`, `updatedGroupTransactionsLoadedPages`), so the composed deep-page refresh path is still unproved even though chronology/header guards remain elsewhere.
+- **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test (58/58) ✅, localhost:8000 HTTP 200 ✅
+- **Verdict:** Rejected again. Hudson is now locked out for the next revision cycle until a different agent adds an explicit mutation-refresh regression at the message/update seam.
+
+### 2026-05-15T16:17:14Z: Deep-Page Refresh Proof Review (commit 06940a4) — APPROVED ✅
+
+- **Task:** Review commit `06940a4` for the incremental-loading refresh bug, with explicit proof that add/edit success several pages down re-requests the same depth.
+- **Findings:**
+  - `src/Frontend.elm` now extracts `operationSuccessfulRefreshPlan`, and `updateFromBackend OperationSuccessful` consumes that plan directly, so the replay request is testable without drifting away from production behavior.
+  - `tests/BackendTests.elm` adds a composed regression that loads two pages, records the remembered depth, runs the operation-success refresh plan, replays the resulting `RequestGroupTransactions { before = Nothing, pages = 2 }`, and proves the refreshed list still contains the older April month in reverse chronology with headers leading each block.
+  - Existing chronology/header guards remain in place in `tests/FrontendTests.elm` and `tests/BackendTests.elm`, and the stale V34 migration artifacts remain deleted: there is no `src/Evergreen/Migrate/V34.elm` or `src/Evergreen/V34/Types.elm`.
+- **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test (59/59) ✅, localhost:8000 HTTP 200 ✅
+- **Verdict:** Approved. The deep-page refresh seam is now explicitly proved at the composed flow level.
+
+### 2026-05-15T18:10:00Z: Late-Arriving Year Summary Review — APPROVED ✅
+
+- **Task:** Review Bishop's follow-up for the seam where an older year first appears on a later page load and must already show its year summary/header.
+- **Findings:**
+  - `src/Backend.elm` now carries year totals on every month slice, then emits year summaries whenever a page spans multiple years or reaches the visible end of a year. That closes the bug where page 2 could introduce a new older year but miss its header until page 3.
+  - `tests/BackendTests.elm` now adds the right regression shape: page 1 shows only 2025, page 2 first introduces 2024 while that year is still only partially loaded, and the assertions check the exact `Y 2024 -> M 2024-12 -> T 2024-12` placement both on the second page itself and after frontend merge.
+  - Existing safeguards remain intact: reverse-chronology coverage still passes, deep-page refresh proof remains in place, and `src/Evergreen/Migrate/V34.elm` plus `src/Evergreen/V34/Types.elm` stay deleted.
+- **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test (60/60) ✅, localhost:8000 HTTP 200 ✅
+- **Verdict:** Approved. The late-arriving year-summary seam is now explicitly proved instead of being inferred from generic header counts.
+
+### 2026-05-15T16:43:52Z: Late-Arriving Year Header Safety Review — APPROVED ✅
+
+- **Task:** Review Bishop's fix for the late-arriving year header seam when older year first appears on page 2.
+- **Approach:**
+  - Verified backend logic: year total on every month slice + header emission when page spans multiple years
+  - Confirmed page 2 can introduce 2024 and render `Y 2024` immediately even when 2024 continues to later page
+  - Checked test quality: exact failure shape (page 1 = 2025, page 2 = first 2024) with `Y 2024 -> M 2024-12` ordering verified both in payload and after frontend merge
+- **Regression Gates Validated:**
+  - Reverse chronology tests: still pass ✓
+  - Deep-page reload proof: remains intact ✓
+  - Migration safety: No Evergreen artifacts generated (`V34/Migrate/` and `V34/Types.elm` stay deleted) ✓
+- **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test ✅, localhost:8000 HTTP 200 ✅
+- **Verdict:** Approved. The late-arriving year seam is now explicitly fixed with comprehensive regression proof; all safety rails remain in place.
+- **Status:** Ready for production merge

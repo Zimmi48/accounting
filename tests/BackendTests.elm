@@ -516,6 +516,323 @@ suite =
                                 )
                         )
             ]
+        , describe "progressive group transaction listing"
+            [ test "group transaction pages place year/month summaries above the rows they summarize" <|
+                \_ ->
+                    let
+                        model =
+                            progressiveListingModel
+                                [ ( 2025, 7, 2 )
+                                , ( 2025, 6, 1 )
+                                , ( 2024, 12, 1 )
+                                ]
+
+                        page =
+                            Backend.listGroupTransactionsPage model
+                                { group = "Trip"
+                                , before = Nothing
+                                , pages = 1
+                                }
+                    in
+                    Expect.equal
+                        [ "Y 2025"
+                        , "M 2025-07"
+                        , "T 2025-07"
+                        , "M 2025-06"
+                        , "T 2025-06"
+                        , "Y 2024"
+                        , "M 2024-12"
+                        , "T 2024-12"
+                        ]
+                        (groupTransactionBoundaryMarkers page.items)
+            , test "initial group transaction page loads whole months until it reaches 100 rows" <|
+                \_ ->
+                    let
+                        model =
+                            progressiveListingModel
+                                [ ( 2025, 7, 40 )
+                                , ( 2025, 6, 40 )
+                                , ( 2025, 5, 30 )
+                                , ( 2025, 4, 10 )
+                                ]
+
+                        page =
+                            Backend.listGroupTransactionsPage model
+                                { group = "Trip"
+                                , before = Nothing
+                                , pages = 1
+                                }
+                    in
+                    Expect.equal
+                        { pagesLoaded = 1
+                        , nextCursor = Just { year = 2025, month = 5 }
+                        , transactionCount = 110
+                        , monthSummaries = [ ( 2025, 7, 4000 ), ( 2025, 6, 4000 ), ( 2025, 5, 3000 ) ]
+                        , yearSummaries = []
+                        , boundaryMarkers =
+                            [ "M 2025-07"
+                            , "T 2025-07"
+                            , "M 2025-06"
+                            , "T 2025-06"
+                            , "M 2025-05"
+                            , "T 2025-05"
+                            ]
+                        }
+                        { pagesLoaded = page.pagesLoaded
+                        , nextCursor = page.nextCursor
+                        , transactionCount = groupTransactionRowCount page.items
+                        , monthSummaries = monthSummaryTotals page.items
+                        , yearSummaries = yearSummaryTotals page.items
+                        , boundaryMarkers = groupTransactionBoundaryMarkers page.items
+                        }
+            , test "reloading multiple pages at once keeps the same history depth" <|
+                \_ ->
+                    let
+                        model =
+                            progressiveListingModel
+                                [ ( 2025, 7, 40 )
+                                , ( 2025, 6, 40 )
+                                , ( 2025, 5, 30 )
+                                , ( 2025, 4, 10 )
+                                ]
+
+                        page =
+                            Backend.listGroupTransactionsPage model
+                                { group = "Trip"
+                                , before = Nothing
+                                , pages = 2
+                                }
+                    in
+                    Expect.equal
+                        { pagesLoaded = 2
+                        , nextCursor = Nothing
+                        , transactionCount = 120
+                        , monthSummaries =
+                            [ ( 2025, 7, 4000 )
+                            , ( 2025, 6, 4000 )
+                            , ( 2025, 5, 3000 )
+                            , ( 2025, 4, 1000 )
+                            ]
+                        , yearSummaries = [ ( 2025, 12000 ) ]
+                        , boundaryMarkers =
+                            [ "Y 2025"
+                            , "M 2025-07"
+                            , "T 2025-07"
+                            , "M 2025-06"
+                            , "T 2025-06"
+                            , "M 2025-05"
+                            , "T 2025-05"
+                            , "M 2025-04"
+                            , "T 2025-04"
+                            ]
+                        }
+                        { pagesLoaded = page.pagesLoaded
+                        , nextCursor = page.nextCursor
+                        , transactionCount = groupTransactionRowCount page.items
+                        , monthSummaries = monthSummaryTotals page.items
+                        , yearSummaries = yearSummaryTotals page.items
+                        , boundaryMarkers = groupTransactionBoundaryMarkers page.items
+                        }
+            , {- Mutations reuse OperationSuccessful, so this cross-layer seam must
+                 prove the frontend replays the full loaded depth before replacing
+                 the list with refreshed backend data.
+              -}
+              test "operation-success refresh re-requests loaded pages and keeps the older month visible in reverse chronology" <|
+                \_ ->
+                    let
+                        initialModel =
+                            progressiveListingModel
+                                [ ( 2025, 7, 40 )
+                                , ( 2025, 6, 40 )
+                                , ( 2025, 5, 30 )
+                                , ( 2025, 4, 10 )
+                                ]
+
+                        firstPage =
+                            Backend.listGroupTransactionsPage initialModel
+                                { group = "Trip"
+                                , before = Nothing
+                                , pages = 1
+                                }
+
+                        secondPage =
+                            Backend.listGroupTransactionsPage initialModel
+                                { group = "Trip"
+                                , before = firstPage.nextCursor
+                                , pages = 1
+                                }
+
+                        initiallyLoadedItems =
+                            Frontend.groupTransactionsFromBackend "Trip" firstPage.group firstPage.before firstPage.items []
+                                |> Frontend.groupTransactionsFromBackend "Trip" secondPage.group secondPage.before secondPage.items
+
+                        loadedPages =
+                            Frontend.updatedGroupTransactionsLoadedPages firstPage.before firstPage.pagesLoaded 0
+                                |> Frontend.updatedGroupTransactionsLoadedPages secondPage.before secondPage.pagesLoaded
+
+                        refreshPlan =
+                            Frontend.operationSuccessfulRefreshPlan
+                                { page = Home
+                                , showDialog = Just (AddSpendingDialog (Frontend.emptySpendingDialog Nothing "Dinner" "10.00"))
+                                , errorMessage = Just "stale"
+                                , nameValidity = Complete
+                                , user = "Alice"
+                                , groupValidity = Complete
+                                , group = "Trip"
+                                , groupTransactionsLoadedPages = loadedPages
+                                , groupTransactionsLoading = False
+                                }
+
+                        refreshedModel =
+                            progressiveListingModel
+                                [ ( 2025, 7, 40 )
+                                , ( 2025, 6, 40 )
+                                , ( 2025, 5, 30 )
+                                , ( 2025, 4, 11 )
+                                ]
+
+                        refreshedPage =
+                            Backend.listGroupTransactionsPage refreshedModel
+                                (groupTransactionsRefreshRequest refreshPlan.backendRequests)
+
+                        refreshedItems =
+                            Frontend.groupTransactionsFromBackend
+                                "Trip"
+                                refreshedPage.group
+                                refreshedPage.before
+                                refreshedPage.items
+                                initiallyLoadedItems
+                    in
+                    Expect.equal
+                        { backendRequests =
+                            [ RequestUserGroups "Alice"
+                            , RequestGroupTransactions
+                                { group = "Trip"
+                                , before = Nothing
+                                , pages = 2
+                                }
+                            ]
+                        , dialogClosed = refreshPlan.updatedModel.showDialog == Nothing
+                        , loading = refreshPlan.updatedModel.groupTransactionsLoading
+                        , pagesLoaded = refreshedPage.pagesLoaded
+                        , boundaryMarkers =
+                            [ "Y 2025"
+                            , "M 2025-07"
+                            , "T 2025-07"
+                            , "M 2025-06"
+                            , "T 2025-06"
+                            , "M 2025-05"
+                            , "T 2025-05"
+                            , "M 2025-04"
+                            , "T 2025-04"
+                            ]
+                        , aprilDays = List.range 1 11 |> List.reverse
+                        }
+                        { backendRequests = refreshPlan.backendRequests
+                        , dialogClosed = refreshPlan.updatedModel.showDialog == Nothing
+                        , loading = refreshPlan.updatedModel.groupTransactionsLoading
+                        , pagesLoaded = refreshedPage.pagesLoaded
+                        , boundaryMarkers = groupTransactionBoundaryMarkers refreshedItems
+                        , aprilDays = transactionDaysForMonth 2025 4 refreshedItems
+                        }
+            , test "later group transaction pages append older months and finish the year summary at the boundary" <|
+                \_ ->
+                    let
+                        model =
+                            progressiveListingModel
+                                [ ( 2025, 7, 40 )
+                                , ( 2025, 6, 40 )
+                                , ( 2025, 5, 30 )
+                                , ( 2025, 4, 10 )
+                                ]
+
+                        page =
+                            Backend.listGroupTransactionsPage model
+                                { group = "Trip"
+                                , before = Just { year = 2025, month = 5 }
+                                , pages = 1
+                                }
+                    in
+                    Expect.equal
+                        { pagesLoaded = 1
+                        , nextCursor = Nothing
+                        , transactionCount = 10
+                        , monthSummaries = [ ( 2025, 4, 1000 ) ]
+                        , yearSummaries = [ ( 2025, 12000 ) ]
+                        , boundaryMarkers =
+                            [ "Y 2025"
+                            , "M 2025-04"
+                            , "T 2025-04"
+                            ]
+                        }
+                        { pagesLoaded = page.pagesLoaded
+                        , nextCursor = page.nextCursor
+                        , transactionCount = groupTransactionRowCount page.items
+                        , monthSummaries = monthSummaryTotals page.items
+                        , yearSummaries = yearSummaryTotals page.items
+                        , boundaryMarkers = groupTransactionBoundaryMarkers page.items
+                        }
+            , test "second page shows the newly visible older year header above its partial block" <|
+                \_ ->
+                    let
+                        model =
+                            progressiveListingModel
+                                [ ( 2025, 7, 40 )
+                                , ( 2025, 6, 40 )
+                                , ( 2025, 5, 30 )
+                                , ( 2025, 4, 10 )
+                                , ( 2024, 12, 95 )
+                                , ( 2024, 11, 10 )
+                                ]
+
+                        firstPage =
+                            Backend.listGroupTransactionsPage model
+                                { group = "Trip"
+                                , before = Nothing
+                                , pages = 1
+                                }
+
+                        secondPage =
+                            Backend.listGroupTransactionsPage model
+                                { group = "Trip"
+                                , before = firstPage.nextCursor
+                                , pages = 1
+                                }
+
+                        mergedItems =
+                            Frontend.groupTransactionsFromBackend "Trip" firstPage.group firstPage.before firstPage.items []
+                                |> Frontend.groupTransactionsFromBackend "Trip" secondPage.group secondPage.before secondPage.items
+                    in
+                    Expect.equal
+                        { secondPageYearSummaries = [ ( 2025, 12000 ), ( 2024, 10500 ) ]
+                        , secondPageBoundaryMarkers =
+                            [ "Y 2025"
+                            , "M 2025-04"
+                            , "T 2025-04"
+                            , "Y 2024"
+                            , "M 2024-12"
+                            , "T 2024-12"
+                            ]
+                        , mergedBoundaryMarkers =
+                            [ "Y 2025"
+                            , "M 2025-07"
+                            , "T 2025-07"
+                            , "M 2025-06"
+                            , "T 2025-06"
+                            , "M 2025-05"
+                            , "T 2025-05"
+                            , "M 2025-04"
+                            , "T 2025-04"
+                            , "Y 2024"
+                            , "M 2024-12"
+                            , "T 2024-12"
+                            ]
+                        }
+                        { secondPageYearSummaries = yearSummaryTotals secondPage.items
+                        , secondPageBoundaryMarkers = groupTransactionBoundaryMarkers secondPage.items
+                        , mergedBoundaryMarkers = groupTransactionBoundaryMarkers mergedItems
+                        }
+            ]
         , describe "transaction reconciliation toggles"
             [ test "toggling a listed transaction updates the active group list without changing its spending totals" <|
                 \_ ->
@@ -1200,6 +1517,171 @@ userAmountsDue : String -> Backend.Model -> Maybe (Dict.Dict String (Amount Debi
 userAmountsDue user model =
     Backend.userGroupsForPerson user model
         |> Maybe.map (\userGroups -> Frontend.personalAmountsDue userGroups.debitors userGroups.creditors)
+
+
+progressiveListingModel : List ( Int, Int, Int ) -> Backend.Model
+progressiveListingModel monthCounts =
+    List.foldl
+        (\( year, month, count ) model ->
+            createMonthlyTripSpendings year month count model
+        )
+        groupedModel
+        monthCounts
+
+
+createMonthlyTripSpendings : Int -> Int -> Int -> Backend.Model -> Backend.Model
+createMonthlyTripSpendings year month count model =
+    List.range 1 count
+        |> List.foldl
+            (\index currentModel ->
+                createSpending
+                    ("Expense " ++ String.fromInt year ++ "-" ++ String.fromInt month ++ "-" ++ String.fromInt index)
+                    (Amount 100)
+                    [ datedSpendingTransaction year month (1 + modBy 28 (index - 1)) "Alice" CreditTransaction 100
+                    , datedSpendingTransaction year month (1 + modBy 28 (index - 1)) "Trip" DebitTransaction 100
+                    ]
+                    currentModel
+            )
+            model
+
+
+groupTransactionsRefreshRequest :
+    List ToBackend
+    ->
+        { group : String
+        , before : Maybe GroupTransactionsCursor
+        , pages : Int
+        }
+groupTransactionsRefreshRequest requests =
+    case List.filterMap groupTransactionsRequestFromMessage requests of
+        request :: _ ->
+            request
+
+        [] ->
+            Debug.todo "Expected a group transaction refresh request"
+
+
+groupTransactionsRequestFromMessage :
+    ToBackend
+    ->
+        Maybe
+            { group : String
+            , before : Maybe GroupTransactionsCursor
+            , pages : Int
+            }
+groupTransactionsRequestFromMessage message =
+    case message of
+        RequestGroupTransactions request ->
+            Just request
+
+        _ ->
+            Nothing
+
+
+groupTransactionRowCount : List GroupTransactionListItem -> Int
+groupTransactionRowCount =
+    List.length
+        << List.filter
+            (\item ->
+                case item of
+                    GroupTransactionRow _ ->
+                        True
+
+                    _ ->
+                        False
+            )
+
+
+monthSummaryTotals : List GroupTransactionListItem -> List ( Int, Int, Int )
+monthSummaryTotals =
+    List.filterMap
+        (\item ->
+            case item of
+                GroupTransactionMonthSummary summary ->
+                    Just ( summary.year, summary.month, amountValue summary.total )
+
+                _ ->
+                    Nothing
+        )
+
+
+yearSummaryTotals : List GroupTransactionListItem -> List ( Int, Int )
+yearSummaryTotals =
+    List.filterMap
+        (\item ->
+            case item of
+                GroupTransactionYearSummary summary ->
+                    Just ( summary.year, amountValue summary.total )
+
+                _ ->
+                    Nothing
+        )
+
+
+groupTransactionBoundaryMarkers : List GroupTransactionListItem -> List String
+groupTransactionBoundaryMarkers items =
+    items
+        |> List.foldl
+            (\item ( markers, lastTransactionMonth ) ->
+                case item of
+                    GroupTransactionYearSummary summary ->
+                        ( ("Y " ++ String.fromInt summary.year) :: markers
+                        , Nothing
+                        )
+
+                    GroupTransactionMonthSummary summary ->
+                        ( boundaryMonthMarker "M" summary.year summary.month :: markers
+                        , Nothing
+                        )
+
+                    GroupTransactionRow transaction ->
+                        let
+                            transactionMonth =
+                                ( transaction.year, transaction.month )
+                        in
+                        if Just transactionMonth == lastTransactionMonth then
+                            ( markers, lastTransactionMonth )
+
+                        else
+                            ( boundaryMonthMarker "T" transaction.year transaction.month :: markers
+                            , Just transactionMonth
+                            )
+            )
+            ( [], Nothing )
+        |> Tuple.first
+        |> List.reverse
+
+
+transactionDaysForMonth : Int -> Int -> List GroupTransactionListItem -> List Int
+transactionDaysForMonth year month items =
+    items
+        |> List.filterMap
+            (\item ->
+                case item of
+                    GroupTransactionRow transaction ->
+                        if transaction.year == year && transaction.month == month then
+                            Just transaction.day
+
+                        else
+                            Nothing
+
+                    _ ->
+                        Nothing
+            )
+
+
+boundaryMonthMarker : String -> Int -> Int -> String
+boundaryMonthMarker prefix year month =
+    prefix
+        ++ " "
+        ++ String.fromInt year
+        ++ "-"
+        ++ String.padLeft 2 '0' (String.fromInt month)
+
+
+amountValue : Amount a -> Int
+amountValue (Amount amount) =
+    amount
 
 
 legacyBackendModel : V24.BackendModel

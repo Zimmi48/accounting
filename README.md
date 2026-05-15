@@ -6,6 +6,7 @@ A web application for managing group expenses and accounting, built with Elm and
 
 - User and group management
 - Expense tracking with automatic debt calculation
+- Progressive transaction loading with month/year summary headers
 - Lightweight transaction reconciliation markers
 - Data import/export functionality
 - Real-time synchronization using Lamdera
@@ -47,7 +48,7 @@ Typical workflow:
 
 The script normalizes both exports before diffing them. It ignores storage-only churn such as `loggedInSessions`, spending-array indexes, raw `transactionIds`, and opaque `groupMembersKey` values, and instead compares person names, groups, logical spendings, per-group active transaction lists, and aggregated totals. Exit code `0` means no semantic differences were found; exit code `1` means the report found differences.
 
-The active-transaction section follows the app's group transaction view semantics: for each group, it replays the active rows that would appear in `RequestGroupTransactions`, applies the frontend's newest-first ordering, and compares the rendered listing fields (date text, composed description, total, and signed share where credits are negative and debits positive).
+The active-transaction section follows the app's group transaction view semantics: for each group, it replays the active rows that would appear in `RequestGroupTransactions`, including the newest-first month pages, summary headers above their corresponding year/month rows, and the rendered listing fields (date text, composed description, total, and signed share where credits are negative and debits positive).
 
 ### Validating stored totals from an export
 

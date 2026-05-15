@@ -18,6 +18,7 @@
 - 2026-05-05: Mixed-sign creditor spendings fail in `src/Backend.elm` before persistence, not in the dialog submit gate. `Frontend.canSubmitSpending` and `dialogTransactions` already pass signed amounts through, so backend normalization/validation must keep non-zero signed transaction lines and only drop exact zero merges; regression coverage now lives in `tests/BackendTests.elm`.
 
 - 2026-05-15: `src/Backend.elm:editSpendingInModel` now reconciles normalized edited rows against active stored rows by logical row identity `(date, secondaryDescription, group, side, amount)`, reassigning matched rows to the replacement spending and only marking unmatched rows `Replaced`; regression coverage lives in `tests/BackendTests.elm`.
+- 2026-05-15: `src/Backend.elm:groupTransactionPageItems` must emit a `GroupTransactionYearSummary` for each visible year when a paged response spans multiple years, even if the oldest visible year is still partial overall; regression proof lives in `tests/BackendTests.elm` with the page-2 2025→2024 seam merged through `Frontend.groupTransactionsFromBackend`.
 
 ## 2026-04-21: Phase 2 Contract Correction Approved
 
@@ -96,3 +97,18 @@
 - **Validation:** elm-format, lamdera make src/Frontend.elm, lamdera make src/Backend.elm, npm test, lamdera live HTTP 200
 - **Status:** ✅ Completed; commit 8edf105 approved for merge
 - **Decision merged:** Spending edit transaction preservation (2026-05-15)
+
+### 2026-05-15T16:43:52Z: Late-Arriving Year Header Seam — COMPLETED ✅
+
+- **Task:** Fix the seam where an older year first appears on page 2 without rendering its year header line.
+- **Root Cause:** Paginated group transaction list could introduce an older year on page 2 without emitting the corresponding year summary header.
+- **Solution:** Emit year summary for each visible year when a response spans multiple years:
+  - Backend carries year totals on every month slice
+  - Emits year header whenever page spans multiple years or reaches visible end of year
+  - Frontend merge already hoists late-arriving headers (no frontend changes needed)
+- **Deliverables:**
+  - Backend emission logic in `src/Backend.elm`
+  - Test regression in `tests/BackendTests.elm` covering exact page-2 2025→2024 shape
+- **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test ✅, lamdera live HTTP 200 ✅
+- **Status:** ✅ Completed; commit d5f7f8a approved and ready for merge
+- **Reviewer:** Vasquez approved

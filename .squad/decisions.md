@@ -2,6 +2,100 @@
 
 ## Active Decisions
 
+### Summary Header Ordering (Hicks, 2026-05-15)
+
+**Status:** Approved and implemented; commit e36ea18 validated.
+
+**Decision:** Render transaction-list summary rows as headers that lead their periods:
+- Month summaries appear before that month's transaction rows
+- Year summaries appear before the first loaded month of that year
+
+Because year boundaries can arrive on a later pagination request, the frontend normalizes merged pages so a newly arrived year summary is hoisted above already-loaded newer months from the same year, preventing mid-list burial.
+
+**Implementation details:**
+- Backend (`src/Backend.elm`): Emits month summaries before their transaction rows; inserts year summary before first loaded month of completed year page
+- Frontend (`src/Frontend.elm`): Page merge normalization hoists year summary arriving on later page above already-loaded months of that year
+- Tests (`src/BackendTests.elm`, `src/FrontendTests.elm`): Boundary markers (e.g., `Y 2025 → M 2025-04 → T 2025-04`) assert ordering on both initial and load-more paths
+
+**Why:** Summaries must lead their periods to provide accurate views of period totals before scanning transaction details. Progressive load-more must preserve this invariant even when year boundaries arrive late.
+
+**Validation:** elm-format, both lamdera make targets, npm test, lamdera live HTTP 200 all pass.
+
+**Reviewer:** Vasquez approved.
+
+### Summary Order Review Approved (Vasquez, 2026-05-15)
+
+**Status:** Approved and validated for production.
+
+**Verdict:** Hicks's summary ordering revision for issue #52 is approved and ready.
+
+**Review details:**
+- Backend seam `src/Backend.elm`: Now emits month summaries before their month rows; inserts year summary before first loaded month of completed year page ✓
+- Pagination seam `src/Frontend.elm`: Now normalizes merged pages so year summary arriving on later page is hoisted above already-loaded months for that year ✓
+- Regression proof: Focused ordering tests assert boundary markers (`Y 2025 → M 2025-04 → T 2025-04`) explicitly on both initial and load-more paths ✓
+
+**Process:** Vasquez reminded team that migration code must wait until pre-migration change is committed and reviewed; generated migration files should land in their own commit before any hand edits (per Théo's directive).
+
+**Impact:** Commit e36ea18 is production-ready; next phase begins after migration review window.
+
+### Progressive Group Transaction Loading with Pagination (Ripley & Vasquez, 2026-05-15)
+
+**Status:** Implemented and committed; awaiting review.
+
+**Decision:** Issue #52 implements progressive loading of group transactions with year/month summary rows. The backend returns whole months (no splits at boundaries), frontend caches and merges pages, and Evergreen migrations clear stale flat-list state.
+
+**Standing workflow rule:** Changes requiring Lamdera migrations must be implemented and committed before Théo reviews them. Do not ask for review on an uncommitted migration-bearing change.
+
+**Implementation details:**
+- Backend: Pagination returns newest whole months needed to show at least 100 transactions, preserving reverse-chronological order.
+- Frontend: Loads and merges pages without duplicates; changing the active group resets cached state.
+- Migration: Evergreen V34+ clears stale `groupTransactions`, `ListGroupTransactions`, and `ShowAddSpendingDialog` to prevent stale data masquerading as paginated state.
+- Codecs: Backend persistence shape remains unchanged; only response payload expands.
+
+**Acceptance criteria:**
+1. Initial load returns newest whole months with ≥100 transactions; no month splits.
+2. Load-more appends older whole months without duplicates or skips.
+3. History exhaustion stops cleanly.
+4. Summary rows (year/month) appear exactly once in correct order, matching persisted totals.
+5. Changing the group resets cached state; stale responses are ignored.
+6. Migration safely upgrades old flat-list state.
+
+**Tests required before approval:**
+- BackendTests: exact-100, spillover, exhaustion, summary correctness
+- FrontendTests: initial rendering, load-more merge, response filtering, group-reset semantics
+- MigrationTests: Evergreen V34+ clears or upgrades stale seams
+- CodecsTests: round-trip new backend model (if shape changes)
+- Review risk: transaction toggle/edit/delete refresh must preserve already-loaded older pages
+
+**Validation:** elm-format, lamdera make (both targets), npm test, lamdera live HTTP 200 all pass.
+
+**Reviewer:** Commit 2fb20e1 ready for Théo.
+
+### Migration Work Review Flow (Ripley, 2026-05-15)
+
+**Status:** Approved and established as standing rule.
+
+**Decision:** For changes that require an Evergreen migration, the implementation must be completed and committed before Théo reviews it. Do not start a review round on an uncommitted migration change.
+
+**Why:** Migration work changes persisted contracts, so review needs a concrete commit boundary instead of an in-progress diff. This keeps review focused on the landed interface, migration logic, and validation evidence rather than speculative intermediate states.
+
+**Scope:**
+- Applies to all future migration-bearing work in this repository.
+- Does not change the existing requirement to run full Lamdera validation gates before handing the commit over for review.
+
+**Implications:**
+- Land the implementation first.
+- Commit with the migration artifacts and manual migration logic in place.
+- Hand the commit to Théo for review without opening a separate review round beforehand.
+
+### User Directive: Migration Review Flow (Théo Zimmermann, 2026-05-15)
+
+**Status:** Captured for team memory.
+
+**What:** Changes requiring migrations must be implemented first and committed before review by the user. This is always the rule unless the user explicitly says otherwise.
+
+**Why:** User request — standing directive for team operations.
+
 ### Transaction Checked Flag (Newt, 2026-05-15)
 
 **Status:** Approved and implemented.
@@ -254,6 +348,47 @@ Keep three layers of coverage:
 - `lamdera live` → HTTP 200 ✅
 
 **Reviewer:** Vasquez approved; reassigned from Newt to Hicks for revision. Commit: 9a67501
+
+### Late-Arriving Year Header on Page 2 (Bishop, 2026-05-15)
+
+**Status:** Approved and implemented; commit d5f7f8a validated.
+
+**Context:** A paginated group transaction list could introduce an older year on page 2 without rendering that year's header line, even though the older months and transactions were shown.
+
+**Decision:** Treat year headers as page-visible block markers when a response spans multiple years. `src/Backend.elm` should therefore send a year summary for each visible year in that response, while preserving the existing single-year partial-page behavior.
+
+**Why:** The frontend can only hoist a year header that actually exists in backend items. Emitting `Y 2024` in the second-page payload fixes the seam without inventing frontend-only summary rows or changing migrations.
+
+**Implementation details:**
+- Backend (`src/Backend.elm`): Emits year header whenever page spans multiple years or reaches visible end of a year
+- Tests (`tests/BackendTests.elm`): Covers exact page-2 2025→2024 case; verifies both second-page payload and merged frontend list keep `Y 2024` above older block
+
+**Validation:**
+- `elm-format --validate` ✅
+- `lamdera make src/Frontend.elm` ✅
+- `lamdera make src/Backend.elm` ✅
+- `npm test` ✅
+- `lamdera live` HTTP 200 ✅
+
+**Reviewer:** Vasquez approved.
+
+### Late-Arriving Year Header Review (Vasquez, 2026-05-15)
+
+**Status:** Approved and validated for production.
+
+**Verdict:** Bishop's revision for the late-arriving year header on page 2 is approved and ready.
+
+**Review details:**
+- Backend logic: Year total on every month slice; header emitted when page spans multiple years ✓
+- Page 2 behavior: Can introduce 2024 and render `Y 2024` immediately even when 2024 continues onto later page ✓
+- Proof quality: Tests use exact failure shape — page 1 contains only 2025, page 2 first introduces 2024 while partial, assertions verify `Y 2024` both in second page payload and after frontend merge ✓
+
+**Regression gates checked:**
+- Reverse chronology: Still passes ✓
+- Deep-page reload proof: Remains intact ✓
+- Migration status: No `src/Evergreen/Migrate/V34.elm` or `src/Evergreen/V34/Types.elm` generated ✓
+
+**Impact:** Commit d5f7f8a is production-ready for merge.
 
 ---
 
@@ -1689,3 +1824,90 @@ The checked state should still read as distinct, but the default accent green an
 Assign next revision to **Dallas**. Remaining work: add explicit frontend regression coverage around rendered marker seam, then rerun existing validation gates.
 
 **Status:** Awaiting Dallas assignment
+
+---
+
+# Decision: User Directive — Reload Migration Handling (2026-05-15T15:58:18Z)
+
+**By:** Théo Zimmermann (via Copilot)
+
+**What:** For this model-changing reload fix, delete the generated migration and do not regenerate or hand-fix it until the user explicitly asks after reviewing the code changes.
+
+**Why:** User request — review-first workflow. Code changes must be approved before migrating types.
+
+**Status:** ✓ Enforced throughout Newt → Hudson → Vasquez pipeline
+
+---
+
+# Decision: Paginated Refresh Depth (2026-05-15)
+
+**Owner:** Newt
+
+**Context:** Issue #52's incremental loading kept only one page on add/edit refresh, so deeper history views snapped back toward newer transactions.
+
+**Decision:** Track the active group's loaded page count in frontend state and let `RequestGroupTransactions` ask the backend for that many pages on a reload, while scroll-driven load-more continues requesting a single additional page.
+
+**Why:** The reload path should preserve the user's current history depth without changing the month-bucket pagination rules or the reverse-chronological rendering contract.
+
+**Implementation Status:** Committed as 8224e1b, initially rejected for insufficient seam coverage, then approved in revised form as 06940a4
+
+**Migration Note:** Deleted stale V34 migration artifacts per user directive; awaiting explicit user approval before regeneration
+
+---
+
+# Decision: Pure OperationSuccessful Refresh Plan Helper (2026-05-15)
+
+**Owner:** Hudson
+
+**Context:** Lamdera `Cmd` values are opaque in Elm tests, but the rejected revision needed proof at the real mutation-triggered reload seam rather than another helper-only page-depth assertion.
+
+**Decision:** Extract the `OperationSuccessful` home-page refresh logic in `src/Frontend.elm` into a pure `operationSuccessfulRefreshPlan` helper that returns the updated frontend state plus the `ToBackend` messages to emit.
+
+**Why:** This keeps runtime behavior mechanical while making the review seam directly testable. The regression test can now load multiple pages, replay the exact refresh request after `OperationSuccessful`, and verify the refreshed list still includes the older month with correct chronology and summary placement.
+
+**Implementation Status:** Committed as 06940a4, approved by Vasquez
+
+---
+
+# Decision: Normalize Paged Group Transactions with Explicit Descending Row Sort (2026-05-15)
+
+**Owner:** Dallas
+
+**Context:** Issue #52 kept month/year summaries above their blocks by normalizing merged `GroupTransactionListItem` pages on the frontend. That normalization preserved header placement, but it also preserved the backend's per-month row order, which is oldest-first inside each month.
+
+**Decision:** When `src/Frontend.elm` rebuilds the grouped transaction list, it must sort:
+- years descending
+- months descending within each year
+- transaction rows descending by `(year, month, day, transactionId.index)`
+
+This keeps summary rows above each block while restoring strict reverse-chronological transaction order.
+
+**Consequences:**
+- Later year-boundary pages can still hoist a year summary above already-loaded newer months.
+- Ordering no longer depends on how backend pages happened to arrive before normalization.
+- Regression coverage belongs on `Frontend.groupTransactionsFromBackend` with realistic backend-ordered fixtures, including same-day index ordering.
+
+**Status:** Under review
+
+---
+
+# Approval: Deep-Page Refresh Proof (2026-05-15T16:17:14Z)
+
+**By:** Vasquez
+
+**What:** Commit 06940a4 is approved
+
+**Why:**
+- `src/Frontend.elm` now routes `OperationSuccessful` through the pure `operationSuccessfulRefreshPlan` helper, and `updateFromBackend` consumes that helper directly.
+- `tests/BackendTests.elm` finally proves the real seam: two pages are loaded, the remembered depth is replayed as `RequestGroupTransactions { before = Nothing, pages = 2 }`, and the refreshed merged list still shows the older month with reverse chronology and summary headers intact.
+- The stale migration remains unregenerated as requested: there is no `src/Evergreen/Migrate/V34.elm` or `src/Evergreen/V34/Types.elm`.
+
+**Validation:**
+- ✅ `elm-format --validate src/ tests/`
+- ✅ `lamdera make src/Frontend.elm --output=/dev/null`
+- ✅ `lamdera make src/Backend.elm --output=/dev/null`
+- ✅ `npm test` (59/59)
+- ✅ `lamdera live` with localhost HTTP 200
+
+**Status:** Ready for merge
+

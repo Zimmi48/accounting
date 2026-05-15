@@ -106,9 +106,8 @@ suite =
                         False
                         (Frontend.canSubmitSpending { validDialog | credits = [ invalidCredit ] })
             ]
-        , {- Group transactions arrive oldest-first from the backend traversal, so
-             the frontend must reverse them at the consumer boundary before the
-             view reads `model.groupTransactions`.
+        , {- Group transaction pages now arrive newest-first with explicit month/year
+             summaries, and older pages append after the current tail.
           -}
           describe "group transaction ordering"
             [ test "transactionCheckVisualState switches between explicit unchecked and checked markers" <|
@@ -142,43 +141,119 @@ suite =
                         , avoidsBrightAccent = checkedStyle.marker /= Frontend.lightPalette.accent
                         , remainsDistinct = checkedStyle.marker /= uncheckedStyle.marker
                         }
-            , test "ListGroupTransactions stores an ascending backend response as newest-first" <|
+            , test "initial ListGroupTransactions replaces existing items with the backend page" <|
                 \_ ->
                     let
-                        backendTransactions =
-                            [ listedTransaction 0 2025 4 16
-                            , listedTransaction 0 2025 4 17
-                            , listedTransaction 1 2025 4 18
-                            , listedTransaction 2 2025 4 18
+                        backendItems =
+                            [ monthSummaryItem 2025 4 1000
+                            , listedTransactionItem 2 2025 4 18
+                            , listedTransactionItem 1 2025 4 18
                             ]
                     in
                     Expect.equal
-                        [ listedTransaction 2 2025 4 18
-                        , listedTransaction 1 2025 4 18
-                        , listedTransaction 0 2025 4 17
-                        , listedTransaction 0 2025 4 16
+                        backendItems
+                        (Frontend.groupTransactionsFromBackend
+                            "Trip"
+                            "Trip"
+                            Nothing
+                            backendItems
+                            [ listedTransactionItem 9 2025 4 1 ]
+                        )
+            , test "initial ListGroupTransactions restores reverse chronological rows while keeping summaries above each block" <|
+                \_ ->
+                    let
+                        backendItems =
+                            [ yearSummaryItem 2025 2500
+                            , monthSummaryItem 2025 5 500
+                            , listedTransactionItem 0 2025 5 1
+                            , listedTransactionItem 1 2025 5 3
+                            , monthSummaryItem 2025 4 2000
+                            , listedTransactionItem 0 2025 4 17
+                            , listedTransactionItem 1 2025 4 17
+                            , listedTransactionItem 2 2025 4 18
+                            ]
+                    in
+                    Expect.equal
+                        [ yearSummaryItem 2025 2500
+                        , monthSummaryItem 2025 5 500
+                        , listedTransactionItem 1 2025 5 3
+                        , listedTransactionItem 0 2025 5 1
+                        , monthSummaryItem 2025 4 2000
+                        , listedTransactionItem 2 2025 4 18
+                        , listedTransactionItem 1 2025 4 17
+                        , listedTransactionItem 0 2025 4 17
                         ]
                         (Frontend.groupTransactionsFromBackend
                             "Trip"
                             "Trip"
-                            backendTransactions
-                            [ listedTransaction 9 2025 4 1 ]
+                            Nothing
+                            backendItems
+                            []
+                        )
+            , test "load-more ListGroupTransactions hoists the year summary and keeps appended rows reverse chronological" <|
+                \_ ->
+                    let
+                        existingItems =
+                            [ monthSummaryItem 2025 5 500
+                            , listedTransactionItem 1 2025 5 3
+                            , listedTransactionItem 0 2025 5 1
+                            ]
+
+                        olderItems =
+                            [ yearSummaryItem 2025 2500
+                            , monthSummaryItem 2025 4 2000
+                            , listedTransactionItem 0 2025 4 17
+                            , listedTransactionItem 1 2025 4 17
+                            , listedTransactionItem 2 2025 4 18
+                            ]
+                    in
+                    Expect.equal
+                        [ yearSummaryItem 2025 2500
+                        , monthSummaryItem 2025 5 500
+                        , listedTransactionItem 1 2025 5 3
+                        , listedTransactionItem 0 2025 5 1
+                        , monthSummaryItem 2025 4 2000
+                        , listedTransactionItem 2 2025 4 18
+                        , listedTransactionItem 1 2025 4 17
+                        , listedTransactionItem 0 2025 4 17
+                        ]
+                        (Frontend.groupTransactionsFromBackend
+                            "Trip"
+                            "Trip"
+                            (Just { year = 2025, month = 5 })
+                            olderItems
+                            existingItems
                         )
             , test "ListGroupTransactions ignores responses for another group" <|
                 \_ ->
                     let
-                        existingTransactions =
-                            [ listedTransaction 2 2025 4 18
-                            , listedTransaction 0 2025 4 16
+                        existingItems =
+                            [ listedTransactionItem 2 2025 4 18
+                            , monthSummaryItem 2025 4 1000
                             ]
                     in
                     Expect.equal
-                        existingTransactions
+                        existingItems
                         (Frontend.groupTransactionsFromBackend
                             "Trip"
                             "Other group"
-                            [ listedTransaction 0 2025 4 16 ]
-                            existingTransactions
+                            Nothing
+                            [ listedTransactionItem 0 2025 4 16 ]
+                            existingItems
+                        )
+            , test "groupTransactionsReloadPages keeps the current depth and still requests one page for a fresh group" <|
+                \_ ->
+                    Expect.equal
+                        ( 1, 3 )
+                        ( Frontend.groupTransactionsReloadPages { groupTransactionsLoadedPages = 0 }
+                        , Frontend.groupTransactionsReloadPages { groupTransactionsLoadedPages = 3 }
+                        )
+            , test "updatedGroupTransactionsLoadedPages resets on a fresh reload and accumulates load-more pages" <|
+                \_ ->
+                    Expect.equal
+                        ( 3, 4 )
+                        ( Frontend.updatedGroupTransactionsLoadedPages Nothing 3 1
+                        , Frontend.updatedGroupTransactionsLoadedPages (Just { year = 2025, month = 4 }) 1 3
                         )
             , test "toggleGroupTransactionChecked only flips the targeted transaction" <|
                 \_ ->
@@ -188,38 +263,43 @@ suite =
 
                         secondId =
                             { groupId = 0, year = 2025, month = 4, day = 18, index = 1 }
+
+                        firstTransaction =
+                            listedTransaction 0 2025 4 18
+
+                        secondTransaction =
+                            listedTransaction 1 2025 4 18
                     in
                     Expect.equal
-                        [ { transactionId = firstId, checked = True }
-                        , { transactionId = secondId, checked = True }
+                        [ GroupTransactionRow { firstTransaction | checked = True }
+                        , GroupTransactionMonthSummary { year = 2025, month = 4, total = Amount 1000 }
+                        , GroupTransactionRow { secondTransaction | checked = True }
                         ]
                         (Frontend.toggleGroupTransactionChecked
                             firstId
-                            [ { transactionId = firstId, checked = False }
-                            , { transactionId = secondId, checked = True }
+                            [ GroupTransactionRow firstTransaction
+                            , monthSummaryItem 2025 4 1000
+                            , GroupTransactionRow { secondTransaction | checked = True }
                             ]
                         )
-            , test "backend refresh keeps the clicked row checked and untouched rows unchanged" <|
+            , test "shouldLoadMoreGroupTransactions waits for the bottom of the list and a cursor" <|
                 \_ ->
-                    let
-                        olderTransaction =
-                            listedTransaction 0 2025 4 17
-
-                        clickedTransaction =
-                            listedTransaction 0 2025 4 18
-
-                        clickedTransactions =
-                            Frontend.toggleGroupTransactionChecked
-                                clickedTransaction.transactionId
-                                [ clickedTransaction, olderTransaction ]
-                    in
                     Expect.equal
-                        [ { clickedTransaction | checked = True }, olderTransaction ]
-                        (Frontend.groupTransactionsFromBackend
-                            "Trip"
-                            "Trip"
-                            [ olderTransaction, { clickedTransaction | checked = True } ]
-                            clickedTransactions
+                        ( False, True, False )
+                        ( Frontend.shouldLoadMoreGroupTransactions
+                            { scrollTop = 100, clientHeight = 200, scrollHeight = 400 }
+                            frontendGroupTransactionsState
+                        , Frontend.shouldLoadMoreGroupTransactions
+                            { scrollTop = 180, clientHeight = 200, scrollHeight = 400 }
+                            { frontendGroupTransactionsState
+                                | groupTransactionsNextCursor = Just { year = 2025, month = 4 }
+                            }
+                        , Frontend.shouldLoadMoreGroupTransactions
+                            { scrollTop = 180, clientHeight = 200, scrollHeight = 400 }
+                            { frontendGroupTransactionsState
+                                | groupTransactionsNextCursor = Just { year = 2025, month = 4 }
+                                , groupTransactionsLoading = True
+                            }
                         )
             ]
         , {- Debt summaries are derived entirely on the client. This example keeps
@@ -385,6 +465,40 @@ listedTransaction index year month day =
     , total = Amount 1000
     , share = Amount 500
     , checked = False
+    }
+
+
+listedTransactionItem : Int -> Int -> Int -> Int -> GroupTransactionListItem
+listedTransactionItem index year month day =
+    GroupTransactionRow (listedTransaction index year month day)
+
+
+monthSummaryItem : Int -> Int -> Int -> GroupTransactionListItem
+monthSummaryItem year month total =
+    GroupTransactionMonthSummary
+        { year = year
+        , month = month
+        , total = Amount total
+        }
+
+
+yearSummaryItem : Int -> Int -> GroupTransactionListItem
+yearSummaryItem year total =
+    GroupTransactionYearSummary
+        { year = year
+        , total = Amount total
+        }
+
+
+frontendGroupTransactionsState :
+    { groupTransactionsLoading : Bool
+    , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+    , groupValidity : NameValidity
+    }
+frontendGroupTransactionsState =
+    { groupTransactionsLoading = False
+    , groupTransactionsNextCursor = Nothing
+    , groupValidity = Complete
     }
 
 

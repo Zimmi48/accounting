@@ -144,6 +144,7 @@ Ripley review of landed rewrite (invariant compliance check) → Then Evergreen 
 - Rebuild V28 top-level `years -> months -> days -> day.transactions` into V31 group-owned storage by assigning person group ids from legacy `Person.id`, allocating named groups after that range, and remapping each old `TransactionId` to `{ groupId, year, month, day, index }`.
 - Recompute migrated `Person.belongsTo` from transaction `groupMembers`/`groupMembersKey`, not only from `totalGroupCredits`, so passive participants still see due/owed group membership after the storage rewrite.
 - Migration regression fixtures now live in `tests/BackendTests.elm` and `tests/FrontendTests.elm` for the V28 -> V31 seam.
+- 2026-05-15: `src/Frontend.elm` must explicitly sort normalized `GroupTransactionListItem` rows by descending `(year, month, day, transactionId.index)` while also sorting years/months descending; summary-header normalization alone will otherwise preserve the backend's oldest-first month order. Regression coverage for this seam lives in the group-transaction ordering tests in `tests/FrontendTests.elm`.
 
 ## Migration Session: Evergreen Prep & Commit (2026-05-14T11:56:22Z)
 

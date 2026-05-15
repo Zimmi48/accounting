@@ -26,17 +26,10 @@ type alias FrontendModel =
     , group : String
     , groupValidity : NameValidity
     , groupTransactions :
-        List
-            { transactionId : TransactionId
-            , spendingId : SpendingId
-            , description : String
-            , year : Int
-            , month : Int
-            , day : Int
-            , total : Amount Debit
-            , share : Amount Debit
-            , checked : Bool
-            }
+        List GroupTransactionListItem
+    , groupTransactionsLoadedPages : Int
+    , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+    , groupTransactionsLoading : Bool
     , key : Key
     , windowWidth : Int
     , windowHeight : Int
@@ -105,6 +98,11 @@ type FrontendMsg
     | UpdateJson String
     | ViewportChanged Int Int
     | ToggleTheme
+    | GroupTransactionsScrolled
+        { scrollTop : Float
+        , clientHeight : Float
+        , scrollHeight : Float
+        }
 
 
 type ToBackend
@@ -128,7 +126,11 @@ type ToBackend
     | DeleteSpending SpendingId
     | RequestSpendingDetails SpendingId
     | RequestUserGroups String
-    | RequestGroupTransactions String
+    | RequestGroupTransactions
+        { group : String
+        , before : Maybe GroupTransactionsCursor
+        , pages : Int
+        }
     | ToggleTransactionCheckedRequest TransactionId
     | RequestAllTransactions
     | CheckPassword String
@@ -153,6 +155,38 @@ type alias SpendingReference =
     { spendingId : SpendingId
     , transactionId : TransactionId
     }
+
+
+type alias GroupTransactionsCursor =
+    { year : Int
+    , month : Int
+    }
+
+
+type alias GroupTransaction =
+    { transactionId : TransactionId
+    , spendingId : SpendingId
+    , description : String
+    , year : Int
+    , month : Int
+    , day : Int
+    , total : Amount Debit
+    , share : Amount Debit
+    , checked : Bool
+    }
+
+
+type GroupTransactionListItem
+    = GroupTransactionRow GroupTransaction
+    | GroupTransactionMonthSummary
+        { year : Int
+        , month : Int
+        , total : Amount Debit
+        }
+    | GroupTransactionYearSummary
+        { year : Int
+        , total : Amount Debit
+        }
 
 
 type alias SpendingTransaction =
@@ -193,18 +227,10 @@ type ToFrontend
         }
     | ListGroupTransactions
         { group : String
-        , transactions :
-            List
-                { transactionId : TransactionId
-                , spendingId : SpendingId
-                , description : String
-                , year : Int
-                , month : Int
-                , day : Int
-                , total : Amount Debit
-                , share : Amount Debit
-                , checked : Bool
-                }
+        , before : Maybe GroupTransactionsCursor
+        , pagesLoaded : Int
+        , nextCursor : Maybe GroupTransactionsCursor
+        , items : List GroupTransactionListItem
         }
     | AuthenticationStatus Bool
     | JsonExport String

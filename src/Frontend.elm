@@ -18,6 +18,7 @@ import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events exposing (..)
+import Json.Decode as Decode
 import Lamdera
 import List.Extra as List
 import Maybe.Extra as Maybe
@@ -60,6 +61,9 @@ init url key =
       , group = ""
       , groupValidity = Incomplete
       , groupTransactions = []
+      , groupTransactionsLoadedPages = 0
+      , groupTransactionsNextCursor = Nothing
+      , groupTransactionsLoading = False
       , key = key
       , windowWidth = 1000
       , windowHeight = 1000
@@ -188,7 +192,7 @@ update msg model =
 
                 Just reference ->
                     -- Edit existing transaction
-                    case List.find (\t -> t.transactionId == reference.transactionId) model.groupTransactions of
+                    case findGroupTransaction reference.transactionId model.groupTransactions of
                         Just transaction ->
                             let
                                 date =
@@ -445,6 +449,9 @@ update msg model =
                 | group = name
                 , groupValidity = Incomplete
                 , groupTransactions = []
+                , groupTransactionsLoadedPages = 0
+                , groupTransactionsNextCursor = Nothing
+                , groupTransactionsLoading = False
               }
             , if String.length name > 0 then
                 Lamdera.sendToBackend (AutocompleteGroup name)
@@ -889,6 +896,13 @@ update msg model =
             , Cmd.none
             )
 
+        GroupTransactionsScrolled scrollState ->
+            if shouldLoadMoreGroupTransactions scrollState model then
+                requestMoreGroupTransactions model
+
+            else
+                ( model, Cmd.none )
+
 
 remainingAmount total lines =
     ((total
@@ -1202,6 +1216,69 @@ updateValueInList index value list =
                 )
 
 
+operationSuccessfulRefreshPlan :
+    { a
+        | page : Page
+        , showDialog : Maybe Dialog
+        , errorMessage : Maybe String
+        , nameValidity : NameValidity
+        , user : String
+        , groupValidity : NameValidity
+        , group : String
+        , groupTransactionsLoadedPages : Int
+        , groupTransactionsLoading : Bool
+    }
+    ->
+        { updatedModel :
+            { a
+                | page : Page
+                , showDialog : Maybe Dialog
+                , errorMessage : Maybe String
+                , nameValidity : NameValidity
+                , user : String
+                , groupValidity : NameValidity
+                , group : String
+                , groupTransactionsLoadedPages : Int
+                , groupTransactionsLoading : Bool
+            }
+        , backendRequests : List ToBackend
+        }
+operationSuccessfulRefreshPlan model =
+    case model.page of
+        Import _ ->
+            { updatedModel = { model | page = Import "", errorMessage = Nothing }
+            , backendRequests = []
+            }
+
+        Home ->
+            { updatedModel =
+                { model
+                    | showDialog = Nothing
+                    , errorMessage = Nothing
+                    , groupTransactionsLoading =
+                        model.groupValidity == Complete
+                }
+            , backendRequests =
+                (if model.nameValidity == Complete then
+                    [ RequestUserGroups model.user ]
+
+                 else
+                    []
+                )
+                    ++ (if model.groupValidity == Complete then
+                            [ initialGroupTransactionsRequest model.group model.groupTransactionsLoadedPages ]
+
+                        else
+                            []
+                       )
+            }
+
+        _ ->
+            { updatedModel = model
+            , backendRequests = []
+            }
+
+
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
 updateFromBackend msg model =
     case msg of
@@ -1209,32 +1286,15 @@ updateFromBackend msg model =
             ( model, Cmd.none )
 
         OperationSuccessful ->
-            case model.page of
-                Import _ ->
-                    ( { model | page = Import "", errorMessage = Nothing }
-                    , Cmd.none
-                    )
-
-                Home ->
-                    ( { model | showDialog = Nothing, errorMessage = Nothing }
-                    , (++)
-                        (if model.nameValidity == Complete then
-                            [ Lamdera.sendToBackend (RequestUserGroups model.user) ]
-
-                         else
-                            []
-                        )
-                        (if model.groupValidity == Complete then
-                            [ Lamdera.sendToBackend (RequestGroupTransactions model.group) ]
-
-                         else
-                            []
-                        )
-                        |> Cmd.batch
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
+            let
+                refreshPlan =
+                    operationSuccessfulRefreshPlan model
+            in
+            ( refreshPlan.updatedModel
+            , refreshPlan.backendRequests
+                |> List.map Lamdera.sendToBackend
+                |> Cmd.batch
+            )
 
         NameAlreadyExists name ->
             case model.showDialog of
@@ -1433,10 +1493,28 @@ updateFromBackend msg model =
 
                                 else
                                     Incomplete
+                            , groupTransactions =
+                                if response.complete then
+                                    []
+
+                                else
+                                    model.groupTransactions
+                            , groupTransactionsLoadedPages =
+                                if response.complete then
+                                    0
+
+                                else
+                                    model.groupTransactionsLoadedPages
+                            , groupTransactionsNextCursor =
+                                if response.complete then
+                                    Nothing
+
+                                else
+                                    model.groupTransactionsNextCursor
+                            , groupTransactionsLoading = response.complete
                           }
                         , if response.complete then
-                            Lamdera.sendToBackend
-                                (RequestGroupTransactions response.longestCommonPrefix)
+                            requestInitialGroupTransactions response.longestCommonPrefix 0
 
                           else
                             Cmd.none
@@ -1460,11 +1538,19 @@ updateFromBackend msg model =
             , Cmd.none
             )
 
-        ListGroupTransactions { group, transactions } ->
-            ( { model
-                | groupTransactions =
-                    groupTransactionsFromBackend model.group group transactions model.groupTransactions
-              }
+        ListGroupTransactions { group, before, pagesLoaded, nextCursor, items } ->
+            ( if model.group == group then
+                { model
+                    | groupTransactions =
+                        groupTransactionsFromBackend model.group group before items model.groupTransactions
+                    , groupTransactionsLoadedPages =
+                        updatedGroupTransactionsLoadedPages before pagesLoaded model.groupTransactionsLoadedPages
+                    , groupTransactionsNextCursor = nextCursor
+                    , groupTransactionsLoading = False
+                }
+
+              else
+                model
             , Cmd.none
             )
 
@@ -1561,38 +1647,278 @@ updateFromBackend msg model =
                     ( model, Cmd.none )
 
 
-groupTransactionsFromBackend : String -> String -> List a -> List a -> List a
-groupTransactionsFromBackend currentGroup responseGroup responseTransactions existingTransactions =
+groupTransactionsFromBackend :
+    String
+    -> String
+    -> Maybe GroupTransactionsCursor
+    -> List GroupTransactionListItem
+    -> List GroupTransactionListItem
+    -> List GroupTransactionListItem
+groupTransactionsFromBackend currentGroup responseGroup responseBefore responseItems existingItems =
     if currentGroup == responseGroup then
-        List.reverse responseTransactions
+        let
+            combinedItems =
+                case responseBefore of
+                    Nothing ->
+                        responseItems
+
+                    Just _ ->
+                        existingItems ++ responseItems
+        in
+        normalizeGroupTransactionListItems combinedItems
 
     else
-        existingTransactions
+        existingItems
+
+
+normalizeGroupTransactionListItems : List GroupTransactionListItem -> List GroupTransactionListItem
+normalizeGroupTransactionListItems items =
+    let
+        collected =
+            List.foldl
+                collectGroupTransactionListItem
+                { monthOrder = []
+                , monthRows = Dict.empty
+                , monthSummaries = Dict.empty
+                , yearOrder = []
+                , yearSummaries = Dict.empty
+                }
+                items
+
+        sortedYears =
+            collected.yearOrder
+                |> List.sortBy negate
+    in
+    sortedYears
+        |> List.concatMap
+            (\year ->
+                (case Dict.get year collected.yearSummaries of
+                    Just summary ->
+                        [ GroupTransactionYearSummary summary ]
+
+                    Nothing ->
+                        []
+                )
+                    ++ (collected.monthOrder
+                            |> List.filter (\( monthYear, _ ) -> monthYear == year)
+                            |> List.sortBy (\( _, month ) -> -month)
+                            |> List.concatMap
+                                (\monthKey ->
+                                    (case Dict.get monthKey collected.monthSummaries of
+                                        Just summary ->
+                                            [ GroupTransactionMonthSummary summary ]
+
+                                        Nothing ->
+                                            []
+                                    )
+                                        ++ (collected.monthRows
+                                                |> Dict.get monthKey
+                                                |> Maybe.withDefault []
+                                                |> List.sortBy groupTransactionChronologicalKey
+                                                |> List.reverse
+                                                |> List.map GroupTransactionRow
+                                           )
+                                )
+                       )
+            )
+
+
+groupTransactionChronologicalKey : GroupTransaction -> ( Int, Int, ( Int, Int ) )
+groupTransactionChronologicalKey transaction =
+    ( transaction.year
+    , transaction.month
+    , ( transaction.day, transaction.transactionId.index )
+    )
+
+
+collectGroupTransactionListItem :
+    GroupTransactionListItem
+    ->
+        { monthOrder : List ( Int, Int )
+        , monthRows : Dict ( Int, Int ) (List GroupTransaction)
+        , monthSummaries : Dict ( Int, Int ) { year : Int, month : Int, total : Amount Debit }
+        , yearOrder : List Int
+        , yearSummaries : Dict Int { year : Int, total : Amount Debit }
+        }
+    ->
+        { monthOrder : List ( Int, Int )
+        , monthRows : Dict ( Int, Int ) (List GroupTransaction)
+        , monthSummaries : Dict ( Int, Int ) { year : Int, month : Int, total : Amount Debit }
+        , yearOrder : List Int
+        , yearSummaries : Dict Int { year : Int, total : Amount Debit }
+        }
+collectGroupTransactionListItem item collected =
+    case item of
+        GroupTransactionRow transaction ->
+            let
+                monthKey =
+                    ( transaction.year, transaction.month )
+            in
+            { monthOrder = collectGroupTransactionMonth monthKey collected.monthOrder
+            , monthRows =
+                Dict.update monthKey
+                    (\maybeTransactions ->
+                        Just
+                            ((maybeTransactions |> Maybe.withDefault [])
+                                ++ [ transaction ]
+                            )
+                    )
+                    collected.monthRows
+            , monthSummaries = collected.monthSummaries
+            , yearOrder = collectGroupTransactionYear transaction.year collected.yearOrder
+            , yearSummaries = collected.yearSummaries
+            }
+
+        GroupTransactionMonthSummary summary ->
+            let
+                monthKey =
+                    ( summary.year, summary.month )
+            in
+            { monthOrder = collectGroupTransactionMonth monthKey collected.monthOrder
+            , monthRows = collected.monthRows
+            , monthSummaries = Dict.insert monthKey summary collected.monthSummaries
+            , yearOrder = collectGroupTransactionYear summary.year collected.yearOrder
+            , yearSummaries = collected.yearSummaries
+            }
+
+        GroupTransactionYearSummary summary ->
+            { monthOrder = collected.monthOrder
+            , monthRows = collected.monthRows
+            , monthSummaries = collected.monthSummaries
+            , yearOrder = collectGroupTransactionYear summary.year collected.yearOrder
+            , yearSummaries = Dict.insert summary.year summary collected.yearSummaries
+            }
+
+
+collectGroupTransactionMonth : ( Int, Int ) -> List ( Int, Int ) -> List ( Int, Int )
+collectGroupTransactionMonth monthKey monthOrder =
+    if List.member monthKey monthOrder then
+        monthOrder
+
+    else
+        monthOrder ++ [ monthKey ]
+
+
+collectGroupTransactionYear : Int -> List Int -> List Int
+collectGroupTransactionYear year yearOrder =
+    if List.member year yearOrder then
+        yearOrder
+
+    else
+        yearOrder ++ [ year ]
+
+
+findGroupTransaction : TransactionId -> List GroupTransactionListItem -> Maybe GroupTransaction
+findGroupTransaction transactionId =
+    List.findMap
+        (\item ->
+            case item of
+                GroupTransactionRow transaction ->
+                    if transaction.transactionId == transactionId then
+                        Just transaction
+
+                    else
+                        Nothing
+
+                GroupTransactionMonthSummary _ ->
+                    Nothing
+
+                GroupTransactionYearSummary _ ->
+                    Nothing
+        )
 
 
 toggleGroupTransactionChecked :
     TransactionId
     ->
         List
-            { a
-                | transactionId : TransactionId
-                , checked : Bool
-            }
-    ->
-        List
-            { a
-                | transactionId : TransactionId
-                , checked : Bool
-            }
+            GroupTransactionListItem
+    -> List GroupTransactionListItem
 toggleGroupTransactionChecked transactionId =
     List.map
-        (\transaction ->
-            if transaction.transactionId == transactionId then
-                { transaction | checked = not transaction.checked }
+        (\item ->
+            case item of
+                GroupTransactionRow transaction ->
+                    if transaction.transactionId == transactionId then
+                        GroupTransactionRow { transaction | checked = not transaction.checked }
 
-            else
-                transaction
+                    else
+                        item
+
+                GroupTransactionMonthSummary _ ->
+                    item
+
+                GroupTransactionYearSummary _ ->
+                    item
         )
+
+
+shouldLoadMoreGroupTransactions :
+    { scrollTop : Float
+    , clientHeight : Float
+    , scrollHeight : Float
+    }
+    ->
+        { a
+            | groupTransactionsLoading : Bool
+            , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+            , groupValidity : NameValidity
+        }
+    -> Bool
+shouldLoadMoreGroupTransactions scrollState model =
+    (scrollState.scrollTop + scrollState.clientHeight + 48)
+        >= scrollState.scrollHeight
+        && not model.groupTransactionsLoading
+        && Maybe.isJust model.groupTransactionsNextCursor
+        && model.groupValidity
+        == Complete
+
+
+groupTransactionsReloadPages : { a | groupTransactionsLoadedPages : Int } -> Int
+groupTransactionsReloadPages model =
+    max 1 model.groupTransactionsLoadedPages
+
+
+updatedGroupTransactionsLoadedPages : Maybe GroupTransactionsCursor -> Int -> Int -> Int
+updatedGroupTransactionsLoadedPages responseBefore pagesLoaded currentPages =
+    case responseBefore of
+        Nothing ->
+            pagesLoaded
+
+        Just _ ->
+            currentPages + pagesLoaded
+
+
+initialGroupTransactionsRequest : String -> Int -> ToBackend
+initialGroupTransactionsRequest group loadedPages =
+    RequestGroupTransactions
+        { group = group
+        , before = Nothing
+        , pages = groupTransactionsReloadPages { groupTransactionsLoadedPages = loadedPages }
+        }
+
+
+requestInitialGroupTransactions : String -> Int -> Cmd FrontendMsg
+requestInitialGroupTransactions group loadedPages =
+    Lamdera.sendToBackend (initialGroupTransactionsRequest group loadedPages)
+
+
+requestMoreGroupTransactions : Model -> ( Model, Cmd FrontendMsg )
+requestMoreGroupTransactions model =
+    case model.groupTransactionsNextCursor of
+        Just cursor ->
+            ( { model | groupTransactionsLoading = True }
+            , Lamdera.sendToBackend
+                (RequestGroupTransactions
+                    { group = model.group
+                    , before = Just cursor
+                    , pages = 1
+                    }
+                )
+            )
+
+        Nothing ->
+            ( model, Cmd.none )
 
 
 markInvalidPrefix prefix list =
@@ -2057,7 +2383,7 @@ view model =
                                         , text = model.group
                                         }
                                    ]
-                                ++ List.map (viewTransaction palette) model.groupTransactions
+                                ++ [ viewGroupTransactions palette model ]
                             )
                         )
                     ]
@@ -2639,18 +2965,7 @@ canSubmitSpending { description, total, date, credits, debits, submitted } =
 
 viewTransaction :
     Palette
-    ->
-        { a
-            | transactionId : TransactionId
-            , spendingId : SpendingId
-            , description : String
-            , year : Int
-            , month : Int
-            , day : Int
-            , total : Amount Debit
-            , share : Amount Debit
-            , checked : Bool
-        }
+    -> GroupTransaction
     -> Element FrontendMsg
 viewTransaction palette transaction =
     let
@@ -2685,6 +3000,89 @@ viewTransaction palette transaction =
                 }
             ]
         ]
+
+
+viewGroupTransactions : Palette -> Model -> Element FrontendMsg
+viewGroupTransactions palette model =
+    let
+        listHeight =
+            max 260 (model.windowHeight - 260)
+    in
+    el
+        [ width fill
+        , height (px listHeight)
+        , scrollbarY
+        , htmlAttribute (on "scroll" groupTransactionsScrollDecoder)
+        ]
+        (column [ width fill, spacing 12 ]
+            (List.map (viewGroupTransactionListItem palette) model.groupTransactions
+                ++ viewGroupTransactionsFooter palette model
+            )
+        )
+
+
+viewGroupTransactionsFooter : Palette -> Model -> List (Element FrontendMsg)
+viewGroupTransactionsFooter palette model =
+    if model.groupTransactionsLoading then
+        [ el
+            [ width fill
+            , padding 16
+            , Background.color palette.surface
+            ]
+            (text "Loading more transactions…")
+        ]
+
+    else
+        []
+
+
+viewGroupTransactionListItem : Palette -> GroupTransactionListItem -> Element FrontendMsg
+viewGroupTransactionListItem palette item =
+    case item of
+        GroupTransactionRow transaction ->
+            viewTransaction palette transaction
+
+        GroupTransactionMonthSummary summary ->
+            viewGroupTransactionSummary palette
+                (String.fromInt summary.year
+                    ++ "-"
+                    ++ String.padLeft 2 '0' (String.fromInt summary.month)
+                )
+                summary.total
+
+        GroupTransactionYearSummary summary ->
+            viewGroupTransactionSummary palette
+                (String.fromInt summary.year)
+                summary.total
+
+
+viewGroupTransactionSummary : Palette -> String -> Amount Debit -> Element FrontendMsg
+viewGroupTransactionSummary palette label total =
+    row
+        [ width fill
+        , spacing 20
+        , padding 16
+        , Background.color palette.disabledButton
+        , Font.color palette.text
+        ]
+        [ el [ Font.bold ] (text label)
+        , text ("Total: " ++ (total |> (\(Amount amount) -> amount) |> viewAmount))
+        ]
+
+
+groupTransactionsScrollDecoder : Decode.Decoder FrontendMsg
+groupTransactionsScrollDecoder =
+    Decode.map3
+        (\scrollTop clientHeight scrollHeight ->
+            GroupTransactionsScrolled
+                { scrollTop = scrollTop
+                , clientHeight = clientHeight
+                , scrollHeight = scrollHeight
+                }
+        )
+        (Decode.at [ "target", "scrollTop" ] Decode.float)
+        (Decode.at [ "target", "clientHeight" ] Decode.float)
+        (Decode.at [ "target", "scrollHeight" ] Decode.float)
 
 
 type TransactionCheckVisualState

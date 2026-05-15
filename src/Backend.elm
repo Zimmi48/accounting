@@ -9,6 +9,7 @@ import Html
 import Lamdera exposing (ClientId, SessionId)
 import Maybe.Extra as Maybe
 import Set exposing (Set)
+import Tuple
 import Types exposing (..)
 
 
@@ -275,13 +276,11 @@ updateFromFrontend sessionId clientId msg model =
                         )
                     )
 
-        ( True, RequestGroupTransactions group ) ->
+        ( True, RequestGroupTransactions request ) ->
             ( model
             , Lamdera.sendToFrontend clientId
-                (ListGroupTransactions
-                    { group = group
-                    , transactions = groupTransactionsForName group model
-                    }
+                (listGroupTransactionsPage model request
+                    |> ListGroupTransactions
                 )
             )
 
@@ -291,20 +290,13 @@ updateFromFrontend sessionId clientId msg model =
                 , Dict.get transactionId.groupId model.groups
                 )
             of
-                ( Just transaction, Just group ) ->
+                ( Just transaction, Just _ ) ->
                     if transactionToggleAllowed model transaction then
                         let
                             updatedModel =
                                 toggleTransactionCheckedInModel transactionId model
                         in
-                        ( updatedModel
-                        , Lamdera.sendToFrontend clientId
-                            (ListGroupTransactions
-                                { group = group.name
-                                , transactions = groupTransactionsForName group.name updatedModel
-                                }
-                            )
-                        )
+                        ( updatedModel, Cmd.none )
 
                     else
                         ( model, Cmd.none )
@@ -1556,29 +1548,316 @@ transactionToggleAllowed model transaction =
            )
 
 
-groupTransactionsForName :
-    String
+type alias GroupTransactionMonthSlice =
+    { cursor : GroupTransactionsCursor
+    , yearSummary : { year : Int, total : Amount Debit }
+    , endsVisibleYear : Bool
+    , items : List GroupTransactionListItem
+    , transactionCount : Int
+    }
+
+
+listGroupTransactionsPage :
+    Model
+    ->
+        { group : String
+        , before : Maybe GroupTransactionsCursor
+        , pages : Int
+        }
+    ->
+        { group : String
+        , before : Maybe GroupTransactionsCursor
+        , pagesLoaded : Int
+        , nextCursor : Maybe GroupTransactionsCursor
+        , items : List GroupTransactionListItem
+        }
+listGroupTransactionsPage model response =
+    case findGroupByName response.group model of
+        Nothing ->
+            { group = response.group
+            , before = response.before
+            , pagesLoaded = 0
+            , nextCursor = Nothing
+            , items = []
+            }
+
+        Just ( groupId, storedGroup ) ->
+            let
+                availableSlices =
+                    groupTransactionMonthSlices groupId storedGroup model
+                        |> dropToGroupTransactionsCursor response.before
+
+                pageSelection =
+                    takeGroupTransactionPages response.pages availableSlices
+            in
+            { group = response.group
+            , before = response.before
+            , pagesLoaded = pageSelection.pagesLoaded
+            , nextCursor =
+                if List.isEmpty pageSelection.remainingSlices then
+                    Nothing
+
+                else
+                    pageSelection.selectedSlices
+                        |> List.reverse
+                        |> List.head
+                        |> Maybe.map .cursor
+            , items =
+                groupTransactionPageItems pageSelection.selectedSlices
+            }
+
+
+takeGroupTransactionPages :
+    Int
+    -> List GroupTransactionMonthSlice
+    ->
+        { selectedSlices : List GroupTransactionMonthSlice
+        , remainingSlices : List GroupTransactionMonthSlice
+        , pagesLoaded : Int
+        }
+takeGroupTransactionPages requestedPages slices =
+    if requestedPages <= 0 || List.isEmpty slices then
+        { selectedSlices = []
+        , remainingSlices = slices
+        , pagesLoaded = 0
+        }
+
+    else
+        let
+            selectedPage =
+                takeTransactionMonthSlices 100 slices
+        in
+        if List.isEmpty selectedPage then
+            { selectedSlices = []
+            , remainingSlices = slices
+            , pagesLoaded = 0
+            }
+
+        else
+            let
+                remainingAfterPage =
+                    List.drop (List.length selectedPage) slices
+
+                nextSelection =
+                    takeGroupTransactionPages (requestedPages - 1) remainingAfterPage
+            in
+            { selectedSlices = selectedPage ++ nextSelection.selectedSlices
+            , remainingSlices = nextSelection.remainingSlices
+            , pagesLoaded = 1 + nextSelection.pagesLoaded
+            }
+
+
+dropToGroupTransactionsCursor :
+    Maybe GroupTransactionsCursor
+    -> List GroupTransactionMonthSlice
+    -> List GroupTransactionMonthSlice
+dropToGroupTransactionsCursor before slices =
+    case before of
+        Nothing ->
+            slices
+
+        Just cursor ->
+            case slices of
+                [] ->
+                    []
+
+                slice :: rest ->
+                    if slice.cursor == cursor then
+                        rest
+
+                    else
+                        dropToGroupTransactionsCursor before rest
+
+
+takeTransactionMonthSlices : Int -> List GroupTransactionMonthSlice -> List GroupTransactionMonthSlice
+takeTransactionMonthSlices remaining slices =
+    case slices of
+        [] ->
+            []
+
+        slice :: rest ->
+            if remaining <= 0 then
+                []
+
+            else
+                slice :: takeTransactionMonthSlices (remaining - slice.transactionCount) rest
+
+
+groupTransactionPageItems : List GroupTransactionMonthSlice -> List GroupTransactionListItem
+groupTransactionPageItems slices =
+    let
+        yearSummaries =
+            slices
+                |> List.foldl
+                    (\slice summaries ->
+                        Dict.insert slice.cursor.year slice.yearSummary summaries
+                    )
+                    Dict.empty
+
+        yearsEndingInSelection =
+            slices
+                |> List.filterMap
+                    (\slice ->
+                        if slice.endsVisibleYear then
+                            Just slice.cursor.year
+
+                        else
+                            Nothing
+                    )
+
+        spansMultipleYears =
+            case slices of
+                [] ->
+                    False
+
+                firstSlice :: remainingSlices ->
+                    List.any (\slice -> slice.cursor.year /= firstSlice.cursor.year) remainingSlices
+    in
+    slices
+        |> List.foldl
+            (\slice ( seenYears, items ) ->
+                let
+                    year =
+                        slice.cursor.year
+
+                    yearItems =
+                        if List.member year seenYears then
+                            []
+
+                        else if spansMultipleYears || List.member year yearsEndingInSelection then
+                            yearSummaries
+                                |> Dict.get year
+                                |> Maybe.map (GroupTransactionYearSummary >> List.singleton)
+                                |> Maybe.withDefault []
+
+                        else
+                            []
+                in
+                ( collectYear year seenYears
+                , items ++ yearItems ++ slice.items
+                )
+            )
+            ( [], [] )
+        |> Tuple.second
+
+
+collectYear : Int -> List Int -> List Int
+collectYear year years =
+    if List.member year years then
+        years
+
+    else
+        years ++ [ year ]
+
+
+groupTransactionMonthSlices : GroupId -> StoredGroup -> Model -> List GroupTransactionMonthSlice
+groupTransactionMonthSlices groupId storedGroup model =
+    let
+        monthRecords =
+            storedGroup.years
+                |> Dict.toList
+                |> List.sortBy Tuple.first
+                |> List.reverse
+                |> List.concatMap
+                    (\( year, yearRecord ) ->
+                        yearRecord.months
+                            |> Dict.toList
+                            |> List.sortBy Tuple.first
+                            |> List.reverse
+                            |> List.map
+                                (\( month, monthRecord ) ->
+                                    { year = year
+                                    , yearTotal = toDebit yearRecord.totalCredit
+                                    , month = month
+                                    , monthTotal = toDebit monthRecord.totalCredit
+                                    , monthRecord = monthRecord
+                                    }
+                                )
+                    )
+    in
+    monthRecords
+        |> List.indexedMap
+            (\index monthRecord ->
+                let
+                    includeYearSummary =
+                        case List.drop (index + 1) monthRecords |> List.head of
+                            Just nextMonth ->
+                                nextMonth.year /= monthRecord.year
+
+                            Nothing ->
+                                True
+                in
+                groupTransactionMonthSlice groupId model monthRecord includeYearSummary
+            )
+        |> List.filterMap identity
+
+
+groupTransactionMonthSlice :
+    GroupId
     -> Model
     ->
-        List
-            { transactionId : TransactionId
-            , spendingId : SpendingId
-            , description : String
-            , year : Int
-            , month : Int
-            , day : Int
-            , total : Amount Debit
-            , share : Amount Debit
-            , checked : Bool
+        { year : Int
+        , yearTotal : Amount Debit
+        , month : Int
+        , monthTotal : Amount Debit
+        , monthRecord : Month
+        }
+    -> Bool
+    -> Maybe GroupTransactionMonthSlice
+groupTransactionMonthSlice groupId model monthRecord includeYearSummary =
+    let
+        transactions =
+            groupTransactionsForMonth groupId monthRecord.year monthRecord.month monthRecord.monthRecord model
+    in
+    if List.isEmpty transactions then
+        Nothing
+
+    else
+        Just
+            { cursor =
+                { year = monthRecord.year
+                , month = monthRecord.month
+                }
+            , yearSummary =
+                { year = monthRecord.year
+                , total = monthRecord.yearTotal
+                }
+            , endsVisibleYear = includeYearSummary
+            , items =
+                [ GroupTransactionMonthSummary
+                    { year = monthRecord.year
+                    , month = monthRecord.month
+                    , total = monthRecord.monthTotal
+                    }
+                ]
+                    ++ List.map GroupTransactionRow transactions
+            , transactionCount = List.length transactions
             }
-groupTransactionsForName group model =
-    findGroupByName group model
-        |> Maybe.map
-            (\( groupId, storedGroup ) ->
-                allTransactionsWithIdsForGroup groupId storedGroup
-                    |> List.filterMap (groupTransactionForList model)
+
+
+groupTransactionsForMonth : GroupId -> Int -> Int -> Month -> Model -> List GroupTransaction
+groupTransactionsForMonth groupId year month monthRecord model =
+    Dict.foldr
+        (\day dayRecord acc ->
+            (dayRecord.transactions
+                |> Array.toIndexedList
+                |> List.map
+                    (\( index, transaction ) ->
+                        ( { groupId = groupId
+                          , year = year
+                          , month = month
+                          , day = day
+                          , index = index
+                          }
+                        , transaction
+                        )
+                    )
+                |> List.filterMap (groupTransactionForList model)
             )
-        |> Maybe.withDefault []
+                ++ acc
+        )
+        []
+        monthRecord.days
 
 
 groupTransactionForList :
