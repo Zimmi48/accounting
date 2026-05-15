@@ -6,6 +6,7 @@ A web application for managing group expenses and accounting, built with Elm and
 
 - User and group management
 - Expense tracking with automatic debt calculation
+- Lightweight transaction reconciliation markers
 - Data import/export functionality
 - Real-time synchronization using Lamdera
 

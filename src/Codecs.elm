@@ -175,6 +175,7 @@ transactionCodec =
         |> Codec.field "groupMembersKey" .groupMembersKey Codec.string
         |> Codec.field "groupMembers" .groupMembers (Codec.set Codec.string)
         |> Codec.field "status" .status transactionStatusCodec
+        |> Codec.field "checked" .checked Codec.bool
         |> Codec.buildObject
 
 

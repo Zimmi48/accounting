@@ -89,8 +89,16 @@ roundTripModel =
                   }
                 ]
                 seededModel
+
+        reconciledModel =
+            case Backend.getSpendingTransactionsWithIds 0 createdModel |> List.head of
+                Just ( transactionId, _ ) ->
+                    Backend.toggleTransactionCheckedInModel transactionId createdModel
+
+                Nothing ->
+                    createdModel
     in
-    deleteSpending 0 createdModel
+    deleteSpending 0 reconciledModel
 
 
 deleteSpending : SpendingId -> Backend.Model -> Backend.Model

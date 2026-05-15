@@ -78,6 +78,36 @@ suite =
                         , transactionSlots 1 editedModel
                         , dayStatuses 2025 4 18 editedModel
                         )
+            , test "editing a spending preserves checked state on unchanged rows and leaves new rows unchecked" <|
+                \_ ->
+                    let
+                        originalModel =
+                            createSpending "Dinner" (Amount 1200) partiallyPreservedTransactions groupedModel
+
+                        checkedModel =
+                            case
+                                Backend.getSpendingTransactionsWithIds 0 originalModel
+                                    |> List.filter (\( _, transaction ) -> transaction.group == "Trip")
+                                    |> List.head
+                            of
+                                Just ( transactionId, _ ) ->
+                                    Backend.toggleTransactionCheckedInModel transactionId originalModel
+
+                                Nothing ->
+                                    originalModel
+
+                        editedModel =
+                            replaceSpending 0 "Dinner (edited)" (Amount 1200) partiallyRevisedTransactions checkedModel
+                    in
+                    Expect.equal
+                        [ ( "Alice", False, Active )
+                        , ( "Bob", False, Active )
+                        , ( "House", False, Active )
+                        , ( "Trip", True, Active )
+                        ]
+                        (Backend.getSpendingTransactionsWithIds 1 editedModel
+                            |> List.map (\( _, transaction ) -> ( transaction.group, transaction.checked, transaction.status ))
+                        )
             , test "deleting a spending keeps its historical slots while hiding it from active detail views" <|
                 \_ ->
                     let
@@ -484,6 +514,43 @@ suite =
                                     , transaction.groupMembers |> Set.toList
                                     )
                                 )
+                        )
+            ]
+        , describe "transaction reconciliation toggles"
+            [ test "toggling a listed transaction updates the active group list without changing its spending totals" <|
+                \_ ->
+                    let
+                        model =
+                            createSpending "Dinner" (Amount 1200) baseTransactions groupedModel
+
+                        toggledModel =
+                            case
+                                Backend.getSpendingTransactionsWithIds 0 model
+                                    |> List.filter (\( _, transaction ) -> transaction.group == "Alice")
+                                    |> List.head
+                            of
+                                Just ( transactionId, _ ) ->
+                                    Backend.toggleTransactionCheckedInModel transactionId model
+
+                                Nothing ->
+                                    model
+                    in
+                    Expect.equal
+                        ( [ { description = "Dinner"
+                            , year = 2025
+                            , month = 4
+                            , day = 18
+                            , total = Amount 1200
+                            , share = Amount -1200
+                            , checked = True
+                            }
+                          ]
+                        , Just (Amount 1200)
+                        )
+                        ( listedTransactionsWithChecked "Alice" toggledModel
+                        , toggledModel.totalGroupCredits
+                            |> Dict.get "1,2"
+                            |> Maybe.andThen (Dict.get "Alice")
                         )
             ]
         , {- User summaries depend on spending-level membership, so mixed-creditor
@@ -1095,6 +1162,36 @@ listedTransactions group model =
                 , day = transaction.day
                 , total = transaction.total
                 , share = transaction.share
+                }
+            )
+
+
+listedTransactionsWithChecked :
+    String
+    -> Backend.Model
+    ->
+        List
+            { description : String
+            , year : Int
+            , month : Int
+            , day : Int
+            , total : Amount Debit
+            , share : Amount Debit
+            , checked : Bool
+            }
+listedTransactionsWithChecked group model =
+    Backend.allTransactionsWithIds model
+        |> List.filter (\( _, transaction ) -> transaction.group == group)
+        |> List.filterMap (Backend.groupTransactionForList model)
+        |> List.map
+            (\transaction ->
+                { description = transaction.description
+                , year = transaction.year
+                , month = transaction.month
+                , day = transaction.day
+                , total = transaction.total
+                , share = transaction.share
+                , checked = transaction.checked
                 }
             )
 

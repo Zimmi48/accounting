@@ -92,3 +92,18 @@
 - **Validation gates:** elm-format ✅, check-codecs ✅, both lamdera make targets ✅, npm test (33/33) ✅, HTTP 200 ✅
 - **Status:** Completed and merged to decisions log
 
+## Learnings
+
+- 2026-05-15: Issue #32's click path already flips `checked` in frontend state (`ToggleTransactionChecked` / `toggleGroupTransactionChecked`) and persists through `ToggleTransactionCheckedRequest`, so the user-visible regression sits in `src/Frontend.elm`'s dot rendering seam rather than backend storage.
+- 2026-05-15: The regression escaped because `tests/FrontendTests.elm` only asserted the pure toggle helper and list refresh separately; it never covered the visible checked/unchecked affordance or the composed click-plus-refresh path for the reconciliation dot.
+
+### 2026-05-15T11:17:55Z: Issue #32 Repair Review — Toggle Dot Visual Affordance ✅ APPROVED
+
+- **Task:** Review Newt's visual repair for transaction toggle dot regression
+- **Analysis:** Data flow (click handler, state toggle, backend persistence) already intact from prior #32 decision. Regression isolated to frontend rendering layer: raw embedded SVG with `currentColor` inheritance not reflecting state changes to users.
+- **Review Findings:**
+  - Regression justified: `tests/FrontendTests.elm` only asserted toggle helpers separately, never the visible affordance or click-plus-refresh composition
+  - Repair adequate: elm-ui text glyph replaces SVG; checked/unchecked states render distinctly; composed path preserved in regression tests
+  - Validation gates all pass: elm-format, both lamdera make targets, npm test, HTTP 200
+- **Verdict:** Approved; commit 9c81ea4 merged
+- **Decision merged:** Transaction Toggle Dot Visual Repair (2026-05-15)

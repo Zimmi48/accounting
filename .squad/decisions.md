@@ -2,6 +2,42 @@
 
 ## Active Decisions
 
+### Transaction Checked Flag (Newt, 2026-05-15)
+
+**Status:** Approved and implemented.
+
+**Decision:** Issue #32 keeps the reconciliation marker transaction-local: persist `checked : Bool` on `Transaction`, expose it through the group-transaction listing payload, and leave the spending dialog contract unchanged.
+
+**Implementation details:**
+- Backend writes new transactions with `checked = False` and toggles the flag only through the transaction-list path.
+- Edit reconciliation preserves `checked` on logically unchanged rows because those rows stay attached to the replacement spending; newly created replacement rows start unchecked.
+- Evergreen V33 and `src/Codecs.elm` default pre-existing persisted/listed transactions to `False` so old state and export/import data remain readable.
+
+**Why:** The user asked for a lightweight list-only affordance, not an expanded spending-edit contract. Preserving the flag on unchanged rows avoids losing manual reconciliation work during harmless spending edits.
+
+**Validation:** `elm-format`, both `lamdera make` targets, `npm test`, and `lamdera live` HTTP 200 all pass. No unintended Evergreen regenerations.
+
+**Reviewer:** Commit c98c59d approved.
+
+### Transaction Toggle Dot Visual Repair (Newt, 2026-05-15)
+
+**Status:** Approved and implemented.
+
+**Decision:** Repair the transaction reconciliation marker visual affordance for Issue #32 by rendering the checked/unchecked indicator with an elm-ui text glyph instead of a raw embedded SVG whose `currentColor` inheritance can fail silently.
+
+**Context:** The data flow (click handler, state toggle, backend persistence) was already intact from the Transaction Checked Flag decision. The regression was at the visual layer: users could not observe when the checked state changed because the dot's color rendering was not wired to the boolean value.
+
+**Implementation details:**
+- Frontend: replace embedded SVG with explicit elm-ui text glyph or color-coded indicator in `src/Frontend.elm`
+- Frontend tests: add regression coverage proving checked vs unchecked states render observably different, and verifying that a toggled row stays visibly toggled after backend refresh in `tests/FrontendTests.elm`
+- Compose click helper with backend refresh to ensure optimistic toggle + authoritative list response preserves visible state
+
+**Why:** Observable user feedback for the reconciliation marker. Users must see that clicking the dot has an effect.
+
+**Validation:** `elm-format`, both `lamdera make` targets, `npm test`, and `lamdera live` HTTP 200 all pass. No unintended Evergreen regenerations.
+
+**Reviewer:** Commit 9c81ea4 approved by Vasquez.
+
 ### V31 Migration Boundary (Dallas, 2026-05-14)
 
 **Status:** Approved and in progress.
@@ -196,6 +232,30 @@ Keep three layers of coverage:
 - Development server: `lamdera live` → HTTP 200 ✅
 
 **Constraint:** Frontend-only refinement. Virtual row remains model-free; creation via group-name-only argument with auto-filled amount; no changes to `SpendingTransaction`, backend behavior, or data model.
+
+### Hicks: explicit transaction check marker (2026-05-15)
+
+**Status:** Approved and implemented.
+
+**Decision:** Render the transaction marker with an explicit elm-ui circle (`transactionCheckIndicator`) driven by a pure `transactionCheckVisualState` helper, while keeping the existing optimistic frontend toggle and backend refresh path intact.
+
+**Why:** This makes checked/unchecked dots visibly gray vs green on click, limits the immediate UI change to the targeted row, and keeps the persisted backend state authoritative after refresh without reshaping the migration or transaction payloads.
+
+**Implementation details:**
+- Frontend: New `transactionCheckVisualState` and `transactionCheckIndicator` helpers in `src/Frontend.elm` render the marker as an explicit elm-ui circle independent of inherited color
+- Tests: `tests/FrontendTests.elm` now covers checked-vs-unchecked marker rendering, optimistic row toggles, and backend refresh seam (preserved checked state for toggled rows, unchanged rows stay unchanged)
+- Backend: No changes; persisted `checked` flag and toggle flow already exist
+
+**Validation:**
+- `elm-format` ✅
+- `lamdera make src/Frontend.elm` ✅
+- `lamdera make src/Backend.elm` ✅
+- `npm test` ✅
+- `lamdera live` → HTTP 200 ✅
+
+**Reviewer:** Vasquez approved; reassigned from Newt to Hicks for revision. Commit: 9a67501
+
+---
 
 ## Governance
 
@@ -1558,3 +1618,74 @@ The previous edit flow marked every prior transaction `Replaced` and appended a 
 ## Commit
 
 8edf105 — Fix #49 preserve unchanged spending rows
+
+---
+
+# User Directive: Subtle transaction check marker (2026-05-15)
+
+**By:** Théo Zimmermann
+
+**What:** For the transaction checked marker, do not use the app's default bright green or a colored border; prefer a subtler single dot like the transaction-line marker in the spending dialog.
+
+**Why:** User request — captured for team memory
+
+**Status:** ✓ Captured for Hicks implementation
+
+---
+
+# Decision: Transaction check marker polish
+
+**Timestamp:** 2026-05-15T11:30:00Z
+
+**Agent:** Hicks
+
+**Issue:** #32 (visual affordance polish)
+
+## Decision
+
+Use a dedicated muted green dot for checked transaction markers while keeping the surrounding button border neutral and the marker borderless.
+
+## Why
+
+The checked state should still read as distinct, but the default accent green and matching green border felt too loud for the transaction list. A smaller borderless dot removes the seam that regressed before and better matches the lighter-weight marker treatment used around transaction lines in the spending dialog. Aligns with user directive for subtler visual treatment.
+
+## Implementation
+
+- Frontend: dedicate muted green dot in `src/Frontend.elm` `transactionCheckIndicator` helper
+- No border on surrounding button; neutral styling
+- Borderless marker design matches spending dialog transaction-line marker pattern
+
+## Status
+
+⏸ Pending frontend regression coverage. See: Vasquez review (2026-05-15T11:32:00Z)
+
+---
+
+# Review: Vasquez — Issue #32 Hicks check marker revision
+
+**Timestamp:** 2026-05-15T11:32:00Z
+
+**Reviewer:** Vasquez (Tester)
+
+**Topic:** Hicks's transaction check marker polish for Issue #32
+
+## Verdict
+
+**REJECT** — UI change is directionally correct, but regression coverage still misses the rendering seam.
+
+## Findings
+
+- **Condition 1:** ✓ Appears implemented in `src/Frontend.elm`: marker now owns its fill via `transactionCheckIndicator` instead of inherited color.
+- **Condition 2:** ✓ Covered by `toggleGroupTransactionChecked` plus the targeted-row test.
+- **Condition 3:** ✓ Covered by the composed backend refresh test that keeps clicked row checked while leaving untouched row alone.
+
+## Why Still a Reject
+
+- My acceptance note required frontend coverage proving the checked and unchecked marker render differently from the **view seam**, not just that a pure helper returns different states.
+- Hicks added a `transactionCheckVisualState` test, but that only checks enum mapping from `Bool`; it does not guard the rendered marker/button attributes that regressed in the first place.
+
+## Next Assignment
+
+Assign next revision to **Dallas**. Remaining work: add explicit frontend regression coverage around rendered marker seam, then rerun existing validation gates.
+
+**Status:** Awaiting Dallas assignment

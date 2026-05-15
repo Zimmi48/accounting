@@ -8,24 +8,35 @@
 
 ## Learnings
 
+- 2026-05-15: Issue #32 persists transaction reconciliation as `Transaction.checked` across `src/Types.elm`, `src/Backend.elm`, `src/Frontend.elm`, `src/Codecs.elm`, and `src/Evergreen/V33/*`; `RequestGroupTransactions` / `ListGroupTransactions` now carry the flag for the lightweight list dot, unchanged rows keep their checked state through `reconcileSpendingTransactions`, and new or migrated rows default to `False`.
+- 2026-05-15: The #32 click path still toggles through `ToggleTransactionChecked` / `ToggleTransactionCheckedRequest` and the backend list refresh, but the visible regression was in `src/Frontend.elm`: the raw SVG dot did not show the checked-state color change reliably, so the repair uses an elm-ui text glyph for the dot and keeps a frontend regression in `tests/FrontendTests.elm`.
 - 2026-04-29: The spending lifecycle seam in `tests/BackendTests.elm` should validate `recomputedTotalsSnapshot` exactly for active rows, but stored redundant totals after edit/delete may only guarantee that stale amounts are missing-or-zero rather than structurally equal; pair those numeric invariants with the existing list/details visibility test and keep validation on `elm-format src/ tests/ --yes`, both `lamdera make` targets, `npm test`, and `lamdera live --port=8123` returning HTTP 200.
-- Joined to own full-stack recovery and compile-first revisions after prior authors were locked out on the spending/transaction split artifact.
-- User directive: do not generate the Evergreen migration before Théo reviews the model changes.
-- Compile-first split shape: `BackendModel` now keeps `spendings : Dict SpendingId Spending` plus dated `Day.transactions`, with `Spending.transactionIds` and `Transaction.spendingId` as the cross-reference seam.
-- Phase 1 edit/delete contract lives in `src/Types.elm`, `src/Backend.elm`, `src/Frontend.elm`, and `src/Codecs.elm`; the frontend still submits one default transaction bucket using the dialog date and an empty secondary description.
-- `RequestSpendingDetails` is the safe bridge for the old dialog: backend returns one editable bucket for singleton spendings and rejects multi-transaction spendings until the later UI pass.
-- `2026-04-20T16:43:52Z`: Model-only spending/transaction split approved for user review
-- `2026-04-21`: The rejected Phase 2 seam in `74261e3` lived in mirrored total checks, not the shared model shape: `src/Backend.elm` still required `credits == debits == total`, and `src/Frontend.elm` still blocked submit unless each side summed to `total`.
-- `2026-04-21`: The recovery fix keeps `Spending.total` as the only amount-level invariant, while line items remain ID-free and still validate per-line date, group, and positive amount; validation stayed on `elm-format src/ --yes`, both `lamdera make` targets, and `lamdera live` returning HTTP 200 with no `src/Evergreen/` diff.
-- `2026-04-26`: The spending dialog's line date pickers only show the today marker when each `TransactionLine.datePickerModel` is seeded with the real dialog-local `today`; `DatePicker.setToday` repairs existing models, but any line model re-created in `defaultTransactionLine` or `transactionLineFromSpendingTransaction` must also initialize from `today` (see `src/Frontend.elm`).
-- `2026-04-26T15:55:20Z`: Diagnosed line picker today marker bug. The fix: seed all newly created date picker models (placeholder lines and loaded spending details) using `DatePicker.initWithToday today` and `DatePicker.setVisibleMonth` for month visibility. This ensures today's date marker displays correctly in all contexts.
-- `2026-04-27`: Spending dialog default line dates must stay implicit in `TransactionLine.date : Maybe Date`, but submission must serialize them with the dialog's effective spending date and edit hydration must round-trip any transaction whose date matches the dialog spending date back to `Nothing` (`src/Frontend.elm`).
-- `2026-04-27`: Import decode failures should reuse `SpendingError` across the Lamdera seam and surface through `FrontendModel.errorMessage`, so the import page and spending dialog both show visible user-facing errors instead of silently failing (`src/Backend.elm`, `src/Frontend.elm`, `src/Types.elm`).
-- `2026-04-27`: User preference for the spending dialog is no automatic blank-row pruning: keep the virtual add row view-only, but once a debitor/creditor row becomes real in `src/Frontend.elm`, leave it in `AddSpendingDialogModel.credits` / `.debits` until the user explicitly removes it.
-- `2026-04-27`: The auto-pruning seam lived entirely in `src/Frontend.elm`; removing it only required deleting `pruneBlank*` helpers and their update/hydration call sites, while leaving `AddDebitor` / `AddCreditor`, `shouldRenderVirtualTransactionLine`, and submit-time transaction derivation intact.
-- `2026-04-27`: Exact transaction addressing now stays derived from append-only `Day.transactions` order; `src/Backend.elm` appends same-day writes and derives `TransactionId` slots on read, while `Transaction.spendingId` is the canonical persisted membership link across `src/Types.elm`, `src/Backend.elm`, and `src/Codecs.elm`.
-- `2026-04-27`: When Théo deletes unapproved Evergreen artifacts, treat that as an active lockout on migration generation: keep compile/test recovery inside `src/Types.elm`, `src/Backend.elm`, `src/Codecs.elm`, `src/Frontend.elm`, and do not recreate `src/Evergreen/V26/*` until explicitly asked.
-- `2026-04-27`: The validation gate for this append-only seam is `elm-format src/ tests/ --yes`, `./check-codecs.sh`, both `lamdera make` targets, `npm test`, and a successful `lamdera live` HTTP 200 check.
+- 2026-05-15: Adding a persisted boolean directly to `Transaction` is a storage-shape change, not just UI wiring: the live model stores `Day.transactions : Array Transaction` in `BackendModel.groups` (`src/Types.elm`, mirrored in `src/Evergreen/V31/Types.elm`) and export/import serialization hard-codes that record in `src/Codecs.elm`, so a new `checked` field would require a Lamdera Evergreen migration plus codec/schema versioning.
+
+## Core Context
+
+### Newt's Role
+- Full-stack Elm/Lamdera developer with deep context on spending/transaction split architecture
+- Primary owner of cross-layer model/backend/frontend integration work
+- Expertise: append-only transaction ID seaming, codec field-order discipline, Evergreen migration patterns
+
+### Recent Completions (2026-04-27 to 2026-05-15)
+1. **Line Picker Today Marker (2026-04-26):** Fixed date picker initialization to properly display today marker in spending dialog
+2. **Remove Auto Pruning (2026-04-27):** Eliminated blank-row auto-pruning, requiring explicit user deletion
+3. **Fix Reported Issues (2026-04-27):** Routed import errors to UI, fixed submission validation, preserved spending-date edit hydration
+4. **Lifecycle Invariants (2026-04-29):** Revised lifecycle tests to validate total-computation without pinning cleanup state
+5. **Transaction Reconciliation Toggle (2026-05-15):** Implemented lightweight list-only toggle flag with transaction-local `checked : Bool`, preserved reconciliation state on unchanged spending edits
+
+### Validation Pattern
+All work validated against: `elm-format src/ tests/ --yes`, `lamdera make` (Frontend + Backend), `npm test`, `lamdera live --port=8123` HTTP 200 check. Evergreen migrations only when required; pre-existing data backwards-compatible.
+
+### Key Architecture Notes
+- Backend stores `Day.transactions : Array Transaction` with append-only ID scheme
+- Frontend submission default-dates implicit transactions, then submits to backend
+- Spending edits preserve transaction metadata (`checked` flag, etc.) on logically unchanged rows
+- Codec defaults new fields to maintain backwards compatibility with exported/imported data
+
+## Session Archive (Consolidated 2026-04-20 to 2026-04-29)
 
 ## 2026-04-27T10:37:26Z: Remove Auto Pruning Session
 
@@ -116,3 +127,32 @@
 - **Validation:** `npm test` passed; no Evergreen migrations
 - **Decision merged:** Lifecycle Total Invariants (2026-04-29)
 - **Status:** Completed; ready for merge review
+
+## 2026-05-15T10:41:38Z: Transaction Reconciliation Toggle Session (Issue #32)
+
+- **Spawned:** Newt (Full-Stack Dev) to implement lightweight reconciliation marker
+- **Request:** Persist transaction-local `checked : Bool` for reconciliation toggle, list-only UI affordance, spending-edit contract unchanged
+- **Fixes Applied:**
+  - Added `checked : Bool` field to `Transaction` in `src/Types.elm`
+  - Backend: New transactions default `checked = False`, toggle path via `ToggleTransactionChecked`
+  - Frontend: List UI renders dot indicator, checkbox toggle in `ListGroupTransactions` view
+  - Codec: `src/Codecs.elm` defaults new field to `False` for backwards compatibility
+  - Evergreen V33: Migration preserves existing transactions at `checked = False`
+  - Spending edit: Unchanged rows retain their `checked` state through `reconcileSpendingTransactions`; new rows default unchecked
+- **Test Coverage:** Updated `tests/BackendTests.elm`, `tests/FrontendTests.elm`, `tests/CodecsTests.elm`, `tests/MigrationTests.elm`
+- **Decision:** Merged to decisions.md (2026-05-15 "Transaction Checked Flag")
+- **Validation:** All gates passed: `elm-format`, `lamdera make` (Frontend + Backend), `npm test`, HTTP 200, no unintended Evergreen regenerations
+- **Status:** Completed; commit c98c59d approved
+
+## 2026-05-15T11:17:55Z: Issue #32 Repair Follow-up — Toggle Dot Visual Regression (Completed)
+
+- **Spawned:** Newt (Full-Stack Dev) to repair visual affordance for transaction toggle
+- **Reviewer:** Vasquez (Tester)
+- **Context:** Data flow intact from prior decision (#32 Toggle Flag). Regression: SVG dot not visually reflecting state change due to `currentColor` inheritance failure.
+- **Repair Applied:**
+  - Replaced raw embedded SVG with elm-ui text glyph in `src/Frontend.elm`
+  - Rendered checked/unchecked states with distinct visual indicators
+  - Added regression test coverage: checked vs unchecked render observably different, toggled row stays visibly toggled after backend refresh
+- **Validation:** All gates passed: `elm-format`, `lamdera make` (Frontend + Backend), `npm test`, HTTP 200
+- **Decision:** Merged to decisions.md (2026-05-15 "Transaction Toggle Dot Visual Repair")
+- **Status:** Approved; commit 9c81ea4 approved by Vasquez

@@ -30,6 +30,7 @@ type alias PendingTransaction =
     , groupMembersKey : String
     , groupMembers : Set String
     , status : TransactionStatus
+    , checked : Bool
     }
 
 
@@ -275,24 +276,41 @@ updateFromFrontend sessionId clientId msg model =
                     )
 
         ( True, RequestGroupTransactions group ) ->
-            let
-                transactions =
-                    findGroupByName group model
-                        |> Maybe.map
-                            (\( groupId, storedGroup ) ->
-                                allTransactionsWithIdsForGroup groupId storedGroup
-                                    |> List.filterMap (groupTransactionForList model)
-                            )
-                        |> Maybe.withDefault []
-            in
             ( model
             , Lamdera.sendToFrontend clientId
                 (ListGroupTransactions
                     { group = group
-                    , transactions = transactions
+                    , transactions = groupTransactionsForName group model
                     }
                 )
             )
+
+        ( True, ToggleTransactionCheckedRequest transactionId ) ->
+            case
+                ( findTransaction transactionId model
+                , Dict.get transactionId.groupId model.groups
+                )
+            of
+                ( Just transaction, Just group ) ->
+                    if transactionToggleAllowed model transaction then
+                        let
+                            updatedModel =
+                                toggleTransactionCheckedInModel transactionId model
+                        in
+                        ( updatedModel
+                        , Lamdera.sendToFrontend clientId
+                            (ListGroupTransactions
+                                { group = group.name
+                                , transactions = groupTransactionsForName group.name updatedModel
+                                }
+                            )
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
         ( True, RequestAllTransactions ) ->
             ( model
@@ -820,6 +838,7 @@ pendingTransactionForSpending spendingId groupId metadata transaction =
     , groupMembersKey = metadata.groupMembersKey
     , groupMembers = metadata.groupMembers
     , status = Active
+    , checked = False
     }
 
 
@@ -833,6 +852,7 @@ storedTransaction pending =
     , groupMembersKey = pending.groupMembersKey
     , groupMembers = pending.groupMembers
     , status = pending.status
+    , checked = pending.checked
     }
 
 
@@ -1060,6 +1080,18 @@ setTransactionStatuses spendingId status model =
                     model
             )
         |> Maybe.withDefault model
+
+
+toggleTransactionCheckedInModel : TransactionId -> Model -> Model
+toggleTransactionCheckedInModel transactionId =
+    updateTransaction transactionId
+        (\transaction ->
+            if transaction.status == Active then
+                { transaction | checked = not transaction.checked }
+
+            else
+                transaction
+        )
 
 
 updateTransaction : TransactionId -> (Transaction -> Transaction) -> Model -> Model
@@ -1514,6 +1546,41 @@ transactionDescription spending transaction =
         spending.description ++ " — " ++ transaction.secondaryDescription
 
 
+transactionToggleAllowed : Model -> Transaction -> Bool
+transactionToggleAllowed model transaction =
+    transaction.status
+        == Active
+        && (Array.get transaction.spendingId model.spendings
+                |> Maybe.map (\spending -> spending.status == Active)
+                |> Maybe.withDefault False
+           )
+
+
+groupTransactionsForName :
+    String
+    -> Model
+    ->
+        List
+            { transactionId : TransactionId
+            , spendingId : SpendingId
+            , description : String
+            , year : Int
+            , month : Int
+            , day : Int
+            , total : Amount Debit
+            , share : Amount Debit
+            , checked : Bool
+            }
+groupTransactionsForName group model =
+    findGroupByName group model
+        |> Maybe.map
+            (\( groupId, storedGroup ) ->
+                allTransactionsWithIdsForGroup groupId storedGroup
+                    |> List.filterMap (groupTransactionForList model)
+            )
+        |> Maybe.withDefault []
+
+
 groupTransactionForList :
     Model
     -> ( TransactionId, Transaction )
@@ -1527,6 +1594,7 @@ groupTransactionForList :
             , day : Int
             , total : Amount Debit
             , share : Amount Debit
+            , checked : Bool
             }
 groupTransactionForList model ( transactionId, transaction ) =
     if transaction.status /= Active then
@@ -1555,6 +1623,7 @@ groupTransactionForList model ( transactionId, transaction ) =
 
                                     ( DebitTransaction, Amount amount ) ->
                                         Amount amount
+                            , checked = transaction.checked
                             }
                 )
 

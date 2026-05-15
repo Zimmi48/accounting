@@ -35,6 +35,7 @@ type alias FrontendModel =
             , day : Int
             , total : Amount Debit
             , share : Amount Debit
+            , checked : Bool
             }
     , key : Key
     , windowWidth : Int
@@ -75,6 +76,7 @@ type FrontendMsg
     | ShowAddSpendingDialog (Maybe SpendingReference) -- Nothing for create, Just for edit
     | ShowConfirmDeleteDialog SpendingId
     | ConfirmDeleteSpending SpendingId
+    | ToggleTransactionChecked TransactionId
     | SetToday Date
     | Submit
     | Cancel
@@ -127,6 +129,7 @@ type ToBackend
     | RequestSpendingDetails SpendingId
     | RequestUserGroups String
     | RequestGroupTransactions String
+    | ToggleTransactionCheckedRequest TransactionId
     | RequestAllTransactions
     | CheckPassword String
     | CheckAuthentication
@@ -200,6 +203,7 @@ type ToFrontend
                 , day : Int
                 , total : Amount Debit
                 , share : Amount Debit
+                , checked : Bool
                 }
         }
     | AuthenticationStatus Bool
@@ -317,6 +321,7 @@ type alias Transaction =
     , groupMembersKey : String
     , groupMembers : Set String
     , status : TransactionStatus
+    , checked : Bool
     }
 
 

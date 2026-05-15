@@ -235,6 +235,14 @@ update msg model =
             , Lamdera.sendToBackend (DeleteSpending spendingId)
             )
 
+        ToggleTransactionChecked transactionId ->
+            ( { model
+                | groupTransactions =
+                    toggleGroupTransactionChecked transactionId model.groupTransactions
+              }
+            , Lamdera.sendToBackend (ToggleTransactionCheckedRequest transactionId)
+            )
+
         SetToday today ->
             case model.showDialog of
                 Just (AddSpendingDialog dialogModel) ->
@@ -1562,6 +1570,31 @@ groupTransactionsFromBackend currentGroup responseGroup responseTransactions exi
         existingTransactions
 
 
+toggleGroupTransactionChecked :
+    TransactionId
+    ->
+        List
+            { a
+                | transactionId : TransactionId
+                , checked : Bool
+            }
+    ->
+        List
+            { a
+                | transactionId : TransactionId
+                , checked : Bool
+            }
+toggleGroupTransactionChecked transactionId =
+    List.map
+        (\transaction ->
+            if transaction.transactionId == transactionId then
+                { transaction | checked = not transaction.checked }
+
+            else
+                transaction
+        )
+
+
 markInvalidPrefix prefix list =
     list
         |> List.map
@@ -2088,6 +2121,7 @@ type alias Palette =
     , inputBackground : Color
     , border : Color
     , accent : Color
+    , subtleAccent : Color
     , accentText : Color
     , error : Color
     , errorText : Color
@@ -2106,6 +2140,7 @@ lightPalette =
     , inputBackground = rgb 1 1 1
     , border = rgb 0.75 0.75 0.75
     , accent = rgb255 152 251 152
+    , subtleAccent = rgb255 104 170 104
     , accentText = rgb 0 0 0
     , error = rgb 1 0.5 0.5
     , errorText = rgb 0 0 0
@@ -2124,6 +2159,7 @@ darkPalette =
     , inputBackground = rgb 0.2 0.2 0.2
     , border = rgb 0.4 0.4 0.4
     , accent = rgb255 80 160 80
+    , subtleAccent = rgb255 110 190 110
     , accentText = rgb 0.95 0.95 0.95
     , error = rgb 0.75 0.3 0.3
     , errorText = rgb 0.95 0.95 0.95
@@ -2601,14 +2637,37 @@ canSubmitSpending { description, total, date, credits, debits, submitted } =
            )
 
 
+viewTransaction :
+    Palette
+    ->
+        { a
+            | transactionId : TransactionId
+            , spendingId : SpendingId
+            , description : String
+            , year : Int
+            , month : Int
+            , day : Int
+            , total : Amount Debit
+            , share : Amount Debit
+            , checked : Bool
+        }
+    -> Element FrontendMsg
 viewTransaction palette transaction =
+    let
+        transactionCheckState =
+            transactionCheckVisualState transaction.checked
+    in
     row [ spacing 20, padding 20, Background.color palette.surface, Font.color palette.text ]
         [ String.fromInt transaction.year ++ "-" ++ String.fromInt transaction.month ++ "-" ++ String.fromInt transaction.day |> text
         , transaction.description |> text
         , transaction.share |> (\(Amount amount) -> amount) |> viewAmount |> text
         , "(Total: " ++ (transaction.total |> (\(Amount amount) -> amount) |> viewAmount) ++ ")" |> text
         , row [ spacing 10 ]
-            [ Input.button [ Background.color palette.editButton, padding 5, Border.rounded 3 ]
+            [ Input.button (transactionCheckButtonStyle palette transactionCheckState)
+                { onPress = Just (ToggleTransactionChecked transaction.transactionId)
+                , label = transactionCheckIndicator palette transactionCheckState
+                }
+            , Input.button [ Background.color palette.editButton, padding 5, Border.rounded 3 ]
                 { onPress =
                     Just
                         (ShowAddSpendingDialog
@@ -2626,6 +2685,86 @@ viewTransaction palette transaction =
                 }
             ]
         ]
+
+
+type TransactionCheckVisualState
+    = UncheckedTransactionCheck
+    | CheckedTransactionCheck
+
+
+transactionCheckVisualState : Bool -> TransactionCheckVisualState
+transactionCheckVisualState checked =
+    if checked then
+        CheckedTransactionCheck
+
+    else
+        UncheckedTransactionCheck
+
+
+transactionCheckColors :
+    Palette
+    -> TransactionCheckVisualState
+    ->
+        { marker : Color
+        , markerBorderWidth : Int
+        , markerSize : Int
+        , buttonBorder : Color
+        }
+transactionCheckColors palette transactionCheckState =
+    case transactionCheckState of
+        CheckedTransactionCheck ->
+            { marker = palette.subtleAccent
+            , markerBorderWidth = 0
+            , markerSize = 10
+            , buttonBorder = palette.border
+            }
+
+        UncheckedTransactionCheck ->
+            { marker = palette.border
+            , markerBorderWidth = 0
+            , markerSize = 10
+            , buttonBorder = palette.border
+            }
+
+
+transactionCheckButtonStyle : Palette -> TransactionCheckVisualState -> List (Attribute FrontendMsg)
+transactionCheckButtonStyle palette transactionCheckState =
+    let
+        colors =
+            transactionCheckColors palette transactionCheckState
+    in
+    [ Background.color palette.surface
+    , Border.color colors.buttonBorder
+    , Border.width 1
+    , padding 5
+    , Border.rounded 999
+    , htmlAttribute
+        (Attr.attribute "aria-label"
+            (case transactionCheckState of
+                CheckedTransactionCheck ->
+                    "Mark transaction unchecked"
+
+                UncheckedTransactionCheck ->
+                    "Mark transaction checked"
+            )
+        )
+    ]
+
+
+transactionCheckIndicator : Palette -> TransactionCheckVisualState -> Element FrontendMsg
+transactionCheckIndicator palette transactionCheckState =
+    let
+        colors =
+            transactionCheckColors palette transactionCheckState
+    in
+    el
+        [ width (px colors.markerSize)
+        , height (px colors.markerSize)
+        , Border.rounded 999
+        , Background.color colors.marker
+        , Border.width colors.markerBorderWidth
+        ]
+        none
 
 
 viewGroups : String -> List ( String, Group, Amount a ) -> Element FrontendMsg

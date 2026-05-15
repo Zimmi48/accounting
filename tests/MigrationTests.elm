@@ -10,8 +10,11 @@ import Date
 import DatePicker
 import Dict
 import Evergreen.Migrate.V26 as MigrateV26
+import Evergreen.Migrate.V33 as MigrateV33
 import Evergreen.V24.Types as V24
 import Evergreen.V26.Types as V26
+import Evergreen.V31.Types as V31
+import Evergreen.V33.Types as V33
 import Expect
 import Set
 import Test exposing (..)
@@ -315,6 +318,69 @@ suite =
                         _ ->
                             Expect.fail "Expected create dialog to survive migration"
             ]
+        , describe "V31 to V33 reconciliation migration"
+            [ test "backend migration defaults persisted transactions to unchecked" <|
+                \_ ->
+                    let
+                        migrated =
+                            MigrateV33.migrate_Types_BackendModel legacyBackendModelV31
+                    in
+                    Expect.equal
+                        ( Just
+                            [ { group = "Alice", checked = False, status = V33.Active } ]
+                        , [ { description = "Dinner"
+                            , transactionIds = [ legacyTransactionIdV31 ]
+                            , status = V33.Active
+                            }
+                          ]
+                        )
+                        ( migrated.groups
+                            |> Dict.get 1
+                            |> Maybe.andThen (.years >> Dict.get 2025)
+                            |> Maybe.andThen (.months >> Dict.get 4)
+                            |> Maybe.andThen (.days >> Dict.get 18)
+                            |> Maybe.map
+                                (.transactions
+                                    >> Array.toList
+                                    >> List.map
+                                        (\transaction ->
+                                            { group = transaction.group
+                                            , checked = transaction.checked
+                                            , status = transaction.status
+                                            }
+                                        )
+                                )
+                        , migrated.spendings
+                            |> Array.toList
+                            |> List.map
+                                (\spending ->
+                                    { description = spending.description
+                                    , transactionIds = spending.transactionIds
+                                    , status = spending.status
+                                    }
+                                )
+                        )
+            , test "frontend list payload migration defaults listed transactions to unchecked" <|
+                \_ ->
+                    Expect.equal
+                        (V33.ListGroupTransactions
+                            { group = "Trip"
+                            , transactions =
+                                [ { transactionId = legacyTransactionIdV31
+                                  , spendingId = 0
+                                  , description = "Dinner"
+                                  , year = 2025
+                                  , month = 4
+                                  , day = 18
+                                  , total = V33.Amount 1200
+                                  , share = V33.Amount -1200
+                                  , checked = False
+                                  }
+                                ]
+                            }
+                        )
+                        (MigrateV33.migrate_Types_ToFrontend legacyListGroupTransactionsV31)
+            ]
         ]
 
 
@@ -443,6 +509,11 @@ legacyCreateDialog =
 legacyTransactionId : V24.TransactionId
 legacyTransactionId =
     { year = 2025, month = 4, day = 18, index = 0 }
+
+
+legacyTransactionIdV31 : V31.TransactionId
+legacyTransactionIdV31 =
+    { groupId = 1, year = 2025, month = 4, day = 18, index = 0 }
 
 
 sampleDate : Date.Date
@@ -639,6 +710,87 @@ frontendMessageSafetySummary =
                 }
             )
     }
+
+
+legacyBackendModelV31 : V31.BackendModel
+legacyBackendModelV31 =
+    { spendings =
+        Array.fromList
+            [ { description = "Dinner"
+              , total = V31.Amount 1200
+              , transactionIds = [ legacyTransactionIdV31 ]
+              , status = V31.Active
+              }
+            ]
+    , groups =
+        Dict.fromList
+            [ ( 1
+              , { name = "Alice"
+                , members = Dict.fromList [ ( 1, V31.Share 1 ) ]
+                , years =
+                    Dict.fromList
+                        [ ( 2025
+                          , { months =
+                                Dict.fromList
+                                    [ ( 4
+                                      , { days =
+                                            Dict.fromList
+                                                [ ( 18
+                                                  , { transactions =
+                                                        Array.fromList
+                                                            [ { spendingId = 0
+                                                              , secondaryDescription = ""
+                                                              , group = "Alice"
+                                                              , amount = V31.Amount 1200
+                                                              , side = V31.CreditTransaction
+                                                              , groupMembersKey = "1,2"
+                                                              , groupMembers = Set.fromList [ "Alice", "Bob" ]
+                                                              , status = V31.Active
+                                                              }
+                                                            ]
+                                                    , totalCredit = V31.Amount 1200
+                                                    }
+                                                  )
+                                                ]
+                                        , totalCredit = V31.Amount 1200
+                                        }
+                                      )
+                                    ]
+                            , totalCredit = V31.Amount 1200
+                            }
+                          )
+                        ]
+                , totalCredit = V31.Amount 1200
+                }
+              )
+            ]
+    , persons =
+        Dict.fromList
+            [ ( 1, { name = "Alice", belongsTo = Set.fromList [ "1,2" ] } )
+            , ( 2, { name = "Bob", belongsTo = Set.fromList [ "1,2" ] } )
+            ]
+    , nextId = 2
+    , totalGroupCredits = Dict.fromList [ ( "1,2", Dict.fromList [ ( "Alice", V31.Amount 1200 ) ] ) ]
+    , loggedInSessions = Set.empty
+    }
+
+
+legacyListGroupTransactionsV31 : V31.ToFrontend
+legacyListGroupTransactionsV31 =
+    V31.ListGroupTransactions
+        { group = "Trip"
+        , transactions =
+            [ { transactionId = legacyTransactionIdV31
+              , spendingId = 0
+              , description = "Dinner"
+              , year = 2025
+              , month = 4
+              , day = 18
+              , total = V31.Amount 1200
+              , share = V31.Amount -1200
+              }
+            ]
+        }
 
 
 createDialogSummary : V26.AddSpendingDialogModel -> CreateDialogSummary

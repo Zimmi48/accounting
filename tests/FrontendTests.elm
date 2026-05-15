@@ -111,7 +111,38 @@ suite =
              view reads `model.groupTransactions`.
           -}
           describe "group transaction ordering"
-            [ test "ListGroupTransactions stores an ascending backend response as newest-first" <|
+            [ test "transactionCheckVisualState switches between explicit unchecked and checked markers" <|
+                \_ ->
+                    Expect.equal
+                        ( Frontend.UncheckedTransactionCheck, Frontend.CheckedTransactionCheck )
+                        ( Frontend.transactionCheckVisualState False
+                        , Frontend.transactionCheckVisualState True
+                        )
+            , test "checked transaction markers use a seamless muted dot without a highlighted border" <|
+                \_ ->
+                    let
+                        checkedStyle =
+                            Frontend.transactionCheckColors Frontend.lightPalette Frontend.CheckedTransactionCheck
+
+                        uncheckedStyle =
+                            Frontend.transactionCheckColors Frontend.lightPalette Frontend.UncheckedTransactionCheck
+                    in
+                    Expect.equal
+                        { marker = Frontend.lightPalette.subtleAccent
+                        , buttonBorder = Frontend.lightPalette.border
+                        , markerBorderWidth = 0
+                        , markerSize = 10
+                        , avoidsBrightAccent = True
+                        , remainsDistinct = True
+                        }
+                        { marker = checkedStyle.marker
+                        , buttonBorder = checkedStyle.buttonBorder
+                        , markerBorderWidth = checkedStyle.markerBorderWidth
+                        , markerSize = checkedStyle.markerSize
+                        , avoidsBrightAccent = checkedStyle.marker /= Frontend.lightPalette.accent
+                        , remainsDistinct = checkedStyle.marker /= uncheckedStyle.marker
+                        }
+            , test "ListGroupTransactions stores an ascending backend response as newest-first" <|
                 \_ ->
                     let
                         backendTransactions =
@@ -148,6 +179,47 @@ suite =
                             "Other group"
                             [ listedTransaction 0 2025 4 16 ]
                             existingTransactions
+                        )
+            , test "toggleGroupTransactionChecked only flips the targeted transaction" <|
+                \_ ->
+                    let
+                        firstId =
+                            { groupId = 0, year = 2025, month = 4, day = 18, index = 0 }
+
+                        secondId =
+                            { groupId = 0, year = 2025, month = 4, day = 18, index = 1 }
+                    in
+                    Expect.equal
+                        [ { transactionId = firstId, checked = True }
+                        , { transactionId = secondId, checked = True }
+                        ]
+                        (Frontend.toggleGroupTransactionChecked
+                            firstId
+                            [ { transactionId = firstId, checked = False }
+                            , { transactionId = secondId, checked = True }
+                            ]
+                        )
+            , test "backend refresh keeps the clicked row checked and untouched rows unchanged" <|
+                \_ ->
+                    let
+                        olderTransaction =
+                            listedTransaction 0 2025 4 17
+
+                        clickedTransaction =
+                            listedTransaction 0 2025 4 18
+
+                        clickedTransactions =
+                            Frontend.toggleGroupTransactionChecked
+                                clickedTransaction.transactionId
+                                [ clickedTransaction, olderTransaction ]
+                    in
+                    Expect.equal
+                        [ { clickedTransaction | checked = True }, olderTransaction ]
+                        (Frontend.groupTransactionsFromBackend
+                            "Trip"
+                            "Trip"
+                            [ olderTransaction, { clickedTransaction | checked = True } ]
+                            clickedTransactions
                         )
             ]
         , {- Debt summaries are derived entirely on the client. This example keeps
@@ -295,6 +367,7 @@ listedTransaction :
         , day : Int
         , total : Amount Debit
         , share : Amount Debit
+        , checked : Bool
         }
 listedTransaction index year month day =
     { transactionId =
@@ -311,6 +384,7 @@ listedTransaction index year month day =
     , day = day
     , total = Amount 1000
     , share = Amount 500
+    , checked = False
     }
 
 
