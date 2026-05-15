@@ -390,6 +390,42 @@ Keep three layers of coverage:
 
 **Impact:** Commit d5f7f8a is production-ready for merge.
 
+### V34 Stale List Reset (Bishop, 2026-05-15)
+
+**Status:** Implemented and validated; generated migration committed as e52015e, manual migration and tests committed as 531272e.
+
+**Decision:** Evergreen V34 migration resets cached frontend transaction-list state to prevent stale flat-list data masquerading as paginated state.
+
+**Context:** V33 stored a flat `groupTransactions` cache and flat `ListGroupTransactions` payloads, while V34 uses paginated `GroupTransactionListItem`s plus reload-depth metadata. The old flat rows do not encode summary/header placement or pagination depth.
+
+**Migration logic:**
+- Reset cached `groupTransactions` (all cached transaction lists)
+- Drop stale flat `ListGroupTransactions` responses
+- Map legacy `RequestGroupTransactions String` to new `{ group, before = Nothing, pages = 1 }` paginated request structure
+- Preserve only create-mode `ShowAddSpendingDialog Nothing` (does not depend on listed row identity)
+- Neutralize edit-opening messages that depend on listed-row identity
+
+**Why:** Clearing stale flat rows avoids rendering old history as if it were already paginated. The migrated app safely refetches the newest page without losing other state.
+
+**Files:**
+- Backend (`src/Backend.elm`): Emits month summaries before their rows; inserts year summary before first loaded month of completed year page
+- Frontend (`src/Frontend.elm`): Page merge normalization hoists year summary arriving on later page above already-loaded months
+- Migration (`src/Evergreen/Migrate/V34.elm`): Clears stale list caches and request state
+- Tests (`tests/MigrationTests.elm`): Covers stale state clearing and request migration
+
+**Validation:**
+- `elm-format --validate` ✓
+- `lamdera make src/Frontend.elm` ✓
+- `lamdera make src/Backend.elm` ✓
+- `npm test` ✓
+- `lamdera live` HTTP 200 ✓
+
+**Commits:**
+- e52015e: Generated Evergreen V34 types and migration files (landed first)
+- 531272e: Manual migration logic, tests, and supporting changes (landed second)
+
+**Impact:** V34 migration clears legacy state; paginated list is ready for production.
+
 ---
 
 ## Governance

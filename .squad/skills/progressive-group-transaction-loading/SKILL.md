@@ -16,13 +16,13 @@ Use this when the UI should load a group's transactions incrementally, but the s
 - Return heterogeneous list items from the backend (`transaction row`, `month summary`, `year summary`) instead of asking the frontend to reconstruct period boundaries from flat rows.
 - Emit month summaries as headers before each month's rows. Preserve the existing single-year partial-page behavior, but if one response spans multiple visible years, include a year summary for each visible year block so an older year does not arrive headerless on a later page.
 - When a later page introduces an older visible year, normalize the merged frontend list so that the new year summary moves above the already-loaded newer months from that same year.
-- In frontend migrations, preserve legacy listed rows by wrapping them in the new row constructor, but reset new pagination-only state to safe defaults.
+- In frontend migrations from flat rows to paginated summary-aware lists, prefer clearing cached `groupTransactions` and pagination metadata, no-op stale flat `ListGroupTransactions` payloads, and only keep create-mode dialog openings that do not depend on listed-row identity.
 
 ## Examples
 - `src/Types.elm` adds `GroupTransactionsCursor`, `GroupTransactionListItem`, and the paged `RequestGroupTransactions` / `ListGroupTransactions` payloads.
 - `src/Backend.elm` uses `groupTransactionMonthSlices`, `groupTransactionPageItems`, and `takeTransactionMonthSlices` to build 100-row month pages while preserving header-first summary placement.
 - `src/Frontend.elm` stores `groupTransactionsLoadedPages`, reloads with that count after `OperationSuccessful`, and keeps scroll-driven pagination on `pages = 1`.
-- `src/Evergreen/Migrate/V34.elm` maps legacy flat transaction rows to `GroupTransactionRow` and resets `groupTransactionsNextCursor` / `groupTransactionsLoading`.
+- `src/Evergreen/Migrate/V34.elm` resets cached flat transaction rows plus pagination metadata, maps legacy `RequestGroupTransactions "Trip"` to `{ group = "Trip", before = Nothing, pages = 1 }`, and drops stale flat `ListGroupTransactions` responses.
 
 ## Anti-Patterns
 - Do not paginate by array index when the storage contract is month-bucketed.

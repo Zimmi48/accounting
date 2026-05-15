@@ -11,10 +11,12 @@ import DatePicker
 import Dict
 import Evergreen.Migrate.V26 as MigrateV26
 import Evergreen.Migrate.V33 as MigrateV33
+import Evergreen.Migrate.V34 as MigrateV34
 import Evergreen.V24.Types as V24
 import Evergreen.V26.Types as V26
 import Evergreen.V31.Types as V31
 import Evergreen.V33.Types as V33
+import Evergreen.V34.Types as V34
 import Expect
 import Set
 import Test exposing (..)
@@ -380,6 +382,58 @@ suite =
                             }
                         )
                         (MigrateV33.migrate_Types_ToFrontend legacyListGroupTransactionsV31)
+            ]
+        , describe "V33 to V34 progressive listing migration"
+            [ test "frontend list-state migration clears stale flat rows and resets pagination metadata" <|
+                \_ ->
+                    let
+                        migrated =
+                            MigrateV34.migrateFrontendGroupTransactionsState
+                                [ { transactionId = legacyTransactionIdV31
+                                  , spendingId = 0
+                                  , description = "Dinner"
+                                  , year = 2025
+                                  , month = 4
+                                  , day = 18
+                                  , total = V33.Amount 1200
+                                  , share = V33.Amount -1200
+                                  , checked = False
+                                  }
+                                ]
+                    in
+                    Expect.equal
+                        { groupTransactions = []
+                        , loadedPages = 0
+                        , nextCursor = Nothing
+                        , loading = False
+                        }
+                        { groupTransactions = migrated.groupTransactions
+                        , loadedPages = migrated.groupTransactionsLoadedPages
+                        , nextCursor = migrated.groupTransactionsNextCursor
+                        , loading = migrated.groupTransactionsLoading
+                        }
+            , test "frontend message migration keeps create dialogs but drops stale edit openings" <|
+                \_ ->
+                    Expect.equal
+                        ( V34.ShowAddSpendingDialog Nothing, V34.NoOpFrontendMsg )
+                        ( MigrateV34.migrate_Types_FrontendMsg (V33.ShowAddSpendingDialog Nothing)
+                        , MigrateV34.migrate_Types_FrontendMsg (V33.ShowAddSpendingDialog (Just legacySpendingReferenceV33))
+                        )
+            , test "request payload migration starts progressive loading from the newest month with one page" <|
+                \_ ->
+                    Expect.equal
+                        (V34.RequestGroupTransactions
+                            { group = "Trip"
+                            , before = Nothing
+                            , pages = 1
+                            }
+                        )
+                        (MigrateV34.migrate_Types_ToBackend (V33.RequestGroupTransactions "Trip"))
+            , test "stale flat list payloads are ignored after the pagination migration" <|
+                \_ ->
+                    Expect.equal
+                        V34.NoOpToFrontend
+                        (MigrateV34.migrate_Types_ToFrontend legacyListGroupTransactionsV33)
             ]
         ]
 
@@ -788,6 +842,32 @@ legacyListGroupTransactionsV31 =
               , day = 18
               , total = V31.Amount 1200
               , share = V31.Amount -1200
+              }
+            ]
+        }
+
+
+legacySpendingReferenceV33 : V33.SpendingReference
+legacySpendingReferenceV33 =
+    { spendingId = 0
+    , transactionId = legacyTransactionIdV31
+    }
+
+
+legacyListGroupTransactionsV33 : V33.ToFrontend
+legacyListGroupTransactionsV33 =
+    V33.ListGroupTransactions
+        { group = "Trip"
+        , transactions =
+            [ { transactionId = legacyTransactionIdV31
+              , spendingId = 0
+              , description = "Dinner"
+              , year = 2025
+              , month = 4
+              , day = 18
+              , total = V33.Amount 1200
+              , share = V33.Amount -1200
+              , checked = False
               }
             ]
         }

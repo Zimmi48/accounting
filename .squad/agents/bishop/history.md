@@ -19,6 +19,7 @@
 
 - 2026-05-15: `src/Backend.elm:editSpendingInModel` now reconciles normalized edited rows against active stored rows by logical row identity `(date, secondaryDescription, group, side, amount)`, reassigning matched rows to the replacement spending and only marking unmatched rows `Replaced`; regression coverage lives in `tests/BackendTests.elm`.
 - 2026-05-15: `src/Backend.elm:groupTransactionPageItems` must emit a `GroupTransactionYearSummary` for each visible year when a paged response spans multiple years, even if the oldest visible year is still partial overall; regression proof lives in `tests/BackendTests.elm` with the page-2 2025→2024 seam merged through `Frontend.groupTransactionsFromBackend`.
+- 2026-05-15: Evergreen V34 migrates the flat group-transaction frontend seam by resetting cached `FrontendModel.groupTransactions` and pagination metadata, translating legacy `RequestGroupTransactions String` to `{ group, before = Nothing, pages = 1 }`, and dropping stale flat `ListGroupTransactions` plus edit-only `ShowAddSpendingDialog (Just _)`; regression coverage lives in `tests/MigrationTests.elm`.
 
 ## 2026-04-21: Phase 2 Contract Correction Approved
 

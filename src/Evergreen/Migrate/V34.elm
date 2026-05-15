@@ -59,6 +59,10 @@ toFrontend old =
 
 migrate_Types_FrontendModel : Evergreen.V33.Types.FrontendModel -> Evergreen.V34.Types.FrontendModel
 migrate_Types_FrontendModel old =
+    let
+        groupTransactionState =
+            migrateFrontendGroupTransactionsState old.groupTransactions
+    in
     { page = old.page |> migrate_Types_Page
     , showDialog = old.showDialog |> Maybe.map migrate_Types_Dialog
     , errorMessage = old.errorMessage
@@ -74,15 +78,42 @@ migrate_Types_FrontendModel old =
                 )
     , group = old.group
     , groupValidity = old.groupValidity |> migrate_Types_NameValidity
-    , groupTransactions = old.groupTransactions |> List.map (Unimplemented {- Type changed from `{}` to `Evergreen.V34.Types.GroupTransactionListItem`. I need you to write this migration. -})
-    , groupTransactionsLoadedPages = (Unimplemented {- Type `Int` was added in V34. I need you to set a default value. -})
-    , groupTransactionsNextCursor = (Unimplemented {- Type `Maybe (Evergreen.V34.Types.GroupTransactionsCursor)` was added in V34. I need you to set a default value. -})
-    , groupTransactionsLoading = (Unimplemented {- Type `Bool` was added in V34. I need you to set a default value. -})
+    , groupTransactions = groupTransactionState.groupTransactions
+    , groupTransactionsLoadedPages = groupTransactionState.groupTransactionsLoadedPages
+    , groupTransactionsNextCursor = groupTransactionState.groupTransactionsNextCursor
+    , groupTransactionsLoading = groupTransactionState.groupTransactionsLoading
     , key = old.key
     , windowWidth = old.windowWidth
     , windowHeight = old.windowHeight
     , checkingAuthentication = old.checkingAuthentication
     , theme = old.theme |> migrate_Types_Theme
+    }
+
+
+migrateFrontendGroupTransactionsState :
+    List
+        { a
+            | transactionId : Evergreen.V33.Types.TransactionId
+            , spendingId : Evergreen.V33.Types.SpendingId
+            , description : String
+            , year : Int
+            , month : Int
+            , day : Int
+            , total : Evergreen.V33.Types.Amount Evergreen.V33.Types.Debit
+            , share : Evergreen.V33.Types.Amount Evergreen.V33.Types.Debit
+            , checked : Bool
+        }
+    ->
+        { groupTransactions : List Evergreen.V34.Types.GroupTransactionListItem
+        , groupTransactionsLoadedPages : Int
+        , groupTransactionsNextCursor : Maybe Evergreen.V34.Types.GroupTransactionsCursor
+        , groupTransactionsLoading : Bool
+        }
+migrateFrontendGroupTransactionsState _ =
+    { groupTransactions = []
+    , groupTransactionsLoadedPages = 0
+    , groupTransactionsNextCursor = Nothing
+    , groupTransactionsLoading = False
     }
 
 
@@ -159,8 +190,13 @@ migrate_Types_FrontendMsg old =
         Evergreen.V33.Types.ShowAddGroupDialog ->
             Evergreen.V34.Types.ShowAddGroupDialog
 
-        Evergreen.V33.Types.ShowAddSpendingDialog p0 ->
-            Evergreen.V34.Types.ShowAddSpendingDialog p0
+        Evergreen.V33.Types.ShowAddSpendingDialog maybeReference ->
+            case maybeReference of
+                Nothing ->
+                    Evergreen.V34.Types.ShowAddSpendingDialog Nothing
+
+                Just _ ->
+                    Evergreen.V34.Types.NoOpFrontendMsg
 
         Evergreen.V33.Types.ShowConfirmDeleteDialog p0 ->
             Evergreen.V34.Types.ShowConfirmDeleteDialog p0
@@ -254,13 +290,6 @@ migrate_Types_FrontendMsg old =
 
         Evergreen.V33.Types.ToggleTheme ->
             Evergreen.V34.Types.ToggleTheme
-
-        notices ->
-            {- @NOTICE `GroupTransactionsScrolled {}` was added in V34.
-               This is just a reminder in case migrating some subset of the old data to this new value was important.
-               See https://dashboard.lamdera.app/tips/modified-custom-type for more info.
-            -}
-            (Unimplemented {- New constructors were added. I need you to resolve the above notices and then remove this case. -})
 
 
 migrate_Types_Group : Evergreen.V33.Types.Group -> Evergreen.V34.Types.Group
@@ -377,7 +406,11 @@ migrate_Types_ToBackend old =
             Evergreen.V34.Types.RequestUserGroups p0
 
         Evergreen.V33.Types.RequestGroupTransactions p0 ->
-            Evergreen.V34.Types.RequestGroupTransactions (p0 |> (Unimplemented {- Type changed from `String` to `{}`. I need you to write this migration. -}))
+            Evergreen.V34.Types.RequestGroupTransactions
+                { group = p0
+                , before = Nothing
+                , pages = 1
+                }
 
         Evergreen.V33.Types.ToggleTransactionCheckedRequest p0 ->
             Evergreen.V34.Types.ToggleTransactionCheckedRequest (p0 |> migrate_Types_TransactionId)
@@ -426,15 +459,8 @@ migrate_Types_ToFrontend old =
                 , creditors = p0.creditors |> List.map (\( t1, t2, t3 ) -> ( t1, t2 |> migrate_Types_Group, t3 |> migrate_Types_Amount ))
                 }
 
-        Evergreen.V33.Types.ListGroupTransactions p0 ->
-            Evergreen.V34.Types.ListGroupTransactions
-                { group = p0.group
-                , before = (Unimplemented {- Type `Maybe (Evergreen.V34.Types.GroupTransactionsCursor)` was added in V34. I need you to set a default value. -})
-                , pagesLoaded = (Unimplemented {- Type `Int` was added in V34. I need you to set a default value. -})
-                , nextCursor = (Unimplemented {- Type `Maybe (Evergreen.V34.Types.GroupTransactionsCursor)` was added in V34. I need you to set a default value. -})
-                , items = (Unimplemented {- Type `List (Evergreen.V34.Types.GroupTransactionListItem)` was added in V34. I need you to set a default value. -})
-                , transactions = (Unimplemented {- Field of type `List ({})` was removed in V34. I need you to do something with the `p0.transactions` value if you wish to keep the data, then remove this line. -})
-                }
+        Evergreen.V33.Types.ListGroupTransactions _ ->
+            Evergreen.V34.Types.NoOpToFrontend
 
         Evergreen.V33.Types.AuthenticationStatus p0 ->
             Evergreen.V34.Types.AuthenticationStatus p0
