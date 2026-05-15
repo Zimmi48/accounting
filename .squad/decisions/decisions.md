@@ -1,5 +1,31 @@
 # Decisions Log
 
+## Hicks: Spending Submit Gating Must Share Backend Signed Balance Invariant
+
+**Date:** 2026-05-15  
+**Owner:** Hicks  
+**Issue:** #47  
+**Status:** APPROVED ✅
+
+### Context
+
+Issue #47 requested restoration of frontend spending dialog submit button gating while preserving the newer backend validation. The dialog submit button must stay disabled until credits, debits, and total all agree.
+
+### Decision
+
+Use the same signed spending invariant on the frontend that the backend already enforces: submission is allowed only when `sum credits == sum debits == total` and `total /= 0`.
+
+### Rationale
+
+This keeps negative-total spendings working, matches the approved #50 backend semantics, and avoids a seam where the button looks enabled but the `Submit` branch still accepts an invalid payload.
+
+### Files Modified
+
+- `src/Frontend.elm` — submit button gating logic
+- `tests/FrontendTests.elm` — submit gate regression tests
+
+---
+
 ## Hicks & Vasquez: Negative Total Spending Fix
 
 **Date:** 2026-05-05  
