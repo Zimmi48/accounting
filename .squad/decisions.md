@@ -1517,3 +1517,44 @@ Consolidate frontend amount formatting by removing `formatAmountValue` helper an
 ## Status
 
 ✅ Approved for merge. Commit: 755a76a
+
+---
+
+# Spending edit transaction preservation
+
+- **Author:** Bishop
+- **Date:** 2026-05-15
+- **Issue:** #49
+- **Status:** ✅ Approved for merge
+
+## Decision
+
+When editing a spending in `src/Backend.elm`, reconcile the normalized submitted transaction rows against the active stored rows by logical row identity `(date, secondaryDescription, group, side, amount)` before replacing anything.
+
+## Why
+
+The previous edit flow marked every prior transaction `Replaced` and appended a fully fresh spending, even when some rows were logically unchanged. That churn hid stable history, broke the intent of issue #49, and was unnecessary as long as the storage model and Evergreen boundary stay unchanged.
+
+## Consequences
+
+- Keep matched rows active and move them onto the replacement spending by updating their `spendingId`.
+- Refresh preserved rows with the new spending-wide metadata (`groupMembersKey`, `groupMembers`) so backend aggregates stay aligned.
+- Mark only unmatched old rows `Replaced` and append only unmatched new rows.
+- Regression coverage belongs in `tests/BackendTests.elm`.
+
+## Implementation
+
+- Backend reconciliation logic in `src/Backend.elm` updateSpending handler
+- Logical row matching by `(date, secondaryDescription, group, side, amount)` tuple
+- Test coverage in `tests/BackendTests.elm` verifies preservation behavior
+- Related skill: `.squad/skills/spending-edit-preservation/SKILL.md`
+
+## Files Modified
+
+- `src/Backend.elm`
+- `tests/BackendTests.elm`
+- `.squad/skills/spending-edit-preservation/SKILL.md`
+
+## Commit
+
+8edf105 — Fix #49 preserve unchanged spending rows

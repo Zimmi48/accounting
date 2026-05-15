@@ -79,3 +79,20 @@
 - **Approval:** Vasquez (Tester) reproduced regression, verified fix, and approved for merge
 - **Decision merged:** Mixed-sign spending validation (2026-05-05)
 - **Status:** Completed; ready for merge
+
+## 2026-05-15T08:04:13Z: Spending Edit Preservation Fix (Background)
+
+- **Task:** Fix issue #49 — preserve unchanged spending rows during edit operations
+- **Problem:** Backend spending edit flow marked every prior transaction `Replaced` and appended a fully fresh spending, even when rows were logically unchanged. This hid stable history and violated the intent of stable row preservation.
+- **Root Cause:** `updateSpending` handler in `src/Backend.elm` lacked logical row identity matching; replaced all rows regardless of content changes
+- **Solution:** Implement reconciliation by logical row identity `(date, secondaryDescription, group, side, amount)` before replacing:
+  - Keep matched rows active; update their `spendingId` to attach to replacement spending
+  - Refresh preserved rows with new spending-wide metadata (`groupMembersKey`, `groupMembers`)
+  - Mark only unmatched old rows `Replaced`; append only unmatched new rows
+- **Deliverables:**
+  - Backend reconciliation logic in `src/Backend.elm`
+  - Test coverage in `tests/BackendTests.elm` verifying preservation
+  - Skill documentation: `.squad/skills/spending-edit-preservation/SKILL.md`
+- **Validation:** elm-format, lamdera make src/Frontend.elm, lamdera make src/Backend.elm, npm test, lamdera live HTTP 200
+- **Status:** ✅ Completed; commit 8edf105 approved for merge
+- **Decision merged:** Spending edit transaction preservation (2026-05-15)
