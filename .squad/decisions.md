@@ -1481,3 +1481,39 @@ The regression was in `src/Backend.elm` validation: `normalizeSpendingTransactio
 ## Status
 
 ✓ Merged and approved
+
+# Decision: Frontend amount formatter consolidation
+
+**Timestamp:** 2026-05-15T07:48:48Z
+
+**Issue:** #40
+
+**Agent:** Hicks
+
+## Decision
+
+Consolidate frontend amount formatting by removing `formatAmountValue` helper and reusing the canonical `viewAmount` helper for all cents-to-decimal string conversions.
+
+## Rationale
+
+- `viewAmount` already serves transaction and debt display views
+- Spending editor hydration paths (`transactionLineFromSpendingTransaction`, `SpendingDetails`) need the same string shape
+- Single canonical formatter keeps amount-formatting behavior consistent across display and edit flows
+- Reduces cognitive load and prevents future divergence between display and edit formatters
+
+## Implementation
+
+- Removed `formatAmountValue` from `src/Frontend.elm`
+- Updated spending editor to use `viewAmount` for amount formatting
+- Added `viewAmount` ↔ `parseAmountValue` round-trip test coverage in `tests/FrontendTests.elm`
+- Updated skill documentation: `.squad/skills/frontend-amount-formatting/SKILL.md`
+
+## Files Modified
+
+- `src/Frontend.elm`
+- `tests/FrontendTests.elm`
+- `.squad/skills/frontend-amount-formatting/SKILL.md`
+
+## Status
+
+✅ Approved for merge. Commit: 755a76a
