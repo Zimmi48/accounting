@@ -94,6 +94,9 @@
 
 ## Learnings
 
+- 2026-05-16: The safe issue #53 pattern in `src/Frontend.elm` is to persist theme in the query string while encoding page-local `Import`, `Json`, and `NotFound` state into `pageUrl` fragments; review proof is strong enough when `ToggleTheme` is a thin `Nav.replaceUrl` wrapper and tests round-trip `pageUrl -> routing/themeFromUrl` for those stateful pages.
+- 2026-05-16: The URL-backed theme pattern in `src/Frontend.elm` only stays safe if theme rewrites preserve page-local route state. Building toggle URLs from `pagePath` alone resets `Json (Maybe String)` to `/json`, clears `Import String` drafts to `/import`, and even turns `NotFound` into `/`, so review coverage must exercise `ToggleTheme`/`UrlChanged` on stateful pages instead of only helper parsing.
+- 2026-05-16: Theme persistence for issue #53 is still missing at `src/Frontend.elm`'s real reload seam: `init` always seeds `theme = LightMode`, `ToggleTheme` only flips in-memory state, and `tests/FrontendTests.elm` has no theme/navigation coverage. Internal route changes preserve `model.theme`, but full page reloads cannot without an explicit browser-storage/init path.
 - 2026-05-15: Issue #32's click path already flips `checked` in frontend state (`ToggleTransactionChecked` / `toggleGroupTransactionChecked`) and persists through `ToggleTransactionCheckedRequest`, so the user-visible regression sits in `src/Frontend.elm`'s dot rendering seam rather than backend storage.
 - 2026-05-15: The regression escaped because `tests/FrontendTests.elm` only asserted the pure toggle helper and list refresh separately; it never covered the visible checked/unchecked affordance or the composed click-plus-refresh path for the reconciliation dot.
 - 2026-05-15: Group transaction chronology now depends on `src/Backend.elm`'s `groupTransactionsForMonth` plus `src/Frontend.elm`'s `normalizeGroupTransactionListItems`; summary-header tests alone do not prove reverse chronology inside a month/day bucket.
@@ -219,3 +222,17 @@
 - **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test ✅, localhost:8000 HTTP 200 ✅
 - **Verdict:** Approved. The late-arriving year seam is now explicitly fixed with comprehensive regression proof; all safety rails remain in place.
 - **Status:** Ready for production merge
+
+## Session 2026-05-16: Issue #53/#51 Review Workflow (Approved Ripley Revision)
+
+**Review gates:** 2026-05-16T18:32:20Z (reject Hicks), 2026-05-16T18:43:00Z (approve Ripley)
+
+Performed two critical review functions for the theme persistence and dark-mode readability work:
+
+1. **#53 Rejection:** Identified state-loss regression in Hicks's toggle seam where `Nav.replaceUrl` was losing state on stateful pages. Requested tighter coverage and reassigned to Ripley.
+
+2. **#53/#51 Approval:** Approved Ripley's revision that preserved theme persistence via URL fragments and fixed dark-mode green readability by raising accent and using black text.
+
+**Validation:** 80/80 tests passing, both Frontend/Backend compile, HTTP 200 from lamdera live.
+
+**Team impact:** This closes both #53 and #51 with frontend-local changes requiring no migrations or shared-type churn.

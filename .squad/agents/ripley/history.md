@@ -226,3 +226,29 @@ Lamdera generates migration scaffolding with `Unimplemented` placeholders. If yo
 - **Migration safety for frontend lists:** For V33 -> V34, legacy listed transactions can be preserved by wrapping them as `GroupTransactionRow` items while resetting new pagination state (`groupTransactionsNextCursor = Nothing`, `groupTransactionsLoading = False`).
 - **Key file paths:** `src/Types.elm` defines the pagination contract, `src/Backend.elm` builds month-bucket pages, `src/Frontend.elm` owns scroll-triggered loading, and `src/Evergreen/Migrate/V34.elm` handles the progressive-list migration.
 - **User workflow preference:** When a change requires an Evergreen migration, Théo wants the implementation completed and committed first, then reviewed—no pre-commit review round.
+- **Issue #53 theme seam:** Keep the theme itself in the query string, but encode page-local `Page` state in the URL fragment when a theme toggle rewrites the location. That preserves `Import` drafts, `Json` exports, and a `NotFound` sentinel across the `ToggleTheme -> UrlChanged` round-trip without adding frontend fields or Evergreen work.
+- **Regression-test pattern:** For URL-backed frontend state, helper parsing tests are not enough; add round-trip coverage that goes through `pageUrl` and `routing` so the toggle-generated URL is forced back through the real route seam.
+- **Key file paths:** `src/Frontend.elm` owns the theme/page URL contract and route hydration, while `tests/FrontendTests.elm` now covers the toggle round-trip for `Import`, `Json`, and `NotFound` pages.
+- **Issue #51 dark-mode accent:** Green action surfaces in dark mode need their own contrast contract, not just a darker tint. Reusing the bright light-mode accent with dark text kept buttons and markers legible against the dark palette.
+
+## Session 2026-05-16: Issue #53/#51 Resolution (Approved)
+
+**Revision timestamp:** 2026-05-16T18:43:46Z  
+**Approval:** Vasquez at 2026-05-16T18:43:00Z
+
+Revised Hicks's #53 theme persistence to close state-loss regression while keeping implementation frontend-local and migration-free. Also addressed #51 dark-mode readability.
+
+### #53 Fix
+- Kept theme persistence URL-backed (`?theme=dark`)
+- Widened URL contract to encode `Import` drafts, `Json` exports, `NotFound` in fragments
+- Added proof-grade tests covering real `ToggleTheme -> UrlChanged` seam
+- All stateful pages now round-trip correctly
+
+### #51 Fix
+- Raised dark-mode accent green from muddy to bright (matching light mode)
+- Updated action text to black for proper contrast
+- Locked palette contract with regression tests
+
+**Validation:** All tests passing (80/80), both modules compile, HTTP 200 from lamdera live.
+
+**Team note:** No shared-type, migration, or elm.json churn. This is the correct scope for both issues.
