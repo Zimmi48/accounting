@@ -16,17 +16,17 @@ Use this when a Lamdera/Elm UI preference such as light/dark mode must survive b
 - On toggle, prefer `Nav.replaceUrl` over `pushUrl` so switching theme does not spam browser history.
 - When handling internal navigation, preserve the current theme unless the clicked URL explicitly includes its own theme query.
 - Extract pure helpers for query parsing and URL rewriting so tests can prove the reload seam without browser ports or JS.
-- When rewriting URLs for theme changes, preserve any page-local state encoded outside the path contract; a helper built only from `Page -> path` is unsafe if `Page` also carries in-memory draft/export state.
-- If the current `Page` constructor carries frontend-only draft/export state, encode that state into the rewritten URL itself (for example in the fragment) before `Nav.replaceUrl`, then hydrate it back in `routing`.
+- Keep the persistence scope narrow: only encode the UI preference itself unless the control can actually fire from a page whose state would otherwise be lost.
+- If navigation already preserves a page's in-memory state, do not promote unrelated draft/export/error state into the URL just to support theme reloads.
 
 ## Examples
 - `src/Frontend.elm`: `themeFromUrl`, `themeFromUrlOr`, `urlStringWithTheme`, `pageUrl`
 - `tests/FrontendTests.elm`: theme bootstrap and query-rewrite regression tests
-- `tests/FrontendTests.elm`: round-trip `pageUrl -> routing` tests for `Import`, `Json`, and `NotFound` prove the real toggle seam.
-- `src/Frontend.elm`: `pageUrl` is only safe when the current `Page` constructor carries no extra state that would be lost on the resulting `UrlChanged`.
+- `src/Frontend.elm`: `ToggleTheme` can stay path-based when the toggle button only appears on `Home`
+- `src/Frontend.elm`: `UrlClicked` still threads the active `theme` query onto internal links so navigation keeps the chosen palette
 
 ## Anti-Patterns
-- Do not reconstruct a theme toggle URL from route path alone on pages like `Import String`, `Json (Maybe String)`, or `NotFound`; the follow-up `UrlChanged` will wipe draft/export/error state or silently navigate elsewhere.
+- Do not encode unrelated page-local state into fragments or queries when the persistence requirement is only "reload keeps the current theme".
 - Do not add shared/frontend model fields just to persist a browser-local theme when URL state is enough.
 - Do not treat in-memory `ToggleTheme` state as proof of reload persistence.
 - Do not use `pushUrl` for theme flips unless product explicitly wants back-button history per theme change.

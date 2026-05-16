@@ -19,6 +19,7 @@ import Frontend
 import Test exposing (..)
 import Time exposing (Month(..))
 import Types exposing (..)
+import Url
 
 
 suite : Test
@@ -47,6 +48,58 @@ suite =
                         ( Frontend.parseAmountValue "12,34"
                         , Frontend.parseAmountValue "-5.5"
                         , Frontend.parseAmountValue "12.345"
+                        )
+            ]
+        , describe "theme URL persistence"
+            [ test "themeFromUrl restores dark mode from the query string and defaults invalid or missing themes to light" <|
+                \_ ->
+                    let
+                        parse url =
+                            url
+                                |> Url.fromString
+                                |> Maybe.map Frontend.themeFromUrl
+                    in
+                    Expect.equal
+                        ( Just DarkMode, Just LightMode, Just LightMode )
+                        ( parse "https://example.test/json?theme=dark"
+                        , parse "https://example.test/json?theme=sepia"
+                        , parse "https://example.test/json"
+                        )
+            , test "themeFromUrlOr keeps the current theme during navigation when the target URL has no theme query" <|
+                \_ ->
+                    let
+                        url =
+                            Url.fromString "https://example.test/json"
+                                |> Maybe.withDefault
+                                    { protocol = Url.Https
+                                    , host = "example.test"
+                                    , port_ = Nothing
+                                    , path = "/json"
+                                    , query = Nothing
+                                    , fragment = Nothing
+                                    }
+                    in
+                    Expect.equal
+                        DarkMode
+                        (Frontend.themeFromUrlOr DarkMode url)
+            , test "urlStringWithTheme keeps the current route while adding or removing only the theme query" <|
+                \_ ->
+                    let
+                        url =
+                            Url.fromString "https://example.test/import?foo=1&theme=light#dialog"
+                                |> Maybe.withDefault
+                                    { protocol = Url.Https
+                                    , host = "example.test"
+                                    , port_ = Nothing
+                                    , path = "/import"
+                                    , query = Just "foo=1&theme=light"
+                                    , fragment = Just "dialog"
+                                    }
+                    in
+                    Expect.equal
+                        ( "/import?foo=1&theme=dark#dialog", "/import?foo=1#dialog" )
+                        ( Frontend.urlStringWithTheme DarkMode url
+                        , Frontend.urlStringWithTheme LightMode url
                         )
             ]
         , {- The spending dialog only exposes extra row details when the user has

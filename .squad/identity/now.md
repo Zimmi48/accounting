@@ -1,10 +1,10 @@
-updated_at: 2026-05-15T15:58:18Z
-focus_area: Fixing paginated transaction reload state before any migration regeneration
+updated_at: 2026-05-17T07:36:15Z
+focus_area: Clarifying the commit-splitting rule and explaining the #53 theme-persistence route state
 active_issues:
-  - Preserve the number of loaded transaction pages across transaction-list reloads after adding or editing a spending
-  - Remove the currently generated migration and leave regeneration for an explicit later user request
+  - Capture the standing rule that independent changes must be committed separately
+  - Explain why #53 encodes draft/not-found route state in URL fragments
 ---
 
 # What We're Focused On
 
-Current work is fixing a new regression from incremental transaction loading: when the app reloads the current group's transactions after adding or editing a spending, it forgets how many pages were already loaded and jumps back to a newer slice of history. The implementation may change the model, but the currently generated migration should be deleted and left unregenerated until the user explicitly asks for migration work after reviewing the code changes.
+Current work is documenting the standing rule that independent fixes should always be split into separate commits, then explaining the #53 theme-persistence diff. The user has already re-committed #53 and #51 separately and wants the reason for the new route fragments such as `draft` and `not-found` clarified in plain terms.

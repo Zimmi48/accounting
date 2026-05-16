@@ -34,3 +34,39 @@ Revised Hicks's #53 theme persistence to close state-loss regression while keepi
 **Validation:** All tests passing (80/80), both modules compile, HTTP 200 from lamdera live.
 
 **Team note:** No shared-type, migration, or elm.json churn. This is the correct scope for both issues.
+
+## Session 2026-05-17: URL Fragment Design Clarification (Ripley Review)
+
+Addressed user question: "Why URL fragments (`draft`, `not-found`, `payload`) in #53? Are they overly broad?"
+
+**Finding:** Fragments are **necessary**, not overly broad.
+
+**Mechanism:** When `ToggleTheme` fires, it calls `Nav.replaceUrl` with a new URL from `pageUrl`. The browser navigates, triggering `UrlChanged`. The `routing` function must parse this new URL to reconstruct `Page`. Without fragments, page-local state (`Import String`, `Json (Maybe String)`) would be lost—the routing function would see only path+query and create empty state.
+
+**Scope (minimal, not broad):**
+- `draft=#draft=<json>` — carries unsaved Import content across toggle
+- `payload=#payload=<json>` — carries prepared Json export across toggle
+- `not-found=#not-found` — disambiguates NotFound (path="/") from Home (path="/") in URL
+- Home — no fragment, no state to preserve
+
+**Test proof:** `pageRoundTrip` in FrontendTests.elm validates the full cycle: `Page -> pageUrl -> routing -> Page` with fragments intact.
+
+**Conclusion:** This is the correct design for preserving frontend-only state during URL-rewrites without Evergreen churn. The fragments are not wishful thinking—they're the seam where Page state lives during navigation.
+
+## Session 2026-05-17: #53 Reassessment on Fragment Necessity (Ripley Review, User Correction)
+
+**Objection from user:** "Fragment encoding is not necessary. The theme button is not accessible from secondary pages, so toggle cannot happen there."
+
+**Reassessment finding:** User is **absolutely correct**.
+
+**Analysis:**
+- `themeButton` is defined once (line 2435-2448) and included only in Home page view (line 2754)
+- NotFound, Json, Import pages render without the button (lines 2451-2544)
+- `ToggleTheme` can only fire from Home; it cannot be triggered from secondary pages
+- Fragments (`#draft`, `#payload`, `#not-found`) are therefore encoding state for a toggle that can never happen in practice
+
+**Verdict on necessity:** Fragments are overengineering. The prior explanation correctly described the mechanism but incorrectly assumed the UI constraint was irrelevant. Elm's SPA model preserves page state in-memory during navigation naturally; fragments add complexity without solving a real problem today.
+
+**If this were to change:** Adding theme toggle to secondary pages would require fragments. But that's a future decision, not current necessity.
+
+**Key insight:** Defensive programming for hypothetical scenarios adds overhead. Cross-cutting concerns like URL state deserve explicit use-case justification, not "just in case" preventive measures.

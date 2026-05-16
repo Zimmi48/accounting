@@ -15,13 +15,18 @@ Use this when a Lamdera/Elm UI preference such as light/dark mode is supposed to
 - Require evidence for the browser boundary: local storage, flags, ports, or another bootstrap mechanism that can repopulate the preference before first render.
 - For this repo, prefer a migration-free fix when the preference already exists in `FrontendModel`; do not approve unnecessary Evergreen churn just to persist a browser-local choice.
 - Test coverage must prove both seams: reload/bootstrap restores the chosen theme, and internal navigation still leaves it alone.
+- In minimal follow-ups, reject fixes that widen the URL contract just to preserve unrelated page-local state; theme persistence is the query/bootstrap seam, not an excuse to serialize every page variant.
+- Keep tests aligned with the issue split: #53 should cover theme persistence behavior, while separate palette/readability regressions belong to their own issue/commit.
+- Review the **full candidate diff against its parent commit**, not only the latest cleanup hunk; stray coupled tests can survive even after the implementation is narrowed.
 
 ## Examples
-- `src/Frontend.elm:init` currently seeds `theme = LightMode`, so any reviewed fix must change the bootstrap path or it will still reset on refresh.
-- `src/Frontend.elm:ToggleTheme` currently only flips in-memory state, which is sufficient for same-session routing but not for a full reload.
-- `tests/FrontendTests.elm` should gain theme-focused regression coverage; unrelated transaction-list tests do not prove this issue.
+- A good fix in this repo wires `src/Frontend.elm:init` and `UrlChanged` through `themeFromUrl`, so reloading `/json?theme=dark` restores `DarkMode`.
+- `src/Frontend.elm:ToggleTheme` should rewrite the browser URL (for example via `pageUrl`) so the next reload has something to hydrate from.
+- `tests/FrontendTests.elm` should gain theme-focused regression coverage; unrelated palette/readability checks or transaction-list tests do not prove this issue.
 
 ## Anti-Patterns
 - Approving a fix because the toggle button label changes during one session.
 - Treating route navigation as proof of reload persistence.
 - Adding migration work when the issue is really a browser bootstrap/storage seam.
+- Letting a "minimal" patch keep broad fragment/state round-trips or unrelated regression tests that should have been left out.
+- Looking only at the final cleanup diff and missing that the overall candidate still introduces unrelated assertions such as dark-palette checks.

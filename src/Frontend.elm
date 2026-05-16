@@ -28,6 +28,7 @@ import Task
 import Tuple exposing (..)
 import Types exposing (..)
 import Url
+import Url.Builder
 
 
 type alias Model =
@@ -85,7 +86,7 @@ init url key =
       , windowWidth = 1000
       , windowHeight = 1000
       , checkingAuthentication = True
-      , theme = LightMode
+      , theme = themeFromUrl url
       }
     , Cmd.batch
         [ routingCmds
@@ -117,6 +118,185 @@ routing url =
             ( NotFound, Cmd.none )
 
 
+themeQueryParameterName : String
+themeQueryParameterName =
+    "theme"
+
+
+themeFromUrl : Url.Url -> Theme
+themeFromUrl url =
+    url.query
+        |> Maybe.andThen maybeThemeFromQuery
+        |> Maybe.withDefault LightMode
+
+
+themeFromUrlOr : Theme -> Url.Url -> Theme
+themeFromUrlOr fallback url =
+    url.query
+        |> Maybe.andThen maybeThemeFromQuery
+        |> Maybe.withDefault fallback
+
+
+maybeThemeFromQuery : String -> Maybe Theme
+maybeThemeFromQuery query =
+    valueForKey themeQueryParameterName (queryParameters query)
+        |> Maybe.andThen themeFromString
+
+
+themeFromString : String -> Maybe Theme
+themeFromString value =
+    case String.toLower value of
+        "dark" ->
+            Just DarkMode
+
+        "light" ->
+            Just LightMode
+
+        _ ->
+            Nothing
+
+
+themeToQueryValue : Theme -> Maybe String
+themeToQueryValue theme =
+    case theme of
+        LightMode ->
+            Just "light"
+
+        DarkMode ->
+            Just "dark"
+
+
+queryParameters : String -> List ( String, String )
+queryParameters query =
+    query
+        |> String.split "&"
+        |> List.filterMap queryParameter
+
+
+valueForKey : String -> List ( String, String ) -> Maybe String
+valueForKey key entries =
+    entries
+        |> List.filterMap
+            (\( entryKey, value ) ->
+                if entryKey == key then
+                    Just value
+
+                else
+                    Nothing
+            )
+        |> List.head
+
+
+queryParameter : String -> Maybe ( String, String )
+queryParameter entry =
+    case String.split "=" entry of
+        [] ->
+            Nothing
+
+        [ key ] ->
+            Just ( percentDecode key, "" )
+
+        key :: values ->
+            Just ( percentDecode key, percentDecode (String.join "=" values) )
+
+
+percentDecode : String -> String
+percentDecode value =
+    Url.percentDecode value
+        |> Maybe.withDefault value
+
+
+urlStringWithTheme : Theme -> Url.Url -> String
+urlStringWithTheme theme url =
+    let
+        query =
+            queryStringWithTheme theme url.query
+
+        fragment =
+            url.fragment
+                |> Maybe.map (\value -> "#" ++ value)
+                |> Maybe.withDefault ""
+    in
+    Url.Builder.absolute
+        (url.path
+            |> String.split "/"
+            |> List.filter (not << String.isEmpty)
+        )
+        []
+        ++ query
+        ++ fragment
+
+
+queryStringWithTheme : Theme -> Maybe String -> String
+queryStringWithTheme theme maybeQuery =
+    let
+        preservedParameters =
+            maybeQuery
+                |> Maybe.map queryParameters
+                |> Maybe.withDefault []
+                |> List.filter (\( key, _ ) -> key /= themeQueryParameterName)
+
+        themeParameters =
+            case themeToQueryValue theme of
+                Just value ->
+                    preservedParameters ++ [ ( themeQueryParameterName, value ) ]
+
+                Nothing ->
+                    preservedParameters
+    in
+    case themeParameters of
+        [] ->
+            ""
+
+        _ ->
+            "?"
+                ++ (themeParameters
+                        |> List.map queryParameterString
+                        |> String.join "&"
+                   )
+
+
+queryParameterString : ( String, String ) -> String
+queryParameterString ( key, value ) =
+    Url.percentEncode key ++ "=" ++ Url.percentEncode value
+
+
+pageUrl : Theme -> Page -> String
+pageUrl theme page =
+    Url.Builder.absolute
+        (pagePath page
+            |> String.split "/"
+            |> List.filter (not << String.isEmpty)
+        )
+        (pageQueryParameters theme)
+
+
+pagePath : Page -> String
+pagePath page =
+    case page of
+        Home ->
+            "/"
+
+        Json _ ->
+            "/json"
+
+        Import _ ->
+            "/import"
+
+        NotFound ->
+            "/not-found"
+
+
+pageQueryParameters : Theme -> List Url.Builder.QueryParameter
+pageQueryParameters theme =
+    case themeToQueryValue theme of
+        Just value ->
+            [ Url.Builder.string themeQueryParameterName value ]
+
+        Nothing ->
+            []
+
+
 update : FrontendMsg -> Model -> ( Model, Cmd FrontendMsg )
 update msg model =
     case msg of
@@ -127,9 +307,13 @@ update msg model =
                         ( page, routingCmds ) =
                             routing url
                     in
-                    ( { model | page = page, errorMessage = Nothing }
+                    ( { model
+                        | page = page
+                        , errorMessage = Nothing
+                        , theme = themeFromUrlOr model.theme url
+                      }
                     , Cmd.batch
-                        [ Nav.pushUrl model.key (Url.toString url)
+                        [ Nav.pushUrl model.key (urlStringWithTheme (themeFromUrlOr model.theme url) url)
                         , routingCmds
                         ]
                     )
@@ -144,7 +328,11 @@ update msg model =
                 ( page, routingCmds ) =
                     routing url
             in
-            ( { model | page = page, errorMessage = Nothing }
+            ( { model
+                | page = page
+                , errorMessage = Nothing
+                , theme = themeFromUrl url
+              }
             , routingCmds
             )
 
@@ -920,16 +1108,17 @@ update msg model =
             )
 
         ToggleTheme ->
-            ( { model
-                | theme =
+            let
+                theme =
                     case model.theme of
                         LightMode ->
                             DarkMode
 
                         DarkMode ->
                             LightMode
-              }
-            , Cmd.none
+            in
+            ( { model | theme = theme }
+            , Nav.replaceUrl model.key (pageUrl theme model.page)
             )
 
         GroupTransactionsScrolled scrollState ->
@@ -2208,7 +2397,7 @@ view model =
                                 [ mouseOver [ Font.color (rgb255 255 0 0) ]
                                 , Font.underline
                                 ]
-                                { label = text "Return home", url = "/" }
+                                { label = text "Return home", url = pageUrl model.theme Home }
                             ]
                         ]
                     )
