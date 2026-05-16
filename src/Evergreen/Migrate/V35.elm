@@ -171,17 +171,6 @@ migrate_Types_FrontendMsg old =
         Evergreen.V34.Types.GroupTransactionsScrolled p0 ->
             Evergreen.V35.Types.GroupTransactionsScrolled p0
 
-        notices ->
-            {- @NOTICE `ToggleGroupTransactionMonthFold Evergreen.V35.Types.GroupTransactionsCursor` was added in V35.
-               This is just a reminder in case migrating some subset of the old data to this new value was important.
-               See https://dashboard.lamdera.app/tips/modified-custom-type for more info.
-            -}
-            {- @NOTICE `GroupTransactionsViewportChecked Result` was added in V35.
-               This is just a reminder in case migrating some subset of the old data to this new value was important.
-               See https://dashboard.lamdera.app/tips/modified-custom-type for more info.
-            -}
-            (Unimplemented {- New constructors were added. I need you to resolve the above notices and then remove this case. -})
-
 
 migrate_Types_TransactionId : Evergreen.V34.Types.TransactionId -> Evergreen.V35.Types.TransactionId
 migrate_Types_TransactionId old =

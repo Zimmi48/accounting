@@ -12,11 +12,13 @@ import Dict
 import Evergreen.Migrate.V26 as MigrateV26
 import Evergreen.Migrate.V33 as MigrateV33
 import Evergreen.Migrate.V34 as MigrateV34
+import Evergreen.Migrate.V35 as MigrateV35
 import Evergreen.V24.Types as V24
 import Evergreen.V26.Types as V26
 import Evergreen.V31.Types as V31
 import Evergreen.V33.Types as V33
 import Evergreen.V34.Types as V34
+import Evergreen.V35.Types as V35
 import Expect
 import Set
 import Test exposing (..)
@@ -435,6 +437,17 @@ suite =
                         V34.NoOpToFrontend
                         (MigrateV34.migrate_Types_ToFrontend legacyListGroupTransactionsV33)
             ]
+        , describe "V34 to V35 transaction-list message migration"
+            [ test "existing transaction-list messages stay unchanged when fold and viewport messages are added" <|
+                \_ ->
+                    Expect.equal
+                        ( V35.ToggleTransactionChecked legacyTransactionIdV35
+                        , V35.GroupTransactionsScrolled { scrollTop = 480, clientHeight = 640, scrollHeight = 960 }
+                        )
+                        ( MigrateV35.migrate_Types_FrontendMsg (V34.ToggleTransactionChecked legacyTransactionIdV34)
+                        , MigrateV35.migrate_Types_FrontendMsg (V34.GroupTransactionsScrolled { scrollTop = 480, clientHeight = 640, scrollHeight = 960 })
+                        )
+            ]
         ]
 
 
@@ -567,6 +580,16 @@ legacyTransactionId =
 
 legacyTransactionIdV31 : V31.TransactionId
 legacyTransactionIdV31 =
+    { groupId = 1, year = 2025, month = 4, day = 18, index = 0 }
+
+
+legacyTransactionIdV34 : V34.TransactionId
+legacyTransactionIdV34 =
+    { groupId = 1, year = 2025, month = 4, day = 18, index = 0 }
+
+
+legacyTransactionIdV35 : V35.TransactionId
+legacyTransactionIdV35 =
     { groupId = 1, year = 2025, month = 4, day = 18, index = 0 }
 
 
