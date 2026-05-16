@@ -2,7 +2,7 @@ module Frontend exposing (..)
 
 import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest(..))
-import Browser.Dom exposing (getViewport)
+import Browser.Dom exposing (Viewport, getViewport, getViewportOf)
 import Browser.Events exposing (onResize)
 import Browser.Navigation as Nav
 import Date
@@ -32,6 +32,23 @@ import Url
 
 type alias Model =
     FrontendModel
+
+
+type GroupTransactionViewSection
+    = StandaloneGroupTransactionListItem GroupTransactionListItem
+    | FoldableGroupTransactionMonthSection GroupTransactionMonthSection
+
+
+type alias GroupTransactionMonthSection =
+    { summary : { year : Int, month : Int, total : Amount Debit }
+    , rows : List GroupTransaction
+    , folded : Bool
+    }
+
+
+groupTransactionsViewportId : String
+groupTransactionsViewportId =
+    "group-transactions-list"
 
 
 app =
@@ -245,6 +262,25 @@ update msg model =
                     toggleGroupTransactionChecked transactionId model.groupTransactions
               }
             , Lamdera.sendToBackend (ToggleTransactionCheckedRequest transactionId)
+            )
+
+        ToggleGroupTransactionMonthFold month ->
+            let
+                foldPlan =
+                    toggleGroupTransactionMonthFoldPlan month model
+
+                updatedModel =
+                    { model
+                        | groupTransactions =
+                            foldPlan.groupTransactions
+                    }
+            in
+            ( updatedModel
+            , if foldPlan.shouldCheckViewport then
+                checkGroupTransactionsViewport updatedModel
+
+              else
+                Cmd.none
             )
 
         SetToday today ->
@@ -897,11 +933,19 @@ update msg model =
             )
 
         GroupTransactionsScrolled scrollState ->
-            if shouldLoadMoreGroupTransactions scrollState model then
-                requestMoreGroupTransactions model
+            applyGroupTransactionsLoadMorePlan (groupTransactionsViewportLoadMorePlan scrollState model)
 
-            else
-                ( model, Cmd.none )
+        GroupTransactionsViewportChecked result ->
+            case result of
+                Ok viewport ->
+                    applyGroupTransactionsLoadMorePlan
+                        (groupTransactionsViewportLoadMorePlan
+                            (groupTransactionsScrollStateFromViewport viewport)
+                            model
+                        )
+
+                Err _ ->
+                    ( model, Cmd.none )
 
 
 remainingAmount total lines =
@@ -1657,6 +1701,9 @@ groupTransactionsFromBackend :
 groupTransactionsFromBackend currentGroup responseGroup responseBefore responseItems existingItems =
     if currentGroup == responseGroup then
         let
+            foldedMonths =
+                foldedGroupTransactionMonths existingItems
+
             combinedItems =
                 case responseBefore of
                     Nothing ->
@@ -1666,6 +1713,7 @@ groupTransactionsFromBackend currentGroup responseGroup responseBefore responseI
                         existingItems ++ responseItems
         in
         normalizeGroupTransactionListItems combinedItems
+            |> applyGroupTransactionMonthFolds foldedMonths
 
     else
         existingItems
@@ -1868,10 +1916,152 @@ shouldLoadMoreGroupTransactions :
 shouldLoadMoreGroupTransactions scrollState model =
     (scrollState.scrollTop + scrollState.clientHeight + 48)
         >= scrollState.scrollHeight
-        && not model.groupTransactionsLoading
+        && canLoadMoreGroupTransactions model
+
+
+canLoadMoreGroupTransactions :
+    { a
+        | groupTransactionsLoading : Bool
+        , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+        , groupValidity : NameValidity
+    }
+    -> Bool
+canLoadMoreGroupTransactions model =
+    not model.groupTransactionsLoading
         && Maybe.isJust model.groupTransactionsNextCursor
         && model.groupValidity
         == Complete
+
+
+groupTransactionsScrollStateFromViewport :
+    Viewport
+    ->
+        { scrollTop : Float
+        , clientHeight : Float
+        , scrollHeight : Float
+        }
+groupTransactionsScrollStateFromViewport viewport =
+    { scrollTop = viewport.viewport.y
+    , clientHeight = viewport.viewport.height
+    , scrollHeight = viewport.scene.height
+    }
+
+
+checkGroupTransactionsViewport :
+    { a
+        | groupTransactionsLoading : Bool
+        , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+        , groupValidity : NameValidity
+    }
+    -> Cmd FrontendMsg
+checkGroupTransactionsViewport model =
+    if canLoadMoreGroupTransactions model then
+        Task.attempt GroupTransactionsViewportChecked (getViewportOf groupTransactionsViewportId)
+
+    else
+        Cmd.none
+
+
+type alias ToggleGroupTransactionMonthFoldPlan =
+    { groupTransactions : List GroupTransactionListItem
+    , shouldCheckViewport : Bool
+    }
+
+
+toggleGroupTransactionMonthFoldPlan :
+    GroupTransactionsCursor
+    ->
+        { a
+            | groupTransactions : List GroupTransactionListItem
+            , groupTransactionsLoading : Bool
+            , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+            , groupValidity : NameValidity
+        }
+    -> ToggleGroupTransactionMonthFoldPlan
+toggleGroupTransactionMonthFoldPlan month model =
+    { groupTransactions = toggleGroupTransactionMonthFold month model.groupTransactions
+    , shouldCheckViewport = canLoadMoreGroupTransactions model
+    }
+
+
+type alias GroupTransactionsLoadMorePlan model =
+    { updatedModel : model
+    , backendRequest : Maybe ToBackend
+    }
+
+
+groupTransactionsViewportLoadMorePlan :
+    { scrollTop : Float
+    , clientHeight : Float
+    , scrollHeight : Float
+    }
+    ->
+        { a
+            | group : String
+            , groupTransactionsLoading : Bool
+            , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+            , groupValidity : NameValidity
+        }
+    ->
+        GroupTransactionsLoadMorePlan
+            { a
+                | group : String
+                , groupTransactionsLoading : Bool
+                , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+                , groupValidity : NameValidity
+            }
+groupTransactionsViewportLoadMorePlan scrollState model =
+    if shouldLoadMoreGroupTransactions scrollState model then
+        groupTransactionsLoadMorePlan model
+
+    else
+        { updatedModel = model
+        , backendRequest = Nothing
+        }
+
+
+groupTransactionsLoadMorePlan :
+    { a
+        | group : String
+        , groupTransactionsLoading : Bool
+        , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+        , groupValidity : NameValidity
+    }
+    ->
+        GroupTransactionsLoadMorePlan
+            { a
+                | group : String
+                , groupTransactionsLoading : Bool
+                , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+                , groupValidity : NameValidity
+            }
+groupTransactionsLoadMorePlan model =
+    case model.groupTransactionsNextCursor of
+        Just cursor ->
+            { updatedModel = { model | groupTransactionsLoading = True }
+            , backendRequest =
+                Just
+                    (RequestGroupTransactions
+                        { group = model.group
+                        , before = Just cursor
+                        , pages = 1
+                        }
+                    )
+            }
+
+        Nothing ->
+            { updatedModel = model
+            , backendRequest = Nothing
+            }
+
+
+applyGroupTransactionsLoadMorePlan : GroupTransactionsLoadMorePlan model -> ( model, Cmd FrontendMsg )
+applyGroupTransactionsLoadMorePlan plan =
+    ( plan.updatedModel
+    , plan.backendRequest
+        |> Maybe.map Lamdera.sendToBackend
+        |> Maybe.withDefault Cmd.none
+    )
 
 
 groupTransactionsReloadPages : { a | groupTransactionsLoadedPages : Int } -> Int
@@ -1905,20 +2095,7 @@ requestInitialGroupTransactions group loadedPages =
 
 requestMoreGroupTransactions : Model -> ( Model, Cmd FrontendMsg )
 requestMoreGroupTransactions model =
-    case model.groupTransactionsNextCursor of
-        Just cursor ->
-            ( { model | groupTransactionsLoading = True }
-            , Lamdera.sendToBackend
-                (RequestGroupTransactions
-                    { group = model.group
-                    , before = Just cursor
-                    , pages = 1
-                    }
-                )
-            )
-
-        Nothing ->
-            ( model, Cmd.none )
+    applyGroupTransactionsLoadMorePlan (groupTransactionsLoadMorePlan model)
 
 
 markInvalidPrefix prefix list =
@@ -3012,10 +3189,11 @@ viewGroupTransactions palette model =
         [ width fill
         , height (px listHeight)
         , scrollbarY
+        , htmlAttribute (Attr.id groupTransactionsViewportId)
         , htmlAttribute (on "scroll" groupTransactionsScrollDecoder)
         ]
         (column [ width fill, spacing 12 ]
-            (List.map (viewGroupTransactionListItem palette) model.groupTransactions
+            (List.map (viewGroupTransactionViewSection palette) (groupTransactionViewSections model.groupTransactions)
                 ++ viewGroupTransactionsFooter palette model
             )
         )
@@ -3054,6 +3232,219 @@ viewGroupTransactionListItem palette item =
             viewGroupTransactionSummary palette
                 (String.fromInt summary.year)
                 summary.total
+
+
+viewGroupTransactionViewSection : Palette -> GroupTransactionViewSection -> Element FrontendMsg
+viewGroupTransactionViewSection palette section =
+    case section of
+        StandaloneGroupTransactionListItem item ->
+            viewGroupTransactionListItem palette item
+
+        FoldableGroupTransactionMonthSection monthSection ->
+            viewFoldableGroupTransactionMonthSection palette monthSection
+
+
+groupTransactionViewSections : List GroupTransactionListItem -> List GroupTransactionViewSection
+groupTransactionViewSections items =
+    case items of
+        (GroupTransactionMonthSummary summary) :: remainingItems ->
+            let
+                ( folded, monthItems ) =
+                    takeGroupTransactionMonthFoldMarker summary remainingItems
+
+                ( monthRows, rest ) =
+                    takeGroupTransactionMonthRows summary.year summary.month monthItems
+            in
+            FoldableGroupTransactionMonthSection
+                { summary = summary
+                , rows = monthRows
+                , folded = folded
+                }
+                :: groupTransactionViewSections rest
+
+        item :: remainingItems ->
+            StandaloneGroupTransactionListItem item :: groupTransactionViewSections remainingItems
+
+        [] ->
+            []
+
+
+takeGroupTransactionMonthFoldMarker :
+    { a | year : Int, month : Int }
+    -> List GroupTransactionListItem
+    -> ( Bool, List GroupTransactionListItem )
+takeGroupTransactionMonthFoldMarker summary items =
+    case items of
+        (GroupTransactionMonthSummary marker) :: remainingItems ->
+            if sameGroupTransactionMonth summary marker then
+                ( True, remainingItems )
+
+            else
+                ( False, items )
+
+        _ ->
+            ( False, items )
+
+
+takeGroupTransactionMonthRows :
+    Int
+    -> Int
+    -> List GroupTransactionListItem
+    -> ( List GroupTransaction, List GroupTransactionListItem )
+takeGroupTransactionMonthRows year month items =
+    case items of
+        (GroupTransactionRow transaction) :: remainingItems ->
+            if transaction.year == year && transaction.month == month then
+                let
+                    ( otherRows, rest ) =
+                        takeGroupTransactionMonthRows year month remainingItems
+                in
+                ( transaction :: otherRows, rest )
+
+            else
+                ( [], items )
+
+        _ ->
+            ( [], items )
+
+
+groupTransactionMonthSectionItems : GroupTransactionMonthSection -> List GroupTransactionListItem
+groupTransactionMonthSectionItems section =
+    GroupTransactionMonthSummary section.summary
+        :: (if section.folded then
+                []
+
+            else
+                List.map GroupTransactionRow section.rows
+           )
+
+
+viewFoldableGroupTransactionMonthSection : Palette -> GroupTransactionMonthSection -> Element FrontendMsg
+viewFoldableGroupTransactionMonthSection palette section =
+    let
+        summaryLabel =
+            String.fromInt section.summary.year
+                ++ "-"
+                ++ String.padLeft 2 '0' (String.fromInt section.summary.month)
+    in
+    column [ width fill, spacing 12 ]
+        ([ Input.button
+            [ width fill ]
+            { onPress =
+                Just
+                    (ToggleGroupTransactionMonthFold
+                        { year = section.summary.year
+                        , month = section.summary.month
+                        }
+                    )
+            , label =
+                row [ width fill, spacing 12 ]
+                    [ el [ centerY ]
+                        (text
+                            (if section.folded then
+                                "▸"
+
+                             else
+                                "▾"
+                            )
+                        )
+                    , el [ width fill ] (viewGroupTransactionSummary palette summaryLabel section.summary.total)
+                    ]
+            }
+         ]
+            ++ (if section.folded then
+                    []
+
+                else
+                    List.map (viewTransaction palette) section.rows
+               )
+        )
+
+
+foldedGroupTransactionMonths : List GroupTransactionListItem -> List GroupTransactionsCursor
+foldedGroupTransactionMonths items =
+    groupTransactionViewSections items
+        |> List.filterMap
+            (\section ->
+                case section of
+                    FoldableGroupTransactionMonthSection monthSection ->
+                        if monthSection.folded then
+                            Just
+                                { year = monthSection.summary.year
+                                , month = monthSection.summary.month
+                                }
+
+                        else
+                            Nothing
+
+                    StandaloneGroupTransactionListItem _ ->
+                        Nothing
+            )
+
+
+applyGroupTransactionMonthFolds :
+    List GroupTransactionsCursor
+    -> List GroupTransactionListItem
+    -> List GroupTransactionListItem
+applyGroupTransactionMonthFolds foldedMonths items =
+    groupTransactionViewSections items
+        |> List.concatMap
+            (\section ->
+                case section of
+                    FoldableGroupTransactionMonthSection monthSection ->
+                        groupTransactionMonthSectionStorageItems
+                            { monthSection
+                                | folded =
+                                    List.any
+                                        (\foldedMonth -> sameGroupTransactionMonth monthSection.summary foldedMonth)
+                                        foldedMonths
+                            }
+
+                    StandaloneGroupTransactionListItem item ->
+                        [ item ]
+            )
+
+
+toggleGroupTransactionMonthFold :
+    GroupTransactionsCursor
+    -> List GroupTransactionListItem
+    -> List GroupTransactionListItem
+toggleGroupTransactionMonthFold month items =
+    groupTransactionViewSections items
+        |> List.concatMap
+            (\section ->
+                case section of
+                    FoldableGroupTransactionMonthSection monthSection ->
+                        if sameGroupTransactionMonth monthSection.summary month then
+                            groupTransactionMonthSectionStorageItems
+                                { monthSection | folded = not monthSection.folded }
+
+                        else
+                            groupTransactionMonthSectionStorageItems monthSection
+
+                    StandaloneGroupTransactionListItem item ->
+                        [ item ]
+            )
+
+
+groupTransactionMonthSectionStorageItems : GroupTransactionMonthSection -> List GroupTransactionListItem
+groupTransactionMonthSectionStorageItems section =
+    GroupTransactionMonthSummary section.summary
+        :: (if section.folded then
+                [ GroupTransactionMonthSummary section.summary ]
+
+            else
+                []
+           )
+        ++ List.map GroupTransactionRow section.rows
+
+
+sameGroupTransactionMonth :
+    { a | year : Int, month : Int }
+    -> { b | year : Int, month : Int }
+    -> Bool
+sameGroupTransactionMonth left right =
+    left.year == right.year && left.month == right.month
 
 
 viewGroupTransactionSummary : Palette -> String -> Amount Debit -> Element FrontendMsg

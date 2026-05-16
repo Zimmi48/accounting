@@ -224,6 +224,191 @@ suite =
                             olderItems
                             existingItems
                         )
+            , test "groupTransactionViewSections keeps year headers outside foldable month sections" <|
+                \_ ->
+                    Expect.equal
+                        [ Frontend.StandaloneGroupTransactionListItem (yearSummaryItem 2025 2500)
+                        , Frontend.FoldableGroupTransactionMonthSection
+                            { summary = { year = 2025, month = 5, total = Amount 500 }
+                            , rows =
+                                [ listedTransaction 1 2025 5 3
+                                , listedTransaction 0 2025 5 1
+                                ]
+                            , folded = False
+                            }
+                        , Frontend.FoldableGroupTransactionMonthSection
+                            { summary = { year = 2025, month = 4, total = Amount 2000 }
+                            , rows =
+                                [ listedTransaction 2 2025 4 18
+                                , listedTransaction 1 2025 4 17
+                                , listedTransaction 0 2025 4 17
+                                ]
+                            , folded = False
+                            }
+                        ]
+                        (Frontend.groupTransactionViewSections
+                            [ yearSummaryItem 2025 2500
+                            , monthSummaryItem 2025 5 500
+                            , listedTransactionItem 1 2025 5 3
+                            , listedTransactionItem 0 2025 5 1
+                            , monthSummaryItem 2025 4 2000
+                            , listedTransactionItem 2 2025 4 18
+                            , listedTransactionItem 1 2025 4 17
+                            , listedTransactionItem 0 2025 4 17
+                            ]
+                        )
+            , test "groupTransactionMonthSectionItems hides month rows when folded and keeps them when expanded" <|
+                \_ ->
+                    let
+                        expandedSection =
+                            { summary = { year = 2025, month = 5, total = Amount 500 }
+                            , rows =
+                                [ listedTransaction 1 2025 5 3
+                                , listedTransaction 0 2025 5 1
+                                ]
+                            , folded = False
+                            }
+
+                        foldedSection =
+                            { expandedSection | folded = True }
+                    in
+                    Expect.equal
+                        ( [ monthSummaryItem 2025 5 500 ]
+                        , [ monthSummaryItem 2025 5 500
+                          , listedTransactionItem 1 2025 5 3
+                          , listedTransactionItem 0 2025 5 1
+                          ]
+                        )
+                        ( Frontend.groupTransactionMonthSectionItems foldedSection
+                        , Frontend.groupTransactionMonthSectionItems expandedSection
+                        )
+            , test "toggleGroupTransactionMonthFold only folds the targeted month and keeps year headers outside the section" <|
+                \_ ->
+                    let
+                        foldedItems =
+                            Frontend.toggleGroupTransactionMonthFold
+                                { year = 2025, month = 5 }
+                                monthSectionedItems
+                    in
+                    Expect.equal
+                        [ Frontend.StandaloneGroupTransactionListItem (yearSummaryItem 2025 2500)
+                        , Frontend.FoldableGroupTransactionMonthSection
+                            { summary = { year = 2025, month = 5, total = Amount 500 }
+                            , rows =
+                                [ listedTransaction 1 2025 5 3
+                                , listedTransaction 0 2025 5 1
+                                ]
+                            , folded = True
+                            }
+                        , Frontend.FoldableGroupTransactionMonthSection
+                            { summary = { year = 2025, month = 4, total = Amount 2000 }
+                            , rows =
+                                [ listedTransaction 2 2025 4 18
+                                , listedTransaction 1 2025 4 17
+                                , listedTransaction 0 2025 4 17
+                                ]
+                            , folded = False
+                            }
+                        ]
+                        (Frontend.groupTransactionViewSections foldedItems)
+            , test "fresh reload keeps a folded month collapsed while restoring reverse chronology inside every month" <|
+                \_ ->
+                    let
+                        existingItems =
+                            Frontend.toggleGroupTransactionMonthFold
+                                { year = 2025, month = 5 }
+                                monthSectionedItems
+
+                        backendItems =
+                            [ yearSummaryItem 2025 2500
+                            , monthSummaryItem 2025 5 500
+                            , listedTransactionItem 0 2025 5 1
+                            , listedTransactionItem 1 2025 5 3
+                            , monthSummaryItem 2025 4 2000
+                            , listedTransactionItem 0 2025 4 17
+                            , listedTransactionItem 1 2025 4 17
+                            , listedTransactionItem 2 2025 4 18
+                            ]
+                    in
+                    Expect.equal
+                        [ Frontend.StandaloneGroupTransactionListItem (yearSummaryItem 2025 2500)
+                        , Frontend.FoldableGroupTransactionMonthSection
+                            { summary = { year = 2025, month = 5, total = Amount 500 }
+                            , rows =
+                                [ listedTransaction 1 2025 5 3
+                                , listedTransaction 0 2025 5 1
+                                ]
+                            , folded = True
+                            }
+                        , Frontend.FoldableGroupTransactionMonthSection
+                            { summary = { year = 2025, month = 4, total = Amount 2000 }
+                            , rows =
+                                [ listedTransaction 2 2025 4 18
+                                , listedTransaction 1 2025 4 17
+                                , listedTransaction 0 2025 4 17
+                                ]
+                            , folded = False
+                            }
+                        ]
+                        (Frontend.groupTransactionViewSections
+                            (Frontend.groupTransactionsFromBackend
+                                "Trip"
+                                "Trip"
+                                Nothing
+                                backendItems
+                                existingItems
+                            )
+                        )
+            , test "load-more keeps a folded newer month collapsed when an older year arrives with its header" <|
+                \_ ->
+                    let
+                        existingItems =
+                            Frontend.toggleGroupTransactionMonthFold
+                                { year = 2025, month = 5 }
+                                [ yearSummaryItem 2025 500
+                                , monthSummaryItem 2025 5 500
+                                , listedTransactionItem 0 2025 5 1
+                                , listedTransactionItem 1 2025 5 3
+                                ]
+
+                        olderItems =
+                            [ yearSummaryItem 2024 2000
+                            , monthSummaryItem 2024 12 2000
+                            , listedTransactionItem 0 2024 12 17
+                            , listedTransactionItem 1 2024 12 17
+                            , listedTransactionItem 2 2024 12 18
+                            ]
+                    in
+                    Expect.equal
+                        [ Frontend.StandaloneGroupTransactionListItem (yearSummaryItem 2025 500)
+                        , Frontend.FoldableGroupTransactionMonthSection
+                            { summary = { year = 2025, month = 5, total = Amount 500 }
+                            , rows =
+                                [ listedTransaction 1 2025 5 3
+                                , listedTransaction 0 2025 5 1
+                                ]
+                            , folded = True
+                            }
+                        , Frontend.StandaloneGroupTransactionListItem (yearSummaryItem 2024 2000)
+                        , Frontend.FoldableGroupTransactionMonthSection
+                            { summary = { year = 2024, month = 12, total = Amount 2000 }
+                            , rows =
+                                [ listedTransaction 2 2024 12 18
+                                , listedTransaction 1 2024 12 17
+                                , listedTransaction 0 2024 12 17
+                                ]
+                            , folded = False
+                            }
+                        ]
+                        (Frontend.groupTransactionViewSections
+                            (Frontend.groupTransactionsFromBackend
+                                "Trip"
+                                "Trip"
+                                (Just { year = 2025, month = 5 })
+                                olderItems
+                                existingItems
+                            )
+                        )
             , test "ListGroupTransactions ignores responses for another group" <|
                 \_ ->
                     let
@@ -248,6 +433,44 @@ suite =
                         ( Frontend.groupTransactionsReloadPages { groupTransactionsLoadedPages = 0 }
                         , Frontend.groupTransactionsReloadPages { groupTransactionsLoadedPages = 3 }
                         )
+            , test "operationSuccessfulRefreshPlan keeps folded months in place while replaying the loaded depth" <|
+                \_ ->
+                    let
+                        foldedItems =
+                            Frontend.toggleGroupTransactionMonthFold
+                                { year = 2025, month = 5 }
+                                monthSectionedItems
+
+                        refreshPlan =
+                            Frontend.operationSuccessfulRefreshPlan
+                                { page = Home
+                                , showDialog = Nothing
+                                , errorMessage = Just "Old error"
+                                , nameValidity = Complete
+                                , user = "Alice"
+                                , groupValidity = Complete
+                                , group = "Trip"
+                                , groupTransactionsLoadedPages = 3
+                                , groupTransactionsLoading = False
+                                , groupTransactions = foldedItems
+                                }
+                    in
+                    Expect.equal
+                        { groupTransactions = foldedItems
+                        , groupTransactionsLoading = True
+                        , backendRequests =
+                            [ RequestUserGroups "Alice"
+                            , RequestGroupTransactions
+                                { group = "Trip"
+                                , before = Nothing
+                                , pages = 3
+                                }
+                            ]
+                        }
+                        { groupTransactions = refreshPlan.updatedModel.groupTransactions
+                        , groupTransactionsLoading = refreshPlan.updatedModel.groupTransactionsLoading
+                        , backendRequests = refreshPlan.backendRequests
+                        }
             , test "updatedGroupTransactionsLoadedPages resets on a fresh reload and accumulates load-more pages" <|
                 \_ ->
                     Expect.equal
@@ -301,6 +524,59 @@ suite =
                                 , groupTransactionsLoading = True
                             }
                         )
+            , test "folding a month rechecks the viewport and triggers the older-history request once the fold reveals the end" <|
+                \_ ->
+                    let
+                        baseModel =
+                            { group = "Trip"
+                            , groupTransactions = monthSectionedItems
+                            , groupTransactionsLoading = False
+                            , groupTransactionsNextCursor = Just { year = 2025, month = 4 }
+                            , groupValidity = Complete
+                            }
+
+                        foldPlan =
+                            Frontend.toggleGroupTransactionMonthFoldPlan
+                                { year = 2025, month = 5 }
+                                baseModel
+
+                        beforeFoldLoadPlan =
+                            Frontend.groupTransactionsViewportLoadMorePlan
+                                { scrollTop = 0, clientHeight = 220, scrollHeight = 440 }
+                                baseModel
+
+                        afterFoldLoadPlan =
+                            Frontend.groupTransactionsViewportLoadMorePlan
+                                (Frontend.groupTransactionsScrollStateFromViewport
+                                    { scene = { width = 640, height = 220 }
+                                    , viewport = { x = 0, y = 0, width = 640, height = 220 }
+                                    }
+                                )
+                                { baseModel | groupTransactions = foldPlan.groupTransactions }
+                    in
+                    Expect.equal
+                        { foldedItems =
+                            Frontend.toggleGroupTransactionMonthFold
+                                { year = 2025, month = 5 }
+                                monthSectionedItems
+                        , rechecksViewport = True
+                        , beforeFoldRequest = Nothing
+                        , afterFoldLoading = True
+                        , afterFoldRequest =
+                            Just
+                                (RequestGroupTransactions
+                                    { group = "Trip"
+                                    , before = Just { year = 2025, month = 4 }
+                                    , pages = 1
+                                    }
+                                )
+                        }
+                        { foldedItems = foldPlan.groupTransactions
+                        , rechecksViewport = foldPlan.shouldCheckViewport
+                        , beforeFoldRequest = beforeFoldLoadPlan.backendRequest
+                        , afterFoldLoading = afterFoldLoadPlan.updatedModel.groupTransactionsLoading
+                        , afterFoldRequest = afterFoldLoadPlan.backendRequest
+                        }
             ]
         , {- Debt summaries are derived entirely on the client. This example keeps
              the "who owes whom" math easy to review.
@@ -488,6 +764,19 @@ yearSummaryItem year total =
         { year = year
         , total = Amount total
         }
+
+
+monthSectionedItems : List GroupTransactionListItem
+monthSectionedItems =
+    [ yearSummaryItem 2025 2500
+    , monthSummaryItem 2025 5 500
+    , listedTransactionItem 1 2025 5 3
+    , listedTransactionItem 0 2025 5 1
+    , monthSummaryItem 2025 4 2000
+    , listedTransactionItem 2 2025 4 18
+    , listedTransactionItem 1 2025 4 17
+    , listedTransactionItem 0 2025 4 17
+    ]
 
 
 frontendGroupTransactionsState :

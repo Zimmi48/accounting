@@ -2,6 +2,23 @@
 
 ## Active Decisions
 
+### Folded Month Pagination Seam Revision (Hicks, 2026-05-16T11:26:24Z)
+
+**Status:** Completed; commit 1d80415 (Fix folded month viewport seam).
+
+**Decision:** Keep the fold-triggered older-history seam testable with pure planning helpers in `src/Frontend.elm` instead of trying to assert opaque `Cmd` values.
+
+**Why:** Folding a large month can expose the end of the visible list without a new scroll event, so the toggle path must schedule a viewport recheck and then reuse the exact older-history request path used by normal scrolling. By extracting `toggleGroupTransactionMonthFoldPlan` and `groupTransactionsViewportLoadMorePlan`, `tests/FrontendTests.elm` can prove the real fold → viewport recheck → `RequestGroupTransactions` behavior directly.
+
+**Impact:**
+- Reuses one load-more path for scroll and fold follow-ups.
+- Keeps the fix frontend-local; no shared model or migration work.
+- Gives future regressions a durable seam to test without browser-task harnesses.
+
+**Validation:** elm-format, both lamdera make targets, npm test, lamdera live HTTP 200 all pass.
+
+**Orchestration:** Completed 2026-05-16T11:27:21Z. Log: `.squad/orchestration-log/2026-05-16T11:27:21Z-hicks.md`.
+
 ### Summary Header Ordering (Hicks, 2026-05-15)
 
 **Status:** Approved and implemented; commit e36ea18 validated.
@@ -425,6 +442,37 @@ Keep three layers of coverage:
 - 531272e: Manual migration logic, tests, and supporting changes (landed second)
 
 **Impact:** V34 migration clears legacy state; paginated list is ready for production.
+
+### Folded Month Pagination Recheck (Dallas, 2026-05-16)
+
+**Status:** Implemented and validated; commit 9fb2827.
+
+**Decision:** After `ToggleGroupTransactionMonthFold`, the frontend should re-measure the group-transaction scroll container with `Browser.Dom.getViewportOf` and reuse `shouldLoadMoreGroupTransactions` to decide whether to request the next page.
+
+**Problem:** Month folding can collapse a >100-row month so much that the transaction list shrinks below the viewport's visible end. When this happens, no scroll event fires, and pagination remains stuck at the bottom.
+
+**Solution:** Post-fold toggle, fetch the updated scroll position via `Browser.Dom.getViewportOf`. If the list now fits entirely within the viewport (or is closer to the end), trigger the existing load-more logic to fetch older months. This ensures pagination continues flowing smoothly even when folding changes list height.
+
+**Why:** Relying only on scroll events leaves pagination stuck when folding changes list height under a stationary viewport. The seam is deterministic and easy to cover with regression tests.
+
+**Key files:**
+- `src/Frontend.elm`: Added viewport re-measure in fold-toggle handler
+- `tests/FrontendTests.elm`: New viewport-derived load-more regression case
+
+**Validation:**
+- elm-format src/ tests/ --yes ✅
+- lamdera make src/Frontend.elm ✅
+- lamdera make src/Backend.elm ✅
+- npm test (all passing) ✅
+- lamdera live → HTTP 200 ✅
+
+**Implementation details:**
+- Month folding state is maintained inside `FrontendModel.groupTransactions` as a duplicated `GroupTransactionMonthSummary` marker
+- `groupTransactionsFromBackend` reapplies fold markers after reload/load-more
+- Regression coverage includes toggle, reload, load-more, and refresh-depth replay cases
+- The viewport recheck uses the same `shouldLoadMoreGroupTransactions` predicate as scroll events
+
+**Impact:** Folding feature now handles all edge cases cleanly. Feature is complete and production-ready.
 
 ---
 

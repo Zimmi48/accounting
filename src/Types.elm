@@ -3,6 +3,7 @@ module Types exposing (..)
 import Array exposing (Array)
 import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest)
+import Browser.Dom
 import Browser.Navigation exposing (Key)
 import Date exposing (Date)
 import DatePicker
@@ -70,6 +71,7 @@ type FrontendMsg
     | ShowConfirmDeleteDialog SpendingId
     | ConfirmDeleteSpending SpendingId
     | ToggleTransactionChecked TransactionId
+    | ToggleGroupTransactionMonthFold GroupTransactionsCursor
     | SetToday Date
     | Submit
     | Cancel
@@ -103,6 +105,7 @@ type FrontendMsg
         , clientHeight : Float
         , scrollHeight : Float
         }
+    | GroupTransactionsViewportChecked (Result Browser.Dom.Error Browser.Dom.Viewport)
 
 
 type ToBackend

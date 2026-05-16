@@ -22,11 +22,14 @@ Use this when a group transaction list stops returning the full history at once 
 - When Lamdera `Cmd`s make that branch opaque in tests, extract a pure "refresh plan" helper that the update branch consumes so tests can assert the exact `RequestGroupTransactions` replay without mocking runtime internals.
 - Compress rendered pages into summary/period-boundary markers (for example `Y 2025`, `M 2025-04`, `T 2025-04`) so tests prove summaries lead each year/month block without snapshotting every row.
 - Add a dedicated seam case where page 1 contains only newer years and page 2 is the first page that introduces an older year. Make that older year large enough that its summary-carrying oldest month would normally fall on page 3; otherwise the reported missing-year-line bug stays hidden.
+- If months become foldable in the UI, key folded state by `(year, month)` rather than list index so pagination merges and refresh replays cannot collapse the wrong month after headers are re-normalized.
+- For month folding, frontend tests must prove the composed seam: a selected month summary stays visible, only that month's rows hide/show, untouched months keep their chronology/header order, and load-more plus mutation-triggered refreshes do not disturb either the folded choice or the remembered page depth.
 
 ## Examples
 - `src/Backend.elm`: current `groupTransactionsForName` emits the entire active history, so a progressive-loading rewrite needs explicit boundary tests around the replacement helper.
 - `src/Frontend.elm`: `groupTransactionsFromBackend` should normalize merged `GroupTransactionListItem`s so later year-boundary pages can hoist their year summary above already-loaded newer months.
 - `src/Frontend.elm`: `operationSuccessfulRefreshPlan` lets tests inspect the exact multi-page refetch requested after add/edit/delete success without needing to unwrap Lamdera `Cmd`s.
+- `src/Frontend.elm`: any month-folding view/helper should decide row visibility from a stable month key and leave `GroupTransactionMonthSummary` rendered even when that month is collapsed.
 - `tests/MigrationTests.elm`: use migration tests to ensure old `RequestGroupTransactions` / `ListGroupTransactions` payloads and cached frontend state cannot be misread as the new paginated contract.
 
 ## Anti-Patterns
@@ -38,3 +41,5 @@ Use this when a group transaction list stops returning the full history at once 
 - Do not approve ordering changes based only on summary counts or totals; a list can have the right aggregates while still rendering every summary below its period rows.
 - Do not rely on `Y/M/T` boundary markers alone to prove reverse chronology; they intentionally collapse many transactions into one marker and can miss day-level or same-day ordering regressions.
 - Do not treat a later-page year-summary test as sufficient when that page also reaches the end of the year; that only proves the boundary month case, not the seam where a year first appears before its oldest month is loaded.
+- Do not approve month folding when tests only prove that some rows disappeared; without month-specific assertions, the implementation may be hiding the wrong month, the header itself, or later paginated rows.
+- Do not hide fold state inside a migration-bearing shared type change unless migration work is explicitly requested and reviewed; UI-local fold state should stay frontend-local whenever possible.

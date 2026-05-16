@@ -145,6 +145,8 @@ Ripley review of landed rewrite (invariant compliance check) → Then Evergreen 
 - Recompute migrated `Person.belongsTo` from transaction `groupMembers`/`groupMembersKey`, not only from `totalGroupCredits`, so passive participants still see due/owed group membership after the storage rewrite.
 - Migration regression fixtures now live in `tests/BackendTests.elm` and `tests/FrontendTests.elm` for the V28 -> V31 seam.
 - 2026-05-15: `src/Frontend.elm` must explicitly sort normalized `GroupTransactionListItem` rows by descending `(year, month, day, transactionId.index)` while also sorting years/months descending; summary-header normalization alone will otherwise preserve the backend's oldest-first month order. Regression coverage for this seam lives in the group-transaction ordering tests in `tests/FrontendTests.elm`.
+- 2026-05-16: Month folding stays migration-free by storing folded state inside `FrontendModel.groupTransactions` itself: a folded month is marked by a duplicated `GroupTransactionMonthSummary`, then `groupTransactionsFromBackend` reapplies those markers after reload/load-more. The regression seam is covered in `tests/FrontendTests.elm` through toggle, reload, load-more, and refresh-depth replay cases.
+- 2026-05-16: When folding can shrink the scrollable transaction list enough to reveal the end immediately, `src/Frontend.elm` should re-check the list viewport via `Browser.Dom.getViewportOf` after `ToggleGroupTransactionMonthFold` and reuse `shouldLoadMoreGroupTransactions` so older months still auto-load. Cover the seam in `tests/FrontendTests.elm` with a viewport-derived load-more regression.
 
 ## Migration Session: Evergreen Prep & Commit (2026-05-14T11:56:22Z)
 
@@ -163,3 +165,23 @@ Ripley review of landed rewrite (invariant compliance check) → Then Evergreen 
 - Validation passed
 
 **Reviewer:** Ripley approved migration shape and clean-diff discipline.
+
+## 2026-05-16: Folded Month Load-More Pagination Fix
+
+**Assignment:** Fix folded month loading bug — when folding collapses a large month below viewport height, pagination stalls because no scroll event fires.
+
+**Task:** Detect viewport scroll-bottom condition after fold toggle; re-measure list viewport and trigger load-more if needed.
+
+**Implementation:**
+- `src/Frontend.elm`: Added `Browser.Dom.getViewportOf` measurement in fold-toggle handler; reuse `shouldLoadMoreGroupTransactions` to fire load-more if list now fits in viewport
+- `tests/FrontendTests.elm`: New viewport-derived load-more regression test case
+- Month folding state: Maintained inside `FrontendModel.groupTransactions` as duplicated `GroupTransactionMonthSummary` marker; `groupTransactionsFromBackend` reapplies markers after reload/load-more
+
+**Validation:**
+- elm-format, both lamdera make targets, npm test, lamdera live HTTP 200 ✅
+
+**Commit:** 9fb2827 — "Fix folded month load-more stall"
+
+**Outcome:** ✅ Feature complete. Folding now handles all edge cases cleanly. Production-ready.
+
+**Decision recorded:** `.squad/decisions.md` — Folded Month Pagination Recheck (Dallas, 2026-05-16)
