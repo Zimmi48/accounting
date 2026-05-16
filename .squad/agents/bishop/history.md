@@ -21,6 +21,7 @@
 - 2026-05-15: `src/Backend.elm:groupTransactionPageItems` must emit a `GroupTransactionYearSummary` for each visible year when a paged response spans multiple years, even if the oldest visible year is still partial overall; regression proof lives in `tests/BackendTests.elm` with the page-2 2025→2024 seam merged through `Frontend.groupTransactionsFromBackend`.
 - 2026-05-16: `src/Backend.elm:groupTransactionPageItems` must also emit the leading year summary when a load-more page starts in a newly visible older year, even if that page stays within one year and does not yet reach that year's final month; regression coverage lives in `tests/BackendTests.elm` on the 2026-01 → 2025-12/11 seam.
 - 2026-05-15: Evergreen V34 migrates the flat group-transaction frontend seam by resetting cached `FrontendModel.groupTransactions` and pagination metadata, translating legacy `RequestGroupTransactions String` to `{ group, before = Nothing, pages = 1 }`, and dropping stale flat `ListGroupTransactions` plus edit-only `ShowAddSpendingDialog (Just _)`; regression coverage lives in `tests/MigrationTests.elm`.
+- 2026-05-16: Evergreen V35 is a `FrontendMsg`-only transaction-list migration for month folding and viewport rechecks. `src/Evergreen/Migrate/V35.elm` should keep every V34 constructor unchanged and needs no frontend-model reset because persisted state shape stays the same; proof lives in `tests/MigrationTests.elm`.
 
 ## 2026-04-21: Phase 2 Contract Correction Approved
 
