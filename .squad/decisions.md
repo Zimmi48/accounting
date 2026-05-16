@@ -2,6 +2,29 @@
 
 ## Active Decisions
 
+### Missing Year Header Seam on Load-More Pages (Bishop, 2026-05-16T11:32:03Z)
+
+**Status:** Completed; commit 1de6fc9 (Fix missing year header seam).
+
+**Decision:** Treat a load-more seam as a visible-year boundary: if `before.year` differs from the first returned month slice year, the backend must emit that older year's `GroupTransactionYearSummary` immediately, even when the page does not span multiple years and has not yet reached that year's final month.
+
+**Context:** The prior fix (commit d5f7f8a) only emitted year headers when a page either spanned multiple years or reached the visible end of a year. That still left a contract leak where scrolling from a newer year into the first month(s) of an older year could omit the older year header until a later page arrived.
+
+**Why:** Backend must remain the source of truth for when a year becomes visible. Frontend merge logic can keep hoisting late summaries without guessing missing ones.
+
+**Implementation details:**
+- Backend (`src/Backend.elm`): Year header emission logic in `groupTransactionPageItems` now detects year transitions on the seam itself, not just within the page slice.
+- Tests (`tests/BackendTests.elm`): Regression coverage for the `2026-01` → `2025-12/11` seam where `2025` arrives on page 2 without spanning or reaching year end.
+
+**Impact:**
+- Summaries always lead their periods across pagination boundaries.
+- Load-more pages with only one visible year still emit year headers on year-change seams.
+- Contract now covers all year-visibility scenarios.
+
+**Validation:** elm-format, both lamdera make targets, npm test, lamdera live HTTP 200 all pass.
+
+**Orchestration:** Completed 2026-05-16T11:32:03Z. Log: `.squad/orchestration-log/2026-05-16T11:32:03Z-bishop.md`.
+
 ### Folded Month Pagination Seam Revision (Hicks, 2026-05-16T11:26:24Z)
 
 **Status:** Completed; commit 1d80415 (Fix folded month viewport seam).

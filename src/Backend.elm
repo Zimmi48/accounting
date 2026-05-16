@@ -1603,7 +1603,7 @@ listGroupTransactionsPage model response =
                         |> List.head
                         |> Maybe.map .cursor
             , items =
-                groupTransactionPageItems pageSelection.selectedSlices
+                groupTransactionPageItems response.before pageSelection.selectedSlices
             }
 
 
@@ -1683,8 +1683,8 @@ takeTransactionMonthSlices remaining slices =
                 slice :: takeTransactionMonthSlices (remaining - slice.transactionCount) rest
 
 
-groupTransactionPageItems : List GroupTransactionMonthSlice -> List GroupTransactionListItem
-groupTransactionPageItems slices =
+groupTransactionPageItems : Maybe GroupTransactionsCursor -> List GroupTransactionMonthSlice -> List GroupTransactionListItem
+groupTransactionPageItems before slices =
     let
         yearSummaries =
             slices
@@ -1712,6 +1712,18 @@ groupTransactionPageItems slices =
 
                 firstSlice :: remainingSlices ->
                     List.any (\slice -> slice.cursor.year /= firstSlice.cursor.year) remainingSlices
+
+        introducedLeadingYear =
+            case ( before, slices ) of
+                ( Just cursor, firstSlice :: _ ) ->
+                    if cursor.year /= firstSlice.cursor.year then
+                        Just firstSlice.cursor.year
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
     in
     slices
         |> List.foldl
@@ -1724,7 +1736,7 @@ groupTransactionPageItems slices =
                         if List.member year seenYears then
                             []
 
-                        else if spansMultipleYears || List.member year yearsEndingInSelection then
+                        else if spansMultipleYears || List.member year yearsEndingInSelection || introducedLeadingYear == Just year then
                             yearSummaries
                                 |> Dict.get year
                                 |> Maybe.map (GroupTransactionYearSummary >> List.singleton)

@@ -131,6 +131,7 @@
 - 2026-05-15: V34 remains intentionally unregenerated for this review-first workflow: no `src/Evergreen/Migrate/V34.elm` or `src/Evergreen/V34/Types.elm` file should reappear before the user asks for migration work.
 - 2026-05-15: The late-year pagination bug lives in `src/Backend.elm`'s page slicing seam: `groupTransactionMonthSlices` attaches a year summary only to the oldest month in that year, so `takeTransactionMonthSlices` can load the first months of a newly entered older year on page 2 without its year header if that year itself still spans more than 100 transaction rows.
 - 2026-05-15: Existing pagination tests are too soft for this seam. `tests/BackendTests.elm` only proves later-page year summaries when the page also includes the summary-carrying boundary month, and `tests/FrontendTests.elm` only hoists a late summary within the same year; neither proves "new year first appears on page 2 and must already show its summary line."
+- 2026-05-16: Missing-year-header review needs two adjacent seam cases in `tests/BackendTests.elm`: one where page 2 first introduces an older year and also reaches an even older year's header on the same payload, and one where `before.year` changes (for example `2026-01 -> 2025-12/11`) but the page still stays inside the newly introduced year. `src/Backend.elm:groupTransactionPageItems` is the decisive backend hook, and the proof is strongest when backend pages are merged through `Frontend.groupTransactionsFromBackend`.
 
 ### 2026-05-15T15:40:58Z: Issue #52 Summary Header Ordering — APPROVED ✅
 

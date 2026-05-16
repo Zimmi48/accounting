@@ -832,6 +832,60 @@ suite =
                         , secondPageBoundaryMarkers = groupTransactionBoundaryMarkers secondPage.items
                         , mergedBoundaryMarkers = groupTransactionBoundaryMarkers mergedItems
                         }
+            , test "second page shows the year header when it first enters view before that year ends" <|
+                \_ ->
+                    let
+                        model =
+                            progressiveListingModel
+                                [ ( 2026, 1, 100 )
+                                , ( 2025, 12, 95 )
+                                , ( 2025, 11, 10 )
+                                , ( 2025, 10, 10 )
+                                , ( 2024, 12, 10 )
+                                ]
+
+                        firstPage =
+                            Backend.listGroupTransactionsPage model
+                                { group = "Trip"
+                                , before = Nothing
+                                , pages = 1
+                                }
+
+                        secondPage =
+                            Backend.listGroupTransactionsPage model
+                                { group = "Trip"
+                                , before = firstPage.nextCursor
+                                , pages = 1
+                                }
+
+                        mergedItems =
+                            Frontend.groupTransactionsFromBackend "Trip" firstPage.group firstPage.before firstPage.items []
+                                |> Frontend.groupTransactionsFromBackend "Trip" secondPage.group secondPage.before secondPage.items
+                    in
+                    Expect.equal
+                        { secondPageYearSummaries = [ ( 2025, 11500 ) ]
+                        , secondPageBoundaryMarkers =
+                            [ "Y 2025"
+                            , "M 2025-12"
+                            , "T 2025-12"
+                            , "M 2025-11"
+                            , "T 2025-11"
+                            ]
+                        , mergedBoundaryMarkers =
+                            [ "Y 2026"
+                            , "M 2026-01"
+                            , "T 2026-01"
+                            , "Y 2025"
+                            , "M 2025-12"
+                            , "T 2025-12"
+                            , "M 2025-11"
+                            , "T 2025-11"
+                            ]
+                        }
+                        { secondPageYearSummaries = yearSummaryTotals secondPage.items
+                        , secondPageBoundaryMarkers = groupTransactionBoundaryMarkers secondPage.items
+                        , mergedBoundaryMarkers = groupTransactionBoundaryMarkers mergedItems
+                        }
             ]
         , describe "transaction reconciliation toggles"
             [ test "toggling a listed transaction updates the active group list without changing its spending totals" <|
