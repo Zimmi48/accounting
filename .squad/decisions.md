@@ -2018,3 +2018,28 @@ This keeps summary rows above each block while restoring strict reverse-chronolo
 
 **Status:** Ready for merge
 
+
+---
+
+# Decision: V35 transaction-list migration follow-up (2026-05-16T12:58:49Z)
+
+**By:** Bishop
+
+**What:** Treat Evergreen V35 as a message-only migration. Commit Lamdera-generated `src/Evergreen/V35/Types.elm` and `src/Evergreen/Migrate/V35.elm` first, then hand-fix `src/Evergreen/Migrate/V35.elm` by removing the unreachable generated `Unimplemented` fallback and keeping all V34 constructors as direct carry-over mappings.
+
+**Context:** The approved transaction-list work added `ToggleGroupTransactionMonthFold` and `GroupTransactionsViewportChecked` to `FrontendMsg`, but it did not change `FrontendModel`, `ToBackend`, `ToFrontend`, or backend storage.
+
+**Why:** Old persisted/client-inflight data can only contain V34 constructors, so introducing the new fold/viewport constructors does not require resets or synthetic migration targets. The real risk is leaving the generated fallback in place and shipping an incomplete Evergreen file.
+
+**Validation:**
+- ✅ `lamdera check --force`
+- ✅ `lamdera make src/Frontend.elm --output=/dev/null`
+- ✅ `lamdera make src/Backend.elm --output=/dev/null`
+- ✅ `npm test`
+- ✅ `lamdera live --port=8002` with HTTP 200
+
+**Commits:**
+- 8d14bfe: Generated artifacts
+- cf3bf3a: Manual follow-up fix
+
+**Status:** Completed

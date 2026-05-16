@@ -115,3 +115,24 @@
 - **Validation:** elm-format ✅, lamdera make src/Frontend.elm ✅, lamdera make src/Backend.elm ✅, npm test ✅, lamdera live HTTP 200 ✅
 - **Status:** ✅ Completed; commit d5f7f8a approved and ready for merge
 - **Reviewer:** Vasquez approved
+
+### 2026-05-16T12:58:49Z: V35 FrontendMsg-Only Migration — COMPLETED ✅
+
+- **Task:** Implement Evergreen V35 migration for transaction-list month folding and viewport rechecks.
+- **Context:** Approved transaction-list work added `ToggleGroupTransactionMonthFold` and `GroupTransactionsViewportChecked` to `FrontendMsg`, but no changes to `FrontendModel`, `ToBackend`, `ToFrontend`, or backend storage.
+- **Decision:** Treat V35 as a message-only migration. Lamdera-generated `src/Evergreen/V35/Types.elm` and `src/Evergreen/Migrate/V35.elm` first, then hand-fix `src/Evergreen/Migrate/V35.elm` by removing the unreachable generated `Unimplemented` fallback and keeping all V34 constructors as direct carry-over mappings.
+- **Why:** Old persisted/client-inflight data can only contain V34 constructors, so the new fold/viewport constructors don't require resets or synthetic migration targets. The real risk is leaving the generated fallback in place and shipping an incomplete Evergreen file.
+- **Deliverables:**
+  - `src/Evergreen/V35/Types.elm` (Lamdera-generated)
+  - `src/Evergreen/Migrate/V35.elm` (Lamdera-generated, hand-fixed)
+  - Test updates in `tests/MigrationTests.elm` and `tests/CodecsTests.elm`
+- **Validation:** 
+  - ✅ `lamdera check --force`
+  - ✅ `lamdera make src/Frontend.elm --output=/dev/null`
+  - ✅ `lamdera make src/Backend.elm --output=/dev/null`
+  - ✅ `npm test`
+  - ✅ `lamdera live --port=8002` HTTP 200
+- **Commits:**
+  - 8d14bfe: Lamdera-generated V35 artifacts
+  - cf3bf3a: Manual follow-up fix removing generated fallback
+- **Status:** ✅ Completed; ready for merge
