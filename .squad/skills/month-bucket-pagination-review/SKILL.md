@@ -26,6 +26,7 @@ Use this when a group transaction list stops returning the full history at once 
 - Keep both boundary shapes in coverage: one later page that introduces year `Y` and also includes an even older year header, and one that introduces `Y` but stays entirely inside `Y`. Either case alone can miss the neighboring skipped-year bug.
 - If months become foldable in the UI, key folded state by `(year, month)` rather than list index so pagination merges and refresh replays cannot collapse the wrong month after headers are re-normalized.
 - For month folding, frontend tests must prove the composed seam: a selected month summary stays visible, only that month's rows hide/show, untouched months keep their chronology/header order, and load-more plus mutation-triggered refreshes do not disturb either the folded choice or the remembered page depth.
+- If dialogs can stay open above the transaction list, add frontend regression coverage proving that dialog presence does not suppress the existing load-more and fold-triggered viewport-check plans. Treat actual wheel/touch scroll-through as a separate view-level seam if pure helper tests cannot observe DOM event routing.
 
 ## Examples
 - `src/Backend.elm`: current `groupTransactionsForName` emits the entire active history, so a progressive-loading rewrite needs explicit boundary tests around the replacement helper.
