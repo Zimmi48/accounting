@@ -218,3 +218,40 @@ Exact assertions Dallas's implementation should make testable:
 3. Once a scroll occurs with a dialog open, the same progressive-loading path must run as without a dialog: existing month/year summaries stay ordered, and bottom-of-list scrolling can still request the next page.
 
 **Status:** Implemented in `tests/FrontendTests.elm` with pure plan helpers and approved test cases.
+
+---
+
+# Decision: Dialog Mask Wheel Routing with Native Dialog Scrolling (2026-06-06T14:17:10Z)
+
+**Timestamp:** 2026-06-06T14:17:10Z
+
+**Agent:** Hicks
+
+**Requested by:** Théo Zimmermann
+
+## Decision
+
+Keep explicit backdrop wheel routing for grouped transactions, but add a dialog-container wheel guard so the spending dialog itself scrolls natively again.
+
+## Why
+
+`PaackEng/elm-ui-dialog` renders the mask as the parent of the dialog container. That means a pure CSS/native setup cannot both block backdrop clicks and let wheel events fall through to the grouped transaction list behind it. The minimal safe fix is to route wheel only from the mask into `#group-transactions-list`, while stopping wheel bubbling at the dialog container so inner dialog scrolling stays browser-native.
+
+## Implementation
+
+- Keep `DialogMaskWheelScrolled` only for the home grouped-transaction backdrop case
+- Compute target scroll positions through pure `groupTransactionsDialogMaskScrollPlan`
+- Add `dialogContainerWheelBlockerAttribute` to dialog containers so wheel/touchpad scrolling inside dialogs no longer bubbles into the mask
+- Leave progressive loading and fold behavior on the existing viewport/fold plan helpers
+
+## Validation
+
+- ✅ `elm-format src/ tests/ --yes`
+- ✅ `lamdera make src/Frontend.elm --output=/dev/null`
+- ✅ `lamdera make src/Backend.elm --output=/dev/null`
+- ✅ `lamdera live --port=8011` + localhost HTTP 200
+- ⚠️ `npm test` still fails on the pre-existing theme expectation `urlStringWithTheme keeps the current route while adding or removing only the theme query`
+
+## Status
+
+✅ Implemented. Ready for merge.

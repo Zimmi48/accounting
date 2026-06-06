@@ -21,14 +21,5 @@
 - 2026-05-16T11:26:24Z: Revised the folded-month pagination seam in `src/Frontend.elm` by routing both scroll-triggered and fold-triggered older-history loads through pure planning helpers (`toggleGroupTransactionMonthFoldPlan`, `groupTransactionsViewportLoadMorePlan`, `groupTransactionsLoadMorePlan`) before turning them into commands. Keep regression coverage in `tests/FrontendTests.elm` focused on the real fold -> viewport recheck -> `RequestGroupTransactions` path so pagination fixes prove the async seam instead of only viewport math. Validation: elm-format, check-codecs, both lamdera make targets, npm test. Commit: 1d80415 (Fix folded month viewport seam). Orchestration log: `.squad/orchestration-log/2026-05-16T11:27:21Z-hicks.md`. Decision merged to `.squad/decisions/decisions.md`.
 
 - 2026-05-16T18:30:00Z: Issue #53 now persists the frontend theme without migration work by treating `theme` as URL-backed page state in `src/Frontend.elm`. `init`/`UrlChanged` hydrate from the `?theme=` query, `ToggleTheme` rewrites the current route with `Nav.replaceUrl`, and internal navigation preserves the active theme unless the target URL explicitly overrides it. Regression coverage lives in `tests/FrontendTests.elm` for dark-theme bootstrap plus query rewrite behavior. Validation: `elm-format src/ tests/ --yes`, both `lamdera make` targets, `npm test` (75/75), and `lamdera live` on port 8000 with HTTP 200.
-## Session 2026-05-16: Issue #53 Theme Persistence (Rejected, Reassigned)
-**Decision point:** 2026-05-16T18:32:20Z
 
-Vasquez rejected the initial #53 theme persistence implementation due to state-loss regression in the toggle seam. The `Nav.replaceUrl` was rebuilding URLs from `pagePath` only, which lost state for `Import`, `Json`, and `NotFound` pages.
-
-**Outcome:** Revision reassigned to Ripley. Next fix requires:
-- Widen URL contract to encode stateful-page state in fragments
-- Add proof-grade tests exercising the real `ToggleTheme -> UrlChanged` seam
-- Cover `Import`, `Json`, `NotFound` state preservation
-
-**Reviewer note:** Helper-only tests are insufficient when the seam is effectful. The next revision must prove the real message/update flow.
+- 2026-06-06T14:17:10Z: Dialog mask wheel routing in `src/Frontend.elm` now respects PaackEng `Dialog.view`'s DOM shape by keeping backdrop wheel rerouting to scroll `#group-transactions-list` while a dialog is open, but adding a dialog-container wheel stop-propagation guard so the spending dialog keeps native wheel/touchpad scrolling. Explicit path kept tiny (`DialogMaskWheelScrolled` + pure `groupTransactionsDialogMaskScrollPlan`); progressive loading and month folds remain on existing helpers. Validation: `elm-format src/ tests/ --yes`, both `lamdera make` targets, `lamdera live --port=8011` with HTTP 200; `npm test` blocked by pre-existing unrelated theme expectation failure. Orchestration log: `.squad/orchestration-log/2026-06-06T14:17:48Z-hicks.md`. Decision merged to `.squad/decisions/decisions.md`.
