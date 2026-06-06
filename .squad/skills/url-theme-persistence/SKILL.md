@@ -16,6 +16,7 @@ Use this when a Lamdera/Elm UI preference such as light/dark mode must survive b
 - On toggle, prefer `Nav.replaceUrl` over `pushUrl` so switching theme does not spam browser history.
 - When handling internal navigation, preserve the current theme unless the clicked URL explicitly includes its own theme query.
 - Extract pure helpers for query parsing and URL rewriting so tests can prove the reload seam without browser ports or JS.
+- If `themeToQueryValue` returns both light and dark values, tests for `urlStringWithTheme` should expect the helper to replace the existing theme query, not drop `?theme=light`.
 - Keep the persistence scope narrow: only encode the UI preference itself unless the control can actually fire from a page whose state would otherwise be lost.
 - If navigation already preserves a page's in-memory state, do not promote unrelated draft/export/error state into the URL just to support theme reloads.
 
@@ -29,4 +30,5 @@ Use this when a Lamdera/Elm UI preference such as light/dark mode must survive b
 - Do not encode unrelated page-local state into fragments or queries when the persistence requirement is only "reload keeps the current theme".
 - Do not add shared/frontend model fields just to persist a browser-local theme when URL state is enough.
 - Do not treat in-memory `ToggleTheme` state as proof of reload persistence.
+- Do not leave tests asserting light-theme query removal when production intentionally serializes `LightMode` as `?theme=light`.
 - Do not use `pushUrl` for theme flips unless product explicitly wants back-button history per theme change.

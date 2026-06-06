@@ -219,8 +219,6 @@ Exact assertions Dallas's implementation should make testable:
 
 **Status:** Implemented in `tests/FrontendTests.elm` with pure plan helpers and approved test cases.
 
----
-
 # Decision: Dialog Mask Wheel Routing with Native Dialog Scrolling (2026-06-06T14:17:10Z)
 
 **Timestamp:** 2026-06-06T14:17:10Z
@@ -254,4 +252,42 @@ Keep explicit backdrop wheel routing for grouped transactions, but add a dialog-
 
 ## Status
 
-✅ Implemented. Ready for merge.
+✅ Implemented and merged. Commits: 501a7c0 (dialog scroll), ba4936b (test fix).
+
+---
+
+# Decision: Hicks — Two Commit Fix (2026-06-06)
+
+**Date:** 2026-06-06  
+**Requested by:** Théo Zimmermann
+
+## Decision
+
+Keep the accepted dialog-mask scroll revision and the broken frontend test repair in separate commits.
+
+## Why
+
+- The dialog scroll work was already accepted and touched production/frontend wiring (`src/Frontend.elm`, `src/Types.elm`) plus its regression coverage.
+- The remaining failing test was a stale expectation in `tests/FrontendTests.elm`, not a reason to reopen the accepted production change.
+- Splitting them preserves review clarity: one commit for shipped behavior, one commit for correcting the outdated test contract.
+
+## Implementation
+
+- Commit 1: 501a7c0 — Dialog scroll revision
+- Commit 2: ba4936b — Theme URL expectation fix
+
+## Validation
+
+- ✅ elm-format src/ tests/ --yes
+- ✅ lamdera make src/Frontend.elm --output=/dev/null
+- ✅ lamdera make src/Backend.elm --output=/dev/null
+- ✅ npm test (79/79)
+- ✅ lamdera live HTTP 200
+
+## Notes
+
+The current theme URL contract keeps an explicit `?theme=light` when `urlStringWithTheme` rewrites a route. Final validation passed after the second commit.
+
+## Status
+
+✅ Completed and merged.
