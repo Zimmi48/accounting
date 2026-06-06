@@ -82,7 +82,7 @@ suite =
                     Expect.equal
                         DarkMode
                         (Frontend.themeFromUrlOr DarkMode url)
-            , test "urlStringWithTheme keeps the current route while adding or removing only the theme query" <|
+            , test "urlStringWithTheme keeps the current route while replacing only the theme query" <|
                 \_ ->
                     let
                         url =
@@ -97,7 +97,7 @@ suite =
                                     }
                     in
                     Expect.equal
-                        ( "/import?foo=1&theme=dark#dialog", "/import?foo=1#dialog" )
+                        ( "/import?foo=1&theme=dark#dialog", "/import?foo=1&theme=light#dialog" )
                         ( Frontend.urlStringWithTheme DarkMode url
                         , Frontend.urlStringWithTheme LightMode url
                         )
