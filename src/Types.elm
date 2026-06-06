@@ -105,6 +105,7 @@ type FrontendMsg
         , clientHeight : Float
         , scrollHeight : Float
         }
+    | DialogMaskWheelScrolled Float
     | GroupTransactionsViewportChecked (Result Browser.Dom.Error Browser.Dom.Viewport)
 
 

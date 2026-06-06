@@ -2,7 +2,7 @@ module Frontend exposing (..)
 
 import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest(..))
-import Browser.Dom exposing (Viewport, getViewport, getViewportOf)
+import Browser.Dom exposing (Viewport, getViewport, getViewportOf, setViewportOf)
 import Browser.Events exposing (onResize)
 import Browser.Navigation as Nav
 import Date
@@ -1124,6 +1124,9 @@ update msg model =
         GroupTransactionsScrolled scrollState ->
             applyGroupTransactionsLoadMorePlan (groupTransactionsViewportLoadMorePlan scrollState model)
 
+        DialogMaskWheelScrolled deltaY ->
+            ( model, scrollGroupTransactionsBehindDialog deltaY model )
+
         GroupTransactionsViewportChecked result ->
             case result of
                 Ok viewport ->
@@ -2151,6 +2154,131 @@ checkGroupTransactionsViewport model =
         Cmd.none
 
 
+type alias GroupTransactionsDialogMaskScrollPlan =
+    { targetX : Float
+    , targetY : Float
+    }
+
+
+shouldRouteDialogMaskWheelToGroupTransactions :
+    { a
+        | page : Page
+        , groupTransactions : List GroupTransactionListItem
+        , groupTransactionsLoading : Bool
+        , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+        , groupValidity : NameValidity
+    }
+    -> Bool
+shouldRouteDialogMaskWheelToGroupTransactions model =
+    model.page
+        == Home
+        && model.groupValidity
+        == Complete
+        && (not (List.isEmpty model.groupTransactions)
+                || model.groupTransactionsLoading
+                || Maybe.isJust model.groupTransactionsNextCursor
+           )
+
+
+groupTransactionsDialogMaskScrollPlan :
+    Float
+    -> Viewport
+    ->
+        { a
+            | page : Page
+            , groupTransactions : List GroupTransactionListItem
+            , groupTransactionsLoading : Bool
+            , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+            , groupValidity : NameValidity
+        }
+    -> Maybe GroupTransactionsDialogMaskScrollPlan
+groupTransactionsDialogMaskScrollPlan deltaY viewport model =
+    if shouldRouteDialogMaskWheelToGroupTransactions model then
+        let
+            maxScrollTop =
+                max 0 (viewport.scene.height - viewport.viewport.height)
+        in
+        Just
+            { targetX = viewport.viewport.x
+            , targetY = clamp 0 maxScrollTop (viewport.viewport.y + deltaY)
+            }
+
+    else
+        Nothing
+
+
+scrollGroupTransactionsBehindDialog :
+    Float
+    ->
+        { a
+            | page : Page
+            , groupTransactions : List GroupTransactionListItem
+            , groupTransactionsLoading : Bool
+            , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+            , groupValidity : NameValidity
+        }
+    -> Cmd FrontendMsg
+scrollGroupTransactionsBehindDialog deltaY model =
+    if shouldRouteDialogMaskWheelToGroupTransactions model then
+        Task.attempt (\_ -> NoOpFrontendMsg)
+            (getViewportOf groupTransactionsViewportId
+                |> Task.andThen
+                    (\viewport ->
+                        case groupTransactionsDialogMaskScrollPlan deltaY viewport model of
+                            Just plan ->
+                                setViewportOf groupTransactionsViewportId plan.targetX plan.targetY
+
+                            Nothing ->
+                                Task.succeed ()
+                    )
+            )
+
+    else
+        Cmd.none
+
+
+groupTransactionsDialogMaskAttributes :
+    { a
+        | page : Page
+        , groupTransactions : List GroupTransactionListItem
+        , groupTransactionsLoading : Bool
+        , groupTransactionsNextCursor : Maybe GroupTransactionsCursor
+        , groupValidity : NameValidity
+    }
+    -> List (Attribute FrontendMsg)
+groupTransactionsDialogMaskAttributes model =
+    if shouldRouteDialogMaskWheelToGroupTransactions model then
+        [ htmlAttribute
+            (custom "wheel"
+                (Decode.field "deltaY" Decode.float
+                    |> Decode.map
+                        (\deltaY ->
+                            { message = DialogMaskWheelScrolled deltaY
+                            , stopPropagation = True
+                            , preventDefault = True
+                            }
+                        )
+                )
+            )
+        ]
+
+    else
+        []
+
+
+dialogContainerWheelBlockerAttribute : Attribute FrontendMsg
+dialogContainerWheelBlockerAttribute =
+    htmlAttribute
+        (custom "wheel"
+            (Decode.succeed
+                { message = NoOpFrontendMsg
+                , stopPropagation = True
+                , preventDefault = False
+                }
+            )
+        )
+
+
 type alias ToggleGroupTransactionMonthFoldPlan =
     { groupTransactions : List GroupTransactionListItem
     , shouldCheckViewport : Bool
@@ -2496,11 +2624,15 @@ view model =
 
             else
                 let
+                    dialogMaskAttributes =
+                        groupTransactionsDialogMaskAttributes model
+
                     config title inputs canSubmit =
                         { closeMessage = Just Cancel
-                        , maskAttributes = []
+                        , maskAttributes = dialogMaskAttributes
                         , containerAttributes =
-                            [ Background.color palette.background
+                            [ dialogContainerWheelBlockerAttribute
+                            , Background.color palette.background
                             , Font.color palette.text
                             , Border.solid
                             , Border.rounded 5
@@ -2590,9 +2722,10 @@ view model =
 
                                         ConfirmDeleteDialog spendingId ->
                                             { closeMessage = Just Cancel
-                                            , maskAttributes = []
+                                            , maskAttributes = dialogMaskAttributes
                                             , containerAttributes =
-                                                [ Background.color palette.background
+                                                [ dialogContainerWheelBlockerAttribute
+                                                , Background.color palette.background
                                                 , Font.color palette.text
                                                 , Border.solid
                                                 , Border.rounded 5

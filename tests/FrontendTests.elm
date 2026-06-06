@@ -577,6 +577,56 @@ suite =
                                 , groupTransactionsLoading = True
                             }
                         )
+            , test "groupTransactionsViewportLoadMorePlan still requests older history while a dialog is open" <|
+                \_ ->
+                    let
+                        loadPlan =
+                            Frontend.groupTransactionsViewportLoadMorePlan
+                                { scrollTop = 180, clientHeight = 200, scrollHeight = 400 }
+                                { group = "Trip"
+                                , showDialog = Just (AddSpendingDialog validDialog)
+                                , groupTransactionsLoading = False
+                                , groupTransactionsNextCursor = Just { year = 2025, month = 4 }
+                                , groupValidity = Complete
+                                }
+                    in
+                    Expect.equal
+                        { loading = True
+                        , request =
+                            Just
+                                (RequestGroupTransactions
+                                    { group = "Trip"
+                                    , before = Just { year = 2025, month = 4 }
+                                    , pages = 1
+                                    }
+                                )
+                        }
+                        { loading = loadPlan.updatedModel.groupTransactionsLoading
+                        , request = loadPlan.backendRequest
+                        }
+            , test "toggleGroupTransactionMonthFoldPlan still schedules a viewport recheck while a dialog is open" <|
+                \_ ->
+                    let
+                        foldPlan =
+                            Frontend.toggleGroupTransactionMonthFoldPlan
+                                { year = 2025, month = 5 }
+                                { groupTransactions = monthSectionedItems
+                                , showDialog = Just (ConfirmDeleteDialog 0)
+                                , groupTransactionsLoading = False
+                                , groupTransactionsNextCursor = Just { year = 2025, month = 4 }
+                                , groupValidity = Complete
+                                }
+                    in
+                    Expect.equal
+                        { foldedItems =
+                            Frontend.toggleGroupTransactionMonthFold
+                                { year = 2025, month = 5 }
+                                monthSectionedItems
+                        , rechecksViewport = True
+                        }
+                        { foldedItems = foldPlan.groupTransactions
+                        , rechecksViewport = foldPlan.shouldCheckViewport
+                        }
             , test "folding a month rechecks the viewport and triggers the older-history request once the fold reveals the end" <|
                 \_ ->
                     let
@@ -630,6 +680,31 @@ suite =
                         , afterFoldLoading = afterFoldLoadPlan.updatedModel.groupTransactionsLoading
                         , afterFoldRequest = afterFoldLoadPlan.backendRequest
                         }
+            , test "dialog mask wheel scrolling keeps modal clicks blocked while routing vertical scroll into the transaction viewport" <|
+                \_ ->
+                    let
+                        viewport =
+                            { scene = { width = 640, height = 1200 }
+                            , viewport = { x = 0, y = 120, width = 640, height = 320 }
+                            }
+
+                        baseModel =
+                            { page = Home
+                            , groupTransactions = monthSectionedItems
+                            , groupTransactionsLoading = False
+                            , groupTransactionsNextCursor = Just { year = 2025, month = 4 }
+                            , groupValidity = Complete
+                            }
+                    in
+                    Expect.equal
+                        ( Just { targetX = 0, targetY = 200 }
+                        , Just { targetX = 0, targetY = 0 }
+                        , Nothing
+                        )
+                        ( Frontend.groupTransactionsDialogMaskScrollPlan 80 viewport baseModel
+                        , Frontend.groupTransactionsDialogMaskScrollPlan -200 viewport baseModel
+                        , Frontend.groupTransactionsDialogMaskScrollPlan 80 viewport { baseModel | page = Json Nothing }
+                        )
             ]
         , {- Debt summaries are derived entirely on the client. This example keeps
              the "who owes whom" math easy to review.
